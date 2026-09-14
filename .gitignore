@@ -1,0 +1,37 @@
+# Binaries & executables
+/bin/
+/server
+/agent
+probe-server
+probe-agent
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# SQLite databases & temp files
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Node dependencies
+node_modules/
+web/node_modules/
+web/dist/
+*.tsbuildinfo
+
+# OS and IDE files
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.gemini/
+
+# Logs
+*.log
+logs/

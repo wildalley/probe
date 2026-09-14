@@ -1,0 +1,21 @@
+[Unit]
+Description=Cyber Probe Agent (Extreme Low Resource Telemetry Daemon)
+Documentation=https://github.com/cola/probe
+After=network.target
+
+[Service]
+Type=simple
+User=root
+# Adjust command flags or configuration file path as required
+ExecStart=/usr/local/bin/probe-agent --server "ws://127.0.0.1:8080" --token "sk_prod_9872f10b" --name "node-prod-01" --region "US-West"
+Restart=always
+RestartSec=5
+LimitNOFILE=65535
+
+# Resource isolation
+MemoryHigh=15M
+MemoryMax=30M
+CPUQuota=5%
+
+[Install]
+WantedBy=multi-user.target

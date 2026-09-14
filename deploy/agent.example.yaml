@@ -1,0 +1,8 @@
+# Cyber Probe Agent Configuration
+server_url: "ws://127.0.0.1:8080" # or wss://status.yourdomain.com
+token: "sk_default_secret_probe_token"
+node_id: "us-west-vps01"
+node_name: "Silicon Valley Gateway"
+region: "US-West"
+report_interval: 1s
+insecure_tls: false
