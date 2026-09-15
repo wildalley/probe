@@ -1067,20 +1067,44 @@ func (s *Server) handleTestNotification(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "测试通知发送成功"})
 }
 
-// handleGetNotificationLogs retrieves recent notification history logs.
+// handleGetNotificationLogs retrieves one page of notification history.
+//
+// The response is an object rather than a bare array so it can carry `total`:
+// without it the dashboard could only report how many rows this page held, and
+// silently gave the impression that older alerts did not exist.
 func (s *Server) handleGetNotificationLogs(c *gin.Context) {
-	limitStr := c.DefaultQuery("limit", "50")
-	limit, _ := strconv.Atoi(limitStr)
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
 	if limit <= 0 {
 		limit = 50
 	}
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	if offset < 0 {
+		offset = 0
+	}
 
-	logs, err := s.storage.GetNotificationLogs(limit)
+	logs, err := s.storage.GetNotificationLogs(limit, offset)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, logs)
+
+	total, err := s.storage.CountNotificationLogs()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Normalize nil to an empty slice so the client always sees an array.
+	if logs == nil {
+		logs = []*model.NotificationLog{}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"logs":   logs,
+		"total":  total,
+		"limit":  limit,
+		"offset": offset,
+	})
 }
 
 // handleClearNotificationLogs clears all alert history logs.
