@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { X, Copy, Check, Terminal, RefreshCw, Globe, ShieldCheck, Zap } from "lucide-react";
+import { Button, Chip, Input } from "@heroui/react";
 import { cn } from "../lib/utils";
 import { BorderBeam } from "./ui/BorderBeam";
 
@@ -102,22 +103,25 @@ export const AddNodeModal: React.FC<AddNodeModalProps> = ({ isOpen, onClose, the
                 <h3 className={`text-base font-bold font-sans ${isBlueprint ? "text-slate-900" : "text-zinc-100"}`}>
                   部署新探针节点 (Deploy Agent)
                 </h3>
-                <span className="badge badge-success badge-sm badge-outline font-sans font-semibold">
+                <Chip color="success" size="sm" variant="soft" className="font-sans font-semibold">
                   智能免配置
-                </span>
+                </Chip>
               </div>
               <p className={`text-xs font-sans mt-0.5 ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}>
                 Token 自动生成 · 地区与运营商根据公网 IP 全自动识别
               </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="btn btn-sm btn-circle btn-ghost"
-            title="关闭"
+          <Button
+            onPress={onClose}
+            variant="ghost"
+            size="sm"
+            isIconOnly
+            className="rounded-full"
+            aria-label="关闭"
           >
             <X className="h-4 w-4" />
-          </button>
+          </Button>
         </div>
 
         {/* Configuration inputs: Node name & Auto-detect status */}
@@ -126,16 +130,14 @@ export const AddNodeModal: React.FC<AddNodeModalProps> = ({ isOpen, onClose, the
             <label className={`block mb-1.5 font-medium ${isBlueprint ? "text-slate-700" : "text-zinc-300"}`}>
               节点名称 (Node Name)
             </label>
-            <input
+            <Input
               type="text"
               value={nodeName}
               onChange={(e) => setNodeName(e.target.value)}
               placeholder="node-01"
-              className={`input input-bordered input-sm w-full font-mono text-xs focus:outline-none ${
-                isBlueprint
-                  ? "bg-white border-slate-200 text-slate-900 focus:border-indigo-500"
-                  : "bg-zinc-950 border-zinc-800 text-zinc-100 focus:border-indigo-500"
-              }`}
+              aria-label="节点名称"
+              fullWidth
+              className="font-mono text-xs"
             />
           </div>
 
@@ -146,7 +148,9 @@ export const AddNodeModal: React.FC<AddNodeModalProps> = ({ isOpen, onClose, the
               <Globe className="h-4 w-4 text-sky-500 shrink-0" />
               <div className="flex flex-wrap items-center gap-1.5">
                 <span className="font-semibold">地区与线路:</span>
-                <span className="badge badge-success badge-sm badge-outline font-semibold">● 全自动识别</span>
+                <Chip color="success" size="sm" variant="soft" className="font-semibold">
+                  ● 全自动识别
+                </Chip>
                 <span className="text-11 text-slate-500 dark:text-zinc-500">免手动填写</span>
               </div>
             </div>
@@ -171,15 +175,17 @@ export const AddNodeModal: React.FC<AddNodeModalProps> = ({ isOpen, onClose, the
               (已自动嵌入安装命令)
             </span>
           </div>
-          <button
-            onClick={handleRegenerateToken}
-            disabled={isRefreshingToken}
-            className="btn btn-xs btn-ghost text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 font-medium gap-1 font-sans"
-            title="生成并换一个新的安全 Token"
+          <Button
+            onPress={handleRegenerateToken}
+            isDisabled={isRefreshingToken}
+            variant="ghost"
+            size="sm"
+            className="gap-1 font-sans font-medium text-indigo-600 dark:text-indigo-400"
+            aria-label="生成并换一个新的安全 Token"
           >
             <RefreshCw className={`h-3 w-3 ${isRefreshingToken ? "animate-spin" : ""}`} />
             <span>换一个 Token</span>
-          </button>
+          </Button>
         </div>
 
         {/* Section 1: One-click Auto Install (Highlighted) */}
@@ -198,13 +204,14 @@ export const AddNodeModal: React.FC<AddNodeModalProps> = ({ isOpen, onClose, the
               <Zap className="h-4 w-4 text-emerald-500" />
               推荐：Linux 一键全自动安装 (内置 Systemd 守护与开机自启)
             </span>
-            <button
-              onClick={() => copyToClipboard(oneClickCmd, "oneclick")}
-              className="btn btn-sm btn-success text-white font-medium shadow-sm gap-1.5 font-sans"
+            <Button
+              onPress={() => copyToClipboard(oneClickCmd, "oneclick")}
+              size="sm"
+              className="gap-1.5 bg-emerald-600 font-sans font-medium text-white shadow-sm hover:bg-emerald-500"
             >
               {copiedCmd === "oneclick" ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
               <span>{copiedCmd === "oneclick" ? "已复制命令" : "一键复制命令"}</span>
-            </button>
+            </Button>
           </div>
           <pre
             className={`p-3.5 rounded-xl border text-xs font-mono overflow-x-auto whitespace-pre-wrap select-all leading-relaxed ${
@@ -223,13 +230,15 @@ export const AddNodeModal: React.FC<AddNodeModalProps> = ({ isOpen, onClose, the
             <span className={isBlueprint ? "text-slate-600 font-medium" : "text-zinc-400"}>
               方式二：直接前台运行二进制 (免 root / 测试调试)
             </span>
-            <button
-              onClick={() => copyToClipboard(binaryCmd, "binary")}
-              className="btn btn-xs btn-ghost text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 font-medium gap-1 font-sans"
+            <Button
+              onPress={() => copyToClipboard(binaryCmd, "binary")}
+              variant="ghost"
+              size="sm"
+              className="gap-1 font-sans font-medium text-indigo-600 dark:text-indigo-400"
             >
               {copiedCmd === "binary" ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
               <span>{copiedCmd === "binary" ? "已复制" : "复制命令"}</span>
-            </button>
+            </Button>
           </div>
           <pre
             className={`p-3 rounded-xl border text-xs font-mono overflow-x-auto whitespace-pre-wrap select-all ${

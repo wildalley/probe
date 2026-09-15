@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { X, Plus, Tag as TagIcon } from "lucide-react";
+import { Button, Chip } from "@heroui/react";
 import { getTagStyle } from "../utils/tagColors";
 import { cn } from "../lib/utils";
 
@@ -77,21 +78,29 @@ export const TagInput: React.FC<TagInputProps> = ({ tags, onChange, theme = "dar
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.8 }}
               transition={{ duration: 0.15, ease: "easeOut" }}
-              className={cn(
-                "badge h-auto gap-1.5 border px-2.5 py-1 text-xs font-sans font-medium shadow-sm",
-                getTagStyle(tag, isBlueprint)
-              )}
+              className="inline-flex"
             >
-              <TagIcon className="h-3 w-3 shrink-0 opacity-75" />
-              <span>{tag}</span>
-              <button
-                type="button"
-                onClick={() => removeTag(tag)}
-                className="cursor-pointer rounded-full p-0.5 opacity-70 transition-all hover:bg-black/15 hover:opacity-100 active:scale-90"
-                title="删除标签"
+              {/* motion wraps rather than replaces the Chip: framer-motion needs a
+                  ref to animate, and Chip renders a plain span without forwarding one. */}
+              <Chip
+                size="sm"
+                variant="soft"
+                className={cn(
+                  "h-auto gap-1.5 border px-2.5 py-1 text-xs font-sans font-medium shadow-sm",
+                  getTagStyle(tag, isBlueprint)
+                )}
               >
-                <X className="h-3 w-3" />
-              </button>
+                <TagIcon className="h-3 w-3 shrink-0 opacity-75" />
+                <span>{tag}</span>
+                <button
+                  type="button"
+                  onClick={() => removeTag(tag)}
+                  className="cursor-pointer rounded-full p-0.5 opacity-70 transition-all hover:bg-black/15 hover:opacity-100 active:scale-90"
+                  title="删除标签"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </Chip>
             </motion.span>
           ))}
         </AnimatePresence>
@@ -129,21 +138,23 @@ export const TagInput: React.FC<TagInputProps> = ({ tags, onChange, theme = "dar
         {PRESET_TAGS.map((preset) => {
           const isSelected = tags.includes(preset);
           return (
-            <button
+            <Button
               key={preset}
               type="button"
-              onClick={() => togglePreset(preset)}
+              size="sm"
+              variant="ghost"
+              onPress={() => togglePreset(preset)}
               className={cn(
-                "badge badge-sm cursor-pointer border font-mono text-11 transition-all active:scale-95",
+                "h-auto rounded-full border px-2 py-0.5 font-mono text-11 transition-all active:scale-95",
                 isSelected
-                  ? "badge-primary border-indigo-500 text-white shadow-sm"
+                  ? "bg-indigo-600 border-indigo-500 text-white shadow-sm"
                   : isBlueprint
                   ? "bg-slate-100/80 text-slate-700 border-slate-200 hover:bg-slate-200/80 hover:text-slate-900"
                   : "bg-zinc-900 text-zinc-300 border-zinc-800 hover:bg-zinc-800 hover:text-zinc-100"
               )}
             >
               {isSelected ? `✓ ${preset}` : `+ ${preset}`}
-            </button>
+            </Button>
           );
         })}
       </div>

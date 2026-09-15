@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import { RefreshCw, Infinity as InfinityIcon } from "lucide-react";
+import { Checkbox, Input, ListBox, Select } from "@heroui/react";
 import { formatBytes } from "../utils/format";
+import { cn } from "../lib/utils";
 
 interface BandwidthConfigProps {
   quotaBytes: number;
@@ -104,39 +106,56 @@ export const BandwidthConfig: React.FC<BandwidthConfigProps> = ({
             <span className={`font-semibold ${isBlueprint ? "text-slate-800" : "text-zinc-200"}`}>
               流量总配额 (Quota)
             </span>
-            <label className="flex items-center gap-1.5 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={isUnlimited}
-                onChange={(e) => handleQuotaChange(quotaVal, quotaUnit, e.target.checked)}
-                className="checkbox checkbox-primary checkbox-xs rounded"
-              />
-              <span className={`text-11 ${isUnlimited ? "text-primary font-bold" : isBlueprint ? "text-slate-500" : "text-zinc-400"}`}>
+            <Checkbox
+              isSelected={isUnlimited}
+              onChange={(checked) => handleQuotaChange(quotaVal, quotaUnit, checked)}
+            >
+              <span
+                className={cn(
+                  "text-11",
+                  isUnlimited
+                    ? "text-indigo-500 font-bold"
+                    : isBlueprint
+                    ? "text-slate-500"
+                    : "text-zinc-400"
+                )}
+              >
                 无限制
               </span>
-            </label>
+            </Checkbox>
           </div>
 
           {!isUnlimited ? (
             <div className="flex items-center gap-1.5">
-              <input
+              <Input
                 type="number"
                 min="0"
                 step="any"
                 value={quotaVal || ""}
                 onChange={(e) => handleQuotaChange(parseFloat(e.target.value) || 0, quotaUnit, false)}
                 placeholder="2"
-                className="input input-bordered input-sm flex-1 font-mono font-bold"
+                aria-label="流量总配额数值"
+                className="flex-1 font-mono font-bold"
               />
-              <select
-                value={quotaUnit}
-                onChange={(e) => handleUnitSwitchQuota(e.target.value as Unit)}
-                className="select select-bordered select-sm font-mono font-bold cursor-pointer"
+              <Select
+                selectedKey={quotaUnit}
+                onSelectionChange={(key) => handleUnitSwitchQuota(key as Unit)}
+                aria-label="流量总配额单位"
               >
-                <option value="TB">TB</option>
-                <option value="GB">GB</option>
-                <option value="MB">MB</option>
-              </select>
+                <Select.Trigger className="font-mono font-bold">
+                  <Select.Value />
+                  <Select.Indicator />
+                </Select.Trigger>
+                <Select.Popover>
+                  <ListBox>
+                    {(["TB", "GB", "MB"] as const).map((u) => (
+                      <ListBox.Item key={u} id={u}>
+                        {u}
+                      </ListBox.Item>
+                    ))}
+                  </ListBox>
+                </Select.Popover>
+              </Select>
             </div>
           ) : (
             <div className={`py-1.5 px-3 rounded-lg border text-center font-bold flex items-center justify-center gap-1.5 ${
@@ -172,24 +191,35 @@ export const BandwidthConfig: React.FC<BandwidthConfigProps> = ({
           </div>
 
           <div className="flex items-center gap-1.5">
-            <input
+            <Input
               type="number"
               min="0"
               step="any"
               value={usedVal || ""}
               onChange={(e) => handleUsedChange(parseFloat(e.target.value) || 0, usedUnit)}
               placeholder="0"
-              className="input input-bordered input-sm flex-1 font-mono font-bold"
+              aria-label="已用流量数值"
+              className="flex-1 font-mono font-bold"
             />
-            <select
-              value={usedUnit}
-              onChange={(e) => handleUnitSwitchUsed(e.target.value as Unit)}
-              className="select select-bordered select-sm font-mono font-bold cursor-pointer"
+            <Select
+              selectedKey={usedUnit}
+              onSelectionChange={(key) => handleUnitSwitchUsed(key as Unit)}
+              aria-label="已用流量单位"
             >
-              <option value="GB">GB</option>
-              <option value="TB">TB</option>
-              <option value="MB">MB</option>
-            </select>
+              <Select.Trigger className="font-mono font-bold">
+                <Select.Value />
+                <Select.Indicator />
+              </Select.Trigger>
+              <Select.Popover>
+                <ListBox>
+                  {(["GB", "TB", "MB"] as const).map((u) => (
+                    <ListBox.Item key={u} id={u}>
+                      {u}
+                    </ListBox.Item>
+                  ))}
+                </ListBox>
+              </Select.Popover>
+            </Select>
           </div>
         </div>
       </div>

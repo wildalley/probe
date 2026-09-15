@@ -1,6 +1,7 @@
 import React from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Calendar, Clock, X } from "lucide-react";
+import { Button } from "@heroui/react";
 import { cn } from "../lib/utils";
 import { NumberTicker } from "./ui/NumberTicker";
 
@@ -123,19 +124,16 @@ export const DatePicker: React.FC<DatePickerProps> = ({ value, onChange, theme =
           { label: "+2年", months: 24 },
           { label: "+3年", months: 36 },
         ].map((p) => (
-          <button
+          <Button
             key={p.label}
             type="button"
-            onClick={() => addPeriod(p.months)}
-            className={cn(
-              "badge badge-sm gap-0 border text-11 font-mono transition-all cursor-pointer active:scale-95",
-              isBlueprint
-                ? "bg-slate-100 text-slate-700 border-slate-200 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-200"
-                : "bg-zinc-900 text-zinc-300 border-zinc-800 hover:bg-indigo-950/50 hover:text-indigo-300 hover:border-indigo-700"
-            )}
+            size="sm"
+            variant="secondary"
+            onPress={() => addPeriod(p.months)}
+            className="h-auto rounded-full px-2 py-0.5 font-mono text-11 active:scale-95"
           >
             {p.label}
-          </button>
+          </Button>
         ))}
       </div>
     </div>

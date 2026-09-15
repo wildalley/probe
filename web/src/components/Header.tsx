@@ -37,6 +37,9 @@ interface HeaderProps {
   onViewModeChange: (m: "grid" | "table") => void;
   onOpenAddModal: () => void;
   onOpenAdminModal?: () => void;
+  isAuthed?: boolean;
+  adminUser?: string | null;
+  onLogout?: () => void;
   theme?: "blueprint" | "dark";
   onToggleTheme?: () => void;
 }
@@ -71,6 +74,9 @@ export const Header: React.FC<HeaderProps> = ({
   onViewModeChange,
   onOpenAddModal,
   onOpenAdminModal,
+  isAuthed = false,
+  adminUser,
+  onLogout,
   theme = "dark",
   onToggleTheme,
 }) => {

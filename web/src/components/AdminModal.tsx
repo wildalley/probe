@@ -43,6 +43,7 @@ import {
   NotificationSettings,
   NotificationLog,
 } from "../types";
+import { Button, Chip, Input, ListBox, Select, Switch, Tabs } from "@heroui/react";
 import { getRegionFlag } from "../utils/flags";
 import { cn } from "../lib/utils";
 import { TagInput } from "./TagInput";
@@ -58,6 +59,50 @@ interface AdminModalProps {
   theme?: "blueprint" | "dark";
   onRefreshNodes?: () => void;
 }
+
+const CURRENCY_OPTIONS = [
+  { key: "$", label: "$ (USD - 美元)" },
+  { key: "¥", label: "¥ (CNY - 人民币)" },
+  { key: "€", label: "€ (EUR - 欧元)" },
+  { key: "HK$", label: "HK$ (HKD - 港币)" },
+  { key: "£", label: "£ (GBP - 英镑)" },
+  { key: "JP¥", label: "JP¥ (JPY - 日元)" },
+];
+
+const BILLING_CYCLE_OPTIONS = [
+  { key: "month", label: "按月 (Month)" },
+  { key: "quarter", label: "按季 (Quarter)" },
+  { key: "half_year", label: "半年 (Half Year)" },
+  { key: "year", label: "按年 (Year)" },
+  { key: "two_year", label: "两年 (2 Years)" },
+  { key: "three_year", label: "三年 (3 Years)" },
+  { key: "one_time", label: "一次性 (One-time)" },
+];
+
+const WEBHOOK_FORMAT_OPTIONS = [
+  { key: "generic", label: "通用 JSON (POST)" },
+  { key: "feishu", label: "飞书群机器人 (Lark Robot)" },
+  { key: "dingtalk", label: "钉钉自定义机器人 (DingTalk)" },
+  { key: "wecom", label: "企业微信群机器人 (WeCom)" },
+  { key: "bark", label: "Bark (iOS 极速通知)" },
+];
+
+// Keys are strings because HeroUI's Select works on keys, not numeric values;
+// the handlers parseInt them back before they reach the settings payload.
+const OFFLINE_THRESHOLD_OPTIONS = [
+  { key: "30", label: "30 秒 (极速检测)" },
+  { key: "60", label: "60 秒 (推荐平衡)" },
+  { key: "120", label: "120 秒 (减少抖动)" },
+  { key: "300", label: "300 秒 (宽限期)" },
+];
+
+const TRAFFIC_THRESHOLD_OPTIONS = [
+  { key: "70", label: "70% 额度预警" },
+  { key: "80", label: "80% 额度预警" },
+  { key: "85", label: "85% 额度预警 (推荐)" },
+  { key: "90", label: "90% 临界预警" },
+  { key: "95", label: "95% 严重警告" },
+];
 
 const TARGET_PALETTE = [
   "#ef4444", // Red
@@ -665,13 +710,16 @@ export const AdminModal: React.FC<AdminModalProps> = ({
               </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="btn btn-sm btn-circle btn-ghost text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200"
-            title="关闭"
+          <Button
+            variant="ghost"
+            size="sm"
+            isIconOnly
+            onPress={onClose}
+            className="text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200"
+            aria-label="关闭"
           >
             <X className="h-4 w-4" />
-          </button>
+          </Button>
         </div>
 
         {/* Tab Navigation */}
@@ -681,37 +729,39 @@ export const AdminModal: React.FC<AdminModalProps> = ({
             isBlueprint ? "bg-white border-slate-200/80" : "bg-zinc-900/60 border-zinc-800"
           )}
         >
-          <div role="tablist" className="tabs tabs-bordered flex-nowrap min-w-max -mb-px">
-            {tabItems.map(({ key, icon: Icon, label, badge, badgeTone }) => (
-              <button
-                key={key}
-                role="tab"
-                aria-selected={activeTab === key}
-                onClick={() => handleTabChange(key)}
-                className={cn(
-                  "tab h-11 flex items-center gap-2 text-xs font-sans transition-all cursor-pointer",
-                  activeTab === key
-                    ? "tab-active !border-indigo-600 !text-indigo-600 dark:!border-indigo-500 dark:!text-indigo-400 font-semibold"
-                    : "!border-transparent text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-200"
-                )}
-              >
-                <Icon className="h-3.5 w-3.5" />
-                <span>{label}</span>
-                {badge != null && (
-                  <span
-                    className={cn(
-                      "rounded-full px-1.5 py-0.5",
-                      badgeTone === "new"
-                        ? "text-9 font-bold bg-indigo-50 text-indigo-600 border border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-400 dark:border-indigo-800"
-                        : "text-10 font-mono bg-slate-100 text-slate-600 border border-slate-200/60 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700/60"
-                    )}
-                  >
-                    {badge}
-                  </span>
-                )}
-              </button>
-            ))}
-          </div>
+          <Tabs
+            selectedKey={activeTab}
+            onSelectionChange={(key) => handleTabChange(key as TabKey)}
+            aria-label="管理后台分区"
+          >
+            <Tabs.List className="flex-nowrap min-w-max -mb-px">
+              {tabItems.map(({ key, icon: Icon, label, badge, badgeTone }) => (
+                <Tabs.Tab
+                  key={key}
+                  id={key}
+                  // HeroUI's .tabs__tab is `w-full` + shrinkable, so five tabs split
+                  // the bar into equal fifths and the long labels wrapped to two
+                  // lines. Sizing to content instead keeps every label on one line.
+                  className="h-11 w-auto shrink-0 gap-2 whitespace-nowrap text-xs font-sans"
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  <span>{label}</span>
+                  {badge != null && (
+                    <span
+                      className={cn(
+                        "rounded-full px-1.5 py-0.5",
+                        badgeTone === "new"
+                          ? "text-9 font-bold bg-indigo-50 text-indigo-600 border border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-400 dark:border-indigo-800"
+                          : "text-10 font-mono bg-slate-100 text-slate-600 border border-slate-200/60 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700/60"
+                      )}
+                    >
+                      {badge}
+                    </span>
+                  )}
+                </Tabs.Tab>
+              ))}
+            </Tabs.List>
+          </Tabs>
         </div>
 
 
@@ -763,16 +813,12 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                     <label className={`block mb-1.5 font-medium ${isBlueprint ? "text-slate-700" : "text-zinc-300"}`}>
                       节点名称 (Name)
                     </label>
-                    <input
+                    <Input
                       type="text"
                       value={deployName}
                       onChange={(e) => setDeployName(e.target.value)}
                       placeholder="node-01"
-                      className={`input input-bordered input-sm w-full font-mono text-xs focus:outline-none ${
-                        isBlueprint
-                          ? "bg-white border-slate-200 text-slate-900 focus:border-indigo-500"
-                          : "bg-zinc-950 border-zinc-800 text-zinc-100 focus:border-indigo-500"
-                      }`}
+                      className="w-full font-mono text-xs"
                     />
                   </div>
                   <div className="flex flex-col justify-end">
@@ -807,14 +853,16 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                       (已自动嵌入下方安装命令)
                     </span>
                   </div>
-                  <button
-                    onClick={handleRegenerateDeployToken}
-                    className="btn btn-xs btn-ghost text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 font-medium gap-1"
-                    title="重新生成并更换一个新 Token"
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onPress={handleRegenerateDeployToken}
+                    className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 font-medium gap-1"
+                    aria-label="重新生成并更换一个新 Token"
                   >
                     <RefreshCw className="h-3 w-3" />
                     <span>更换 Token</span>
-                  </button>
+                  </Button>
                 </div>
 
                 {/* Command Shell Block */}
@@ -824,13 +872,15 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                   >
                     {oneClickCmd}
                   </pre>
-                  <button
-                    onClick={() => copyToClipboard(oneClickCmd, "deployCmd")}
-                    className="absolute right-3 top-3 btn btn-sm btn-primary font-sans font-medium shadow-md gap-1.5"
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onPress={() => copyToClipboard(oneClickCmd, "deployCmd")}
+                    className="absolute right-3 top-3 font-sans font-medium shadow-md gap-1.5"
                   >
                     {copiedCmd === "deployCmd" ? <Check className="h-3.5 w-3.5 text-white" /> : <Copy className="h-3.5 w-3.5" />}
                     <span>{copiedCmd === "deployCmd" ? "已复制" : "复制命令"}</span>
-                  </button>
+                  </Button>
                 </div>
               </div>
 
@@ -848,15 +898,17 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                     </div>
 
                     <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => {
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onPress={() => {
                           setEditingNode(null);
                           setAutoGeoNotice(null);
                         }}
-                        className="btn btn-sm btn-ghost font-sans text-xs"
+                        className="font-sans text-xs"
                       >
                         取消
-                      </button>
+                      </Button>
                     </div>
                   </div>
 
@@ -879,17 +931,17 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                       <div className="flex items-center gap-1.5 font-bold">
                         <Globe className="h-4 w-4 text-sky-500 shrink-0" />
                         <span className={isBlueprint ? "text-slate-700" : "text-zinc-300"}>归属地区:</span>
-                        <span className="badge badge-info badge-outline font-bold gap-1 py-2 px-2.5">
+                        <Chip variant="soft" color="accent" size="sm" className="gap-1 font-bold">
                           <span className="text-sm">{getRegionFlag(editingNode.region || "")}</span>
                           <span>{editingNode.region || "自动识别中"}</span>
-                        </span>
+                        </Chip>
                       </div>
 
                       <div className="flex items-center gap-1.5 font-bold">
                         <span className={isBlueprint ? "text-slate-700" : "text-zinc-300"}>服务商/线路:</span>
-                        <span className="badge badge-success badge-outline font-bold py-2 px-2.5">
+                        <Chip color="success" variant="soft" size="sm" className="font-bold">
                           {editingNode.provider || "智能测定中..."}
-                        </span>
+                        </Chip>
                       </div>
 
                       {editingNode.public_ip && (
@@ -900,24 +952,28 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                     </div>
 
                     <div className="flex items-center gap-2">
-                      <button
+                      <Button
+                        variant="outline"
+                        size="sm"
                         type="button"
-                        onClick={handleAutoResolveNodeGeo}
-                        disabled={isResolvingGeo}
-                        className="btn btn-xs btn-outline btn-primary gap-1 font-sans font-medium"
-                        title="根据该节点公网 IP 自动重新解析国家地区与网络线路"
+                        onPress={handleAutoResolveNodeGeo}
+                        isDisabled={isResolvingGeo}
+                        className="gap-1 font-sans font-medium"
+                        aria-label="根据该节点公网 IP 自动重新解析国家地区与网络线路"
                       >
                         <Zap className={`h-3 w-3 ${isResolvingGeo ? "animate-spin" : ""}`} />
                         <span>{isResolvingGeo ? "识别中..." : "重新识别"}</span>
-                      </button>
+                      </Button>
 
-                      <button
+                      <Button
+                        variant="ghost"
+                        size="sm"
                         type="button"
-                        onClick={() => setShowManualOverride(!showManualOverride)}
-                        className="btn btn-xs btn-ghost text-10 text-slate-500 dark:text-zinc-400 font-sans"
+                        onPress={() => setShowManualOverride(!showManualOverride)}
+                        className="text-10 text-slate-500 dark:text-zinc-400 font-sans"
                       >
                         {showManualOverride ? "收起手动覆盖" : "手动微调 ▾"}
-                      </button>
+                      </Button>
                     </div>
                   </div>
 
@@ -928,32 +984,24 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                         <label className={`block mb-1 font-medium ${isBlueprint ? "text-slate-700" : "text-zinc-300"}`}>
                           强制指定地区 (覆盖自动识别)
                         </label>
-                        <input
+                        <Input
                           type="text"
                           value={editingNode.region || ""}
                           onChange={(e) => setEditingNode({ ...editingNode, region: e.target.value })}
                           placeholder="如 HK, US, JP, SG 等"
-                          className={`input input-bordered input-sm w-full font-sans text-xs focus:outline-none ${
-                            isBlueprint
-                              ? "bg-white border-slate-200 text-slate-900 focus:border-indigo-500"
-                              : "bg-zinc-950 border-zinc-800 text-zinc-100 focus:border-indigo-500"
-                          }`}
+                          className="w-full font-sans text-xs"
                         />
                       </div>
                       <div>
                         <label className={`block mb-1 font-medium ${isBlueprint ? "text-slate-700" : "text-zinc-300"}`}>
                           强制指定服务商/线路 (覆盖自动识别)
                         </label>
-                        <input
+                        <Input
                           type="text"
                           value={editingNode.provider || ""}
                           onChange={(e) => setEditingNode({ ...editingNode, provider: e.target.value })}
                           placeholder="如 BandwagonHost CN2 GIA, Oracle"
-                          className={`input input-bordered input-sm w-full font-sans text-xs focus:outline-none ${
-                            isBlueprint
-                              ? "bg-white border-slate-200 text-slate-900 focus:border-indigo-500"
-                              : "bg-zinc-950 border-zinc-800 text-zinc-100 focus:border-indigo-500"
-                          }`}
+                          className="w-full font-sans text-xs"
                         />
                       </div>
                     </div>
@@ -964,75 +1012,74 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                       <label className={`block mb-1 font-medium ${isBlueprint ? "text-slate-700" : "text-zinc-300"}`}>
                         主机展示名称 (Name)
                       </label>
-                      <input
+                      <Input
                         type="text"
                         value={editingNode.name || ""}
                         onChange={(e) => setEditingNode({ ...editingNode, name: e.target.value })}
-                        className={`input input-bordered input-sm w-full font-sans text-xs focus:outline-none ${
-                          isBlueprint
-                            ? "bg-white border-slate-200 text-slate-900 focus:border-indigo-500"
-                            : "bg-zinc-950 border-zinc-800 text-zinc-100 focus:border-indigo-500"
-                        }`}
+                        className="w-full font-sans text-xs"
                       />
                     </div>
                     <div>
                       <label className={`block mb-1 font-medium ${isBlueprint ? "text-slate-700" : "text-zinc-300"}`}>
                         计费单价 (Price)
                       </label>
-                      <input
+                      <Input
                         type="number"
                         step="0.01"
                         value={editingNode.price}
                         onChange={(e) => setEditingNode({ ...editingNode, price: parseFloat(e.target.value) || 0 })}
-                        className={`input input-bordered input-sm w-full font-mono text-xs font-bold focus:outline-none ${
-                          isBlueprint
-                            ? "bg-white border-slate-200 text-slate-900 focus:border-indigo-500"
-                            : "bg-zinc-950 border-zinc-800 text-zinc-100 focus:border-indigo-500"
-                        }`}
+                        className="w-full font-mono text-xs font-bold"
                       />
                     </div>
                     <div>
                       <label className={`block mb-1 font-medium ${isBlueprint ? "text-slate-700" : "text-zinc-300"}`}>
                         货币单位 (Currency)
                       </label>
-                      <select
-                        value={editingNode.currency}
-                        onChange={(e) => setEditingNode({ ...editingNode, currency: e.target.value })}
-                        className={`select select-bordered select-sm w-full font-mono text-xs font-bold focus:outline-none cursor-pointer ${
-                          isBlueprint
-                            ? "bg-white border-slate-200 text-slate-900 focus:border-indigo-500"
-                            : "bg-zinc-950 border-zinc-800 text-zinc-100 focus:border-indigo-500"
-                        }`}
+                      <Select
+                        selectedKey={editingNode.currency}
+                        onSelectionChange={(key) => setEditingNode({ ...editingNode, currency: String(key) })}
+                        aria-label="货币单位"
+                        fullWidth
                       >
-                        <option value="$">$ (USD - 美元)</option>
-                        <option value="¥">¥ (CNY - 人民币)</option>
-                        <option value="€">€ (EUR - 欧元)</option>
-                        <option value="HK$">HK$ (HKD - 港币)</option>
-                        <option value="£">£ (GBP - 英镑)</option>
-                        <option value="JP¥">JP¥ (JPY - 日元)</option>
-                      </select>
+                        <Select.Trigger className="font-mono text-xs font-bold">
+                          <Select.Value />
+                          <Select.Indicator />
+                        </Select.Trigger>
+                        <Select.Popover>
+                          <ListBox>
+                            {CURRENCY_OPTIONS.map((o) => (
+                              <ListBox.Item key={o.key} id={o.key} textValue={o.label}>
+                                {o.label}
+                              </ListBox.Item>
+                            ))}
+                          </ListBox>
+                        </Select.Popover>
+                      </Select>
                     </div>
                     <div>
                       <label className={`block mb-1 font-medium ${isBlueprint ? "text-slate-700" : "text-zinc-300"}`}>
                         计费周期 (Billing Cycle)
                       </label>
-                      <select
-                        value={editingNode.billing_cycle}
-                        onChange={(e) => setEditingNode({ ...editingNode, billing_cycle: e.target.value })}
-                        className={`select select-bordered select-sm w-full font-sans text-xs font-semibold focus:outline-none cursor-pointer ${
-                          isBlueprint
-                            ? "bg-white border-slate-200 text-slate-900 focus:border-indigo-500"
-                            : "bg-zinc-950 border-zinc-800 text-zinc-100 focus:border-indigo-500"
-                        }`}
+                      <Select
+                        selectedKey={editingNode.billing_cycle}
+                        onSelectionChange={(key) => setEditingNode({ ...editingNode, billing_cycle: String(key) })}
+                        aria-label="计费周期"
+                        fullWidth
                       >
-                        <option value="month">按月 (Month)</option>
-                        <option value="quarter">按季 (Quarter)</option>
-                        <option value="half_year">半年 (Half Year)</option>
-                        <option value="year">按年 (Year)</option>
-                        <option value="two_year">两年 (2 Years)</option>
-                        <option value="three_year">三年 (3 Years)</option>
-                        <option value="one_time">一次性 (One-time)</option>
-                      </select>
+                        <Select.Trigger className="font-sans text-xs font-semibold">
+                          <Select.Value />
+                          <Select.Indicator />
+                        </Select.Trigger>
+                        <Select.Popover>
+                          <ListBox>
+                            {BILLING_CYCLE_OPTIONS.map((o) => (
+                              <ListBox.Item key={o.key} id={o.key} textValue={o.label}>
+                                {o.label}
+                              </ListBox.Item>
+                            ))}
+                          </ListBox>
+                        </Select.Popover>
+                      </Select>
                     </div>
                   </div>
 
@@ -1083,30 +1130,36 @@ export const AdminModal: React.FC<AdminModalProps> = ({
 
                   {/* Actions & Auto Renewal */}
                   <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-dashed border-slate-200 dark:border-zinc-800">
-                    <label className="flex items-center gap-2 text-xs font-sans font-medium cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={editingNode.auto_renewal}
-                        onChange={(e) => setEditingNode({ ...editingNode, auto_renewal: e.target.checked })}
-                        className="toggle toggle-primary toggle-sm cursor-pointer"
-                      />
-                      <span className={isBlueprint ? "text-slate-800" : "text-zinc-200"}>
-                        开启到期自动续费 (Auto Renewal)
-                      </span>
-                    </label>
+                    <Switch
+                      isSelected={editingNode.auto_renewal}
+                      onChange={(v) => setEditingNode({ ...editingNode, auto_renewal: v })}
+                      size="sm"
+                      className="text-xs font-sans font-medium"
+                    >
+                      <Switch.Content className="gap-2">
+                        <Switch.Control>
+                          <Switch.Thumb />
+                        </Switch.Control>
+                        <span className={isBlueprint ? "text-slate-800" : "text-zinc-200"}>
+                          开启到期自动续费 (Auto Renewal)
+                        </span>
+                      </Switch.Content>
+                    </Switch>
 
                     <div className="flex items-center gap-3">
                       {hostSaveSuccess && (
-                        <span className="badge badge-success badge-outline text-xs font-sans font-medium flex items-center gap-1">
+                        <Chip color="success" variant="soft" size="sm" className="flex items-center gap-1 text-xs font-sans font-medium">
                           <Check className="h-3.5 w-3.5" /> 配置保存成功！
-                        </span>
+                        </Chip>
                       )}
-                      <button
-                        onClick={handleSaveNodeSettings}
-                        className="btn btn-sm btn-primary font-sans font-medium"
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onPress={handleSaveNodeSettings}
+                        className="font-sans font-medium"
                       >
                         保存主机设置
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 </div>
@@ -1231,22 +1284,26 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                             </td>
                             <td className="py-3.5 px-4 whitespace-nowrap text-right pr-6">
                               <div className="flex items-center justify-end gap-1">
-                                <button
-                                  onClick={() => handleEditNodeClick(n)}
-                                  className="btn btn-xs btn-ghost text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 dark:text-zinc-400 dark:hover:text-indigo-400 dark:hover:bg-indigo-950/40 font-sans gap-1"
-                                  title="配置主机"
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onPress={() => handleEditNodeClick(n)}
+                                  className="text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 dark:text-zinc-400 dark:hover:text-indigo-400 dark:hover:bg-indigo-950/40 font-sans gap-1"
+                                  aria-label="配置主机"
                                 >
                                   <Sliders className="h-3 w-3" />
                                   <span>配置</span>
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteNode(n.node_id)}
-                                  className="btn btn-xs btn-ghost text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:text-rose-400 dark:hover:bg-rose-950/40 font-sans gap-1"
-                                  title="删除主机"
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onPress={() => handleDeleteNode(n.node_id)}
+                                  className="text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:text-rose-400 dark:hover:bg-rose-950/40 font-sans gap-1"
+                                  aria-label="删除主机"
                                 >
                                   <Trash2 className="h-3 w-3" />
                                   <span>删除</span>
-                                </button>
+                                </Button>
                               </div>
                             </td>
                           </tr>
@@ -1280,13 +1337,15 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                   </p>
                 </div>
 
-                <button
-                  onClick={openAddTargetModal}
-                  className="btn btn-sm btn-primary font-sans font-medium gap-1.5 shadow-xs"
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onPress={openAddTargetModal}
+                  className="font-sans font-medium gap-1.5 shadow-xs"
                 >
                   <Plus className="h-4 w-4" />
                   <span>添加监测</span>
-                </button>
+                </Button>
               </div>
 
               {/* Instant ping tester quick bar */}
@@ -1302,8 +1361,8 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                   <span className={`font-semibold ${isBlueprint ? "text-slate-800" : "text-zinc-200"}`}>
                     即时测速:
                   </span>
-                  <div className="join">
-                    <input
+                  <div className="flex items-center gap-2">
+                    <Input
                       type="text"
                       placeholder="输入 IP 或域名，如 1.1.1.1"
                       value={instantTargetInput}
@@ -1313,19 +1372,17 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                           handleTestTarget(instantTargetInput.trim());
                         }
                       }}
-                      className={`input input-bordered input-sm join-item font-mono text-xs w-64 focus:outline-none ${
-                        isBlueprint
-                          ? "bg-white border-slate-200 text-slate-900 focus:border-indigo-500"
-                          : "bg-zinc-950 border-zinc-800 text-zinc-100 focus:border-indigo-500"
-                      }`}
+                      className="font-mono text-xs w-64"
                     />
-                    <button
-                      onClick={() => handleTestTarget(instantTargetInput.trim())}
-                      disabled={isTesting || !instantTargetInput.trim()}
-                      className="btn btn-sm btn-primary join-item font-sans font-medium"
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onPress={() => handleTestTarget(instantTargetInput.trim())}
+                      isDisabled={isTesting || !instantTargetInput.trim()}
+                      className="font-sans font-medium"
                     >
                       {isTesting ? "测试中..." : "测试连接"}
-                    </button>
+                    </Button>
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5 text-xs font-sans text-slate-500 dark:text-zinc-400">
@@ -1349,13 +1406,14 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                         : `连接失败: ${testResult.error || "网络超时"}`}
                     </span>
                   </div>
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     type="button"
-                    onClick={() => setTestResult(null)}
-                    className="btn btn-xs btn-ghost"
+                    onPress={() => setTestResult(null)}
                   >
                     关闭
-                  </button>
+                  </Button>
                 </div>
               )}
 
@@ -1437,41 +1495,48 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                               </span>
                             )}
                           </td>
-                          <td className="py-3 px-4 whitespace-nowrap">
-                            <label className="inline-flex items-center gap-2 cursor-pointer select-none" title="点击切换启用/停用状态">
-                              <input
-                                type="checkbox"
-                                checked={t.enabled !== false}
-                                onChange={() => handleToggleTarget(t)}
-                                className="toggle toggle-success toggle-xs cursor-pointer"
-                              />
-                              <span className={`text-xs font-medium ${
-                                t.enabled !== false
-                                  ? isBlueprint ? "text-emerald-700" : "text-emerald-400"
-                                  : isBlueprint ? "text-slate-400" : "text-zinc-500"
-                              }`}>
-                                {t.enabled !== false ? "已启用" : "已停用"}
-                              </span>
-                            </label>
+                          <td className="py-3 px-4 whitespace-nowrap" title="点击切换启用/停用状态">
+                            <Switch
+                              isSelected={t.enabled !== false}
+                              onChange={() => handleToggleTarget(t)}
+                              size="sm"
+                            >
+                              <Switch.Content className="gap-2">
+                                <Switch.Control>
+                                  <Switch.Thumb />
+                                </Switch.Control>
+                                <span className={`text-xs font-medium ${
+                                  t.enabled !== false
+                                    ? isBlueprint ? "text-emerald-700" : "text-emerald-400"
+                                    : isBlueprint ? "text-slate-400" : "text-zinc-500"
+                                }`}>
+                                  {t.enabled !== false ? "已启用" : "已停用"}
+                                </span>
+                              </Switch.Content>
+                            </Switch>
                           </td>
                           <td className="py-3 px-4 whitespace-nowrap text-right pr-6">
                             <div className="flex items-center justify-end gap-1">
-                              <button
-                                onClick={() => openEditTargetModal(t)}
-                                className="btn btn-xs btn-ghost text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 dark:text-zinc-400 dark:hover:text-indigo-400 dark:hover:bg-indigo-950/40 font-sans gap-1"
-                                title="编辑监测目标"
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onPress={() => openEditTargetModal(t)}
+                                className="text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 dark:text-zinc-400 dark:hover:text-indigo-400 dark:hover:bg-indigo-950/40 font-sans gap-1"
+                                aria-label="编辑监测目标"
                               >
                                 <Edit2 className="h-3 w-3" />
                                 <span>编辑</span>
-                              </button>
-                              <button
-                                onClick={() => handleDeleteTarget(t.id)}
-                                className="btn btn-xs btn-ghost text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:text-rose-400 dark:hover:bg-rose-950/40 font-sans gap-1"
-                                title="删除监测目标"
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onPress={() => handleDeleteTarget(t.id)}
+                                className="text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:text-rose-400 dark:hover:bg-rose-950/40 font-sans gap-1"
+                                aria-label="删除监测目标"
                               >
                                 <Trash2 className="h-3 w-3" />
                                 <span>删除</span>
-                              </button>
+                              </Button>
                             </div>
                           </td>
                         </tr>
@@ -1549,14 +1614,16 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                   </div>
 
                   <div className="flex items-center gap-2 font-sans text-xs">
-                    <button
-                      onClick={handleRefreshRates}
-                      disabled={isRefreshingRates}
-                      className="btn btn-xs btn-ghost text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 font-sans gap-1"
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onPress={handleRefreshRates}
+                      isDisabled={isRefreshingRates}
+                      className="text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 font-sans gap-1"
                     >
                       <RefreshCw className={`h-3.5 w-3.5 ${isRefreshingRates ? "animate-spin" : ""}`} />
                       <span>获取最新实时汇率</span>
-                    </button>
+                    </Button>
                   </div>
                 </div>
 
@@ -1606,12 +1673,14 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                         <Check className="h-3.5 w-3.5" /> 汇率保存成功
                       </span>
                     )}
-                    <button
-                      onClick={handleSaveRates}
-                      className="btn btn-sm btn-primary font-sans font-medium"
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onPress={handleSaveRates}
+                      className="font-sans font-medium"
                     >
                       保存汇率设定
-                    </button>
+                    </Button>
                   </div>
                 </div>
               </div>
@@ -1628,25 +1697,23 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                 }`}
               >
                 <div className="flex-1 min-w-[240px]">
-                  <input
+                  <Input
                     type="text"
                     placeholder="输入新 Token 标签备注 (如: 美国VPS专用)..."
                     value={newTokenLabel}
                     onChange={(e) => setNewTokenLabel(e.target.value)}
-                    className={`input input-bordered input-sm w-full font-sans text-xs focus:outline-none ${
-                      isBlueprint
-                        ? "bg-white border-slate-200 text-slate-900 focus:border-indigo-500"
-                        : "bg-zinc-950 border-zinc-800 text-zinc-100 focus:border-indigo-500"
-                    }`}
+                    className="w-full font-sans text-xs"
                   />
                 </div>
-                <button
-                  onClick={handleCreateToken}
-                  className="btn btn-sm btn-primary font-sans font-medium gap-1.5"
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onPress={handleCreateToken}
+                  className="font-sans font-medium gap-1.5"
                 >
                   <Plus className="h-4 w-4" />
                   <span>生成新 Token</span>
-                </button>
+                </Button>
               </div>
 
               {/* Tokens list */}
@@ -1691,13 +1758,15 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                             {t.created_at ? new Date(t.created_at * 1000).toLocaleString() : "--"}
                           </td>
                           <td className="py-3 px-4 whitespace-nowrap text-right pr-6">
-                            <button
-                              onClick={() => copyToClipboard(t.token, t.token)}
-                              className="btn btn-xs btn-ghost text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 dark:text-zinc-400 dark:hover:text-indigo-400 dark:hover:bg-indigo-950/40 font-sans gap-1"
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onPress={() => copyToClipboard(t.token, t.token)}
+                              className="text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 dark:text-zinc-400 dark:hover:text-indigo-400 dark:hover:bg-indigo-950/40 font-sans gap-1"
                             >
                               {copiedCmd === t.token ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
                               <span>{copiedCmd === t.token ? "已复制" : "复制"}</span>
-                            </button>
+                            </Button>
                           </td>
                         </tr>
                       ))}
@@ -1746,11 +1815,13 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                   </div>
 
                   <div className="flex items-center gap-2.5 shrink-0 self-end md:self-auto font-sans text-xs">
-                    <button
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       type="button"
-                      disabled={testingChannel !== null}
-                      onClick={() => handleTestNotification("all")}
-                      className="btn btn-sm btn-ghost text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-zinc-300 dark:hover:bg-zinc-800 font-sans font-medium gap-1.5"
+                      isDisabled={testingChannel !== null}
+                      onPress={() => handleTestNotification("all")}
+                      className="text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-zinc-300 dark:hover:bg-zinc-800 font-sans font-medium gap-1.5"
                     >
                       {testingChannel === "all" ? (
                         <RefreshCw className="h-3.5 w-3.5 animate-spin" />
@@ -1758,13 +1829,15 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                         <Send className="h-3.5 w-3.5" />
                       )}
                       <span>{testingChannel === "all" ? "测试中..." : "全通道测试"}</span>
-                    </button>
+                    </Button>
 
-                    <button
+                    <Button
+                      variant="primary"
+                      size="sm"
                       type="button"
-                      disabled={isSavingNotif}
-                      onClick={handleSaveNotificationSettings}
-                      className="btn btn-sm btn-primary font-sans font-medium gap-1.5"
+                      isDisabled={isSavingNotif}
+                      onPress={handleSaveNotificationSettings}
+                      className="font-sans font-medium gap-1.5"
                     >
                       {isSavingNotif ? (
                         <RefreshCw className="h-3.5 w-3.5 animate-spin" />
@@ -1774,7 +1847,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                         <Check className="h-3.5 w-3.5" />
                       )}
                       <span>{notifSaveSuccess ? "已保存配置" : "保存通知配置"}</span>
-                    </button>
+                    </Button>
                   </div>
                 </div>
 
@@ -1793,13 +1866,14 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                       )}
                       <span>{testNotice.msg}</span>
                     </div>
-                    <button
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       type="button"
-                      onClick={() => setTestNotice(null)}
-                      className="btn btn-xs btn-ghost"
+                      onPress={() => setTestNotice(null)}
                     >
                       <X className="h-3.5 w-3.5" />
-                    </button>
+                    </Button>
                   </div>
                 )}
               </div>
@@ -1838,17 +1912,23 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                             <span className="font-semibold font-sans text-xs">Telegram 机器人</span>
                           </div>
                         </div>
-                        <input
-                          type="checkbox"
-                          checked={notificationSettings.telegram.enabled}
-                          onChange={(e) =>
+                        <Switch
+                          isSelected={notificationSettings.telegram.enabled}
+                          onChange={(v) =>
                             setNotificationSettings({
                               ...notificationSettings,
-                              telegram: { ...notificationSettings.telegram, enabled: e.target.checked },
+                              telegram: { ...notificationSettings.telegram, enabled: v },
                             })
                           }
-                          className="toggle toggle-info toggle-sm cursor-pointer"
-                        />
+                          size="sm"
+                          aria-label="启用 Telegram 通知"
+                        >
+                          <Switch.Content>
+                            <Switch.Control>
+                              <Switch.Thumb />
+                            </Switch.Control>
+                          </Switch.Content>
+                        </Switch>
                       </div>
 
                       <div className="space-y-3 text-xs font-sans">
@@ -1856,7 +1936,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                           <label className={`block text-11 font-medium mb-1 ${isBlueprint ? "text-slate-600" : "text-zinc-400"}`}>
                             Bot Token
                           </label>
-                          <input
+                          <Input
                             type="text"
                             value={notificationSettings.telegram.bot_token}
                             onChange={(e) =>
@@ -1866,11 +1946,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                               })
                             }
                             placeholder="如: 123456789:ABCdef-ghI..."
-                            className={`input input-bordered input-sm w-full font-mono text-xs focus:outline-none ${
-                              isBlueprint
-                                ? "bg-white border-slate-200 text-slate-900 focus:border-indigo-500"
-                                : "bg-zinc-950 border-zinc-800 text-zinc-100 focus:border-indigo-500"
-                            }`}
+                            className="w-full font-mono text-xs"
                           />
                         </div>
 
@@ -1878,7 +1954,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                           <label className={`block text-11 font-medium mb-1 ${isBlueprint ? "text-slate-600" : "text-zinc-400"}`}>
                             Chat ID (用户或群组ID)
                           </label>
-                          <input
+                          <Input
                             type="text"
                             value={notificationSettings.telegram.chat_id}
                             onChange={(e) =>
@@ -1888,11 +1964,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                               })
                             }
                             placeholder="如: -100123456789 或 98765432"
-                            className={`input input-bordered input-sm w-full font-mono text-xs focus:outline-none ${
-                              isBlueprint
-                                ? "bg-white border-slate-200 text-slate-900 focus:border-indigo-500"
-                                : "bg-zinc-950 border-zinc-800 text-zinc-100 focus:border-indigo-500"
-                            }`}
+                            className="w-full font-mono text-xs"
                           />
                         </div>
                       </div>
@@ -1902,14 +1974,16 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                       <span className={`text-11 ${isBlueprint ? "text-slate-400" : "text-zinc-500"}`}>
                         Markdown 格式排版
                       </span>
-                      <button
+                      <Button
+                        variant="ghost"
+                        size="sm"
                         type="button"
-                        disabled={testingChannel !== null}
-                        onClick={() => handleTestNotification("telegram")}
-                        className="btn btn-xs btn-ghost text-sky-600 hover:bg-sky-50 dark:text-sky-400 dark:hover:bg-sky-950/40 font-sans font-medium"
+                        isDisabled={testingChannel !== null}
+                        onPress={() => handleTestNotification("telegram")}
+                        className="text-sky-600 hover:bg-sky-50 dark:text-sky-400 dark:hover:bg-sky-950/40 font-sans font-medium"
                       >
                         {testingChannel === "telegram" ? "测试中..." : "测试 Telegram"}
-                      </button>
+                      </Button>
                     </div>
                   </div>
 
@@ -1935,17 +2009,23 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                             <span className="font-semibold font-sans text-xs">通用 / 企业 Webhook</span>
                           </div>
                         </div>
-                        <input
-                          type="checkbox"
-                          checked={notificationSettings.webhook.enabled}
-                          onChange={(e) =>
+                        <Switch
+                          isSelected={notificationSettings.webhook.enabled}
+                          onChange={(v) =>
                             setNotificationSettings({
                               ...notificationSettings,
-                              webhook: { ...notificationSettings.webhook, enabled: e.target.checked },
+                              webhook: { ...notificationSettings.webhook, enabled: v },
                             })
                           }
-                          className="toggle toggle-success toggle-sm cursor-pointer"
-                        />
+                          size="sm"
+                          aria-label="启用 Webhook 通知"
+                        >
+                          <Switch.Content>
+                            <Switch.Control>
+                              <Switch.Thumb />
+                            </Switch.Control>
+                          </Switch.Content>
+                        </Switch>
                       </div>
 
                       <div className="space-y-3 text-xs font-sans">
@@ -1953,33 +2033,38 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                           <label className={`block text-11 font-medium mb-1 ${isBlueprint ? "text-slate-600" : "text-zinc-400"}`}>
                             平台协议类型
                           </label>
-                          <select
-                            value={notificationSettings.webhook.format}
-                            onChange={(e) =>
+                          <Select
+                            selectedKey={notificationSettings.webhook.format}
+                            onSelectionChange={(key) =>
                               setNotificationSettings({
                                 ...notificationSettings,
-                                webhook: { ...notificationSettings.webhook, format: e.target.value as any },
+                                webhook: { ...notificationSettings.webhook, format: String(key) as any },
                               })
                             }
-                            className={`select select-bordered select-sm w-full font-sans text-xs focus:outline-none cursor-pointer ${
-                              isBlueprint
-                                ? "bg-white border-slate-200 text-slate-900 focus:border-indigo-500"
-                                : "bg-zinc-950 border-zinc-800 text-zinc-100 focus:border-indigo-500"
-                            }`}
+                            aria-label="平台协议类型"
+                            fullWidth
                           >
-                            <option value="generic">通用 JSON (POST)</option>
-                            <option value="feishu">飞书群机器人 (Lark Robot)</option>
-                            <option value="dingtalk">钉钉自定义机器人 (DingTalk)</option>
-                            <option value="wecom">企业微信群机器人 (WeCom)</option>
-                            <option value="bark">Bark (iOS 极速通知)</option>
-                          </select>
+                            <Select.Trigger className="font-sans text-xs">
+                              <Select.Value />
+                              <Select.Indicator />
+                            </Select.Trigger>
+                            <Select.Popover>
+                              <ListBox>
+                                {WEBHOOK_FORMAT_OPTIONS.map((o) => (
+                                  <ListBox.Item key={o.key} id={o.key} textValue={o.label}>
+                                    {o.label}
+                                  </ListBox.Item>
+                                ))}
+                              </ListBox>
+                            </Select.Popover>
+                          </Select>
                         </div>
 
                         <div>
                           <label className={`block text-11 font-medium mb-1 ${isBlueprint ? "text-slate-600" : "text-zinc-400"}`}>
                             Webhook URL
                           </label>
-                          <input
+                          <Input
                             type="text"
                             value={notificationSettings.webhook.url}
                             onChange={(e) =>
@@ -1989,11 +2074,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                               })
                             }
                             placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/..."
-                            className={`input input-bordered input-sm w-full font-mono text-xs focus:outline-none ${
-                              isBlueprint
-                                ? "bg-white border-slate-200 text-slate-900 focus:border-indigo-500"
-                                : "bg-zinc-950 border-zinc-800 text-zinc-100 focus:border-indigo-500"
-                            }`}
+                            className="w-full font-mono text-xs"
                           />
                         </div>
 
@@ -2001,7 +2082,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                           <label className={`block text-11 font-medium mb-1 ${isBlueprint ? "text-slate-600" : "text-zinc-400"}`}>
                             Secret 密钥 / 签名 (可选)
                           </label>
-                          <input
+                          <Input
                             type="text"
                             value={notificationSettings.webhook.secret || ""}
                             onChange={(e) =>
@@ -2011,11 +2092,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                               })
                             }
                             placeholder="可选签名密钥或 Token"
-                            className={`input input-bordered input-sm w-full font-mono text-xs focus:outline-none ${
-                              isBlueprint
-                                ? "bg-white border-slate-200 text-slate-900 focus:border-indigo-500"
-                                : "bg-zinc-950 border-zinc-800 text-zinc-100 focus:border-indigo-500"
-                            }`}
+                            className="w-full font-mono text-xs"
                           />
                         </div>
                       </div>
@@ -2025,14 +2102,16 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                       <span className={`text-11 ${isBlueprint ? "text-slate-400" : "text-zinc-500"}`}>
                         原生适配 Markdown
                       </span>
-                      <button
+                      <Button
+                        variant="ghost"
+                        size="sm"
                         type="button"
-                        disabled={testingChannel !== null}
-                        onClick={() => handleTestNotification("webhook")}
-                        className="btn btn-xs btn-ghost text-emerald-600 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/40 font-sans font-medium"
+                        isDisabled={testingChannel !== null}
+                        onPress={() => handleTestNotification("webhook")}
+                        className="text-emerald-600 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/40 font-sans font-medium"
                       >
                         {testingChannel === "webhook" ? "测试中..." : "测试 Webhook"}
-                      </button>
+                      </Button>
                     </div>
                   </div>
 
@@ -2058,17 +2137,23 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                             <span className="font-semibold font-sans text-xs">Discord 频道</span>
                           </div>
                         </div>
-                        <input
-                          type="checkbox"
-                          checked={notificationSettings.discord.enabled}
-                          onChange={(e) =>
+                        <Switch
+                          isSelected={notificationSettings.discord.enabled}
+                          onChange={(v) =>
                             setNotificationSettings({
                               ...notificationSettings,
-                              discord: { ...notificationSettings.discord, enabled: e.target.checked },
+                              discord: { ...notificationSettings.discord, enabled: v },
                             })
                           }
-                          className="toggle toggle-primary toggle-sm cursor-pointer"
-                        />
+                          size="sm"
+                          aria-label="启用 Discord 通知"
+                        >
+                          <Switch.Content>
+                            <Switch.Control>
+                              <Switch.Thumb />
+                            </Switch.Control>
+                          </Switch.Content>
+                        </Switch>
                       </div>
 
                       <div className="space-y-3 text-xs font-sans">
@@ -2076,7 +2161,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                           <label className={`block text-11 font-medium mb-1 ${isBlueprint ? "text-slate-600" : "text-zinc-400"}`}>
                             Discord Webhook URL
                           </label>
-                          <input
+                          <Input
                             type="text"
                             value={notificationSettings.discord.webhook_url}
                             onChange={(e) =>
@@ -2086,11 +2171,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                               })
                             }
                             placeholder="https://discord.com/api/webhooks/..."
-                            className={`input input-bordered input-sm w-full font-mono text-xs focus:outline-none ${
-                              isBlueprint
-                                ? "bg-white border-slate-200 text-slate-900 focus:border-indigo-500"
-                                : "bg-zinc-950 border-zinc-800 text-zinc-100 focus:border-indigo-500"
-                            }`}
+                            className="w-full font-mono text-xs"
                           />
                         </div>
 
@@ -2098,7 +2179,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                           <label className={`block text-11 font-medium mb-1 ${isBlueprint ? "text-slate-600" : "text-zinc-400"}`}>
                             机器人自定义名称 (可选)
                           </label>
-                          <input
+                          <Input
                             type="text"
                             value={notificationSettings.discord.username || ""}
                             onChange={(e) =>
@@ -2108,11 +2189,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                               })
                             }
                             placeholder="CyberProbe Monitor"
-                            className={`input input-bordered input-sm w-full font-sans text-xs focus:outline-none ${
-                              isBlueprint
-                                ? "bg-white border-slate-200 text-slate-900 focus:border-indigo-500"
-                                : "bg-zinc-950 border-zinc-800 text-zinc-100 focus:border-indigo-500"
-                            }`}
+                            className="w-full font-sans text-xs"
                           />
                         </div>
                       </div>
@@ -2122,14 +2199,16 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                       <span className={`text-11 ${isBlueprint ? "text-slate-400" : "text-zinc-500"}`}>
                         Discord Embed 富文本卡片
                       </span>
-                      <button
+                      <Button
+                        variant="ghost"
+                        size="sm"
                         type="button"
-                        disabled={testingChannel !== null}
-                        onClick={() => handleTestNotification("discord")}
-                        className="btn btn-xs btn-ghost text-indigo-600 hover:bg-indigo-50 dark:text-indigo-400 dark:hover:bg-indigo-950/40 font-sans font-medium"
+                        isDisabled={testingChannel !== null}
+                        onPress={() => handleTestNotification("discord")}
+                        className="text-indigo-600 hover:bg-indigo-50 dark:text-indigo-400 dark:hover:bg-indigo-950/40 font-sans font-medium"
                       >
                         {testingChannel === "discord" ? "测试中..." : "测试 Discord"}
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 </div>
@@ -2159,67 +2238,80 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                     </div>
 
                     <div className="space-y-3.5">
-                      <label className="flex items-center justify-between cursor-pointer select-none">
-                        <span className={isBlueprint ? "text-slate-700 font-medium" : "text-zinc-300 font-medium"}>
-                          开启节点离线告警
-                        </span>
-                        <input
-                          type="checkbox"
-                          checked={notificationSettings.rules.offline_alert}
-                          onChange={(e) =>
-                            setNotificationSettings({
-                              ...notificationSettings,
-                              rules: { ...notificationSettings.rules, offline_alert: e.target.checked },
-                            })
-                          }
-                          className="toggle toggle-error toggle-sm cursor-pointer"
-                        />
-                      </label>
+                      <Switch
+                        isSelected={notificationSettings.rules.offline_alert}
+                        onChange={(v) =>
+                          setNotificationSettings({
+                            ...notificationSettings,
+                            rules: { ...notificationSettings.rules, offline_alert: v },
+                          })
+                        }
+                        size="sm"
+                      >
+                        <Switch.Content className="w-full justify-between">
+                          <span className={isBlueprint ? "text-slate-700 font-medium" : "text-zinc-300 font-medium"}>
+                            开启节点离线告警
+                          </span>
+                          <Switch.Control>
+                            <Switch.Thumb />
+                          </Switch.Control>
+                        </Switch.Content>
+                      </Switch>
 
                       <div>
                         <span className={`block text-11 mb-1 font-medium ${isBlueprint ? "text-slate-600" : "text-zinc-400"}`}>
                           离线判定超时秒数
                         </span>
-                        <select
-                          value={notificationSettings.rules.offline_threshold_sec}
-                          onChange={(e) =>
+                        <Select
+                          selectedKey={String(notificationSettings.rules.offline_threshold_sec)}
+                          onSelectionChange={(key) =>
                             setNotificationSettings({
                               ...notificationSettings,
                               rules: {
                                 ...notificationSettings.rules,
-                                offline_threshold_sec: parseInt(e.target.value) || 60,
+                                offline_threshold_sec: parseInt(String(key)) || 60,
                               },
                             })
                           }
-                          className={`select select-bordered select-sm w-full font-sans text-xs focus:outline-none cursor-pointer ${
-                            isBlueprint
-                              ? "bg-white border-slate-200 text-slate-900 focus:border-indigo-500"
-                              : "bg-zinc-950 border-zinc-800 text-zinc-100 focus:border-indigo-500"
-                          }`}
+                          aria-label="离线判定超时秒数"
+                          fullWidth
                         >
-                          <option value={30}>30 秒 (极速检测)</option>
-                          <option value={60}>60 秒 (推荐平衡)</option>
-                          <option value={120}>120 秒 (减少抖动)</option>
-                          <option value={300}>300 秒 (宽限期)</option>
-                        </select>
+                          <Select.Trigger className="font-sans text-xs">
+                            <Select.Value />
+                            <Select.Indicator />
+                          </Select.Trigger>
+                          <Select.Popover>
+                            <ListBox>
+                              {OFFLINE_THRESHOLD_OPTIONS.map((o) => (
+                                <ListBox.Item key={o.key} id={o.key} textValue={o.label}>
+                                  {o.label}
+                                </ListBox.Item>
+                              ))}
+                            </ListBox>
+                          </Select.Popover>
+                        </Select>
                       </div>
 
-                      <label className="flex items-center justify-between cursor-pointer select-none pt-2 border-t border-slate-100 dark:border-zinc-800">
-                        <span className={isBlueprint ? "text-slate-700 font-medium" : "text-zinc-300 font-medium"}>
-                          恢复上线通知 (含离线时长)
-                        </span>
-                        <input
-                          type="checkbox"
-                          checked={notificationSettings.rules.recovery_alert}
-                          onChange={(e) =>
-                            setNotificationSettings({
-                              ...notificationSettings,
-                              rules: { ...notificationSettings.rules, recovery_alert: e.target.checked },
-                            })
-                          }
-                          className="toggle toggle-success toggle-sm cursor-pointer"
-                        />
-                      </label>
+                      <Switch
+                        isSelected={notificationSettings.rules.recovery_alert}
+                        onChange={(v) =>
+                          setNotificationSettings({
+                            ...notificationSettings,
+                            rules: { ...notificationSettings.rules, recovery_alert: v },
+                          })
+                        }
+                        size="sm"
+                        className="pt-2 border-t border-slate-100 dark:border-zinc-800"
+                      >
+                        <Switch.Content className="w-full justify-between">
+                          <span className={isBlueprint ? "text-slate-700 font-medium" : "text-zinc-300 font-medium"}>
+                            恢复上线通知 (含离线时长)
+                          </span>
+                          <Switch.Control>
+                            <Switch.Thumb />
+                          </Switch.Control>
+                        </Switch.Content>
+                      </Switch>
                     </div>
                   </div>
 
@@ -2235,50 +2327,58 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                     </div>
 
                     <div className="space-y-3.5">
-                      <label className="flex items-center justify-between cursor-pointer select-none">
-                        <span className={isBlueprint ? "text-slate-700 font-medium" : "text-zinc-300 font-medium"}>
-                          开启超额预警通知
-                        </span>
-                        <input
-                          type="checkbox"
-                          checked={notificationSettings.rules.traffic_alert}
-                          onChange={(e) =>
-                            setNotificationSettings({
-                              ...notificationSettings,
-                              rules: { ...notificationSettings.rules, traffic_alert: e.target.checked },
-                            })
-                          }
-                          className="toggle toggle-warning toggle-sm cursor-pointer"
-                        />
-                      </label>
+                      <Switch
+                        isSelected={notificationSettings.rules.traffic_alert}
+                        onChange={(v) =>
+                          setNotificationSettings({
+                            ...notificationSettings,
+                            rules: { ...notificationSettings.rules, traffic_alert: v },
+                          })
+                        }
+                        size="sm"
+                      >
+                        <Switch.Content className="w-full justify-between">
+                          <span className={isBlueprint ? "text-slate-700 font-medium" : "text-zinc-300 font-medium"}>
+                            开启超额预警通知
+                          </span>
+                          <Switch.Control>
+                            <Switch.Thumb />
+                          </Switch.Control>
+                        </Switch.Content>
+                      </Switch>
 
                       <div>
                         <span className={`block text-11 mb-1 font-medium ${isBlueprint ? "text-slate-600" : "text-zinc-400"}`}>
                           预警触发比例阈值
                         </span>
-                        <select
-                          value={notificationSettings.rules.traffic_threshold_pct}
-                          onChange={(e) =>
+                        <Select
+                          selectedKey={String(notificationSettings.rules.traffic_threshold_pct)}
+                          onSelectionChange={(key) =>
                             setNotificationSettings({
                               ...notificationSettings,
                               rules: {
                                 ...notificationSettings.rules,
-                                traffic_threshold_pct: parseInt(e.target.value) || 85,
+                                traffic_threshold_pct: parseInt(String(key)) || 85,
                               },
                             })
                           }
-                          className={`select select-bordered select-sm w-full font-sans text-xs focus:outline-none cursor-pointer ${
-                            isBlueprint
-                              ? "bg-white border-slate-200 text-slate-900 focus:border-indigo-500"
-                              : "bg-zinc-950 border-zinc-800 text-zinc-100 focus:border-indigo-500"
-                          }`}
+                          aria-label="预警触发比例阈值"
+                          fullWidth
                         >
-                          <option value={70}>70% 额度预警</option>
-                          <option value={80}>80% 额度预警</option>
-                          <option value={85}>85% 额度预警 (推荐)</option>
-                          <option value={90}>90% 临界预警</option>
-                          <option value={95}>95% 严重警告</option>
-                        </select>
+                          <Select.Trigger className="font-sans text-xs">
+                            <Select.Value />
+                            <Select.Indicator />
+                          </Select.Trigger>
+                          <Select.Popover>
+                            <ListBox>
+                              {TRAFFIC_THRESHOLD_OPTIONS.map((o) => (
+                                <ListBox.Item key={o.key} id={o.key} textValue={o.label}>
+                                  {o.label}
+                                </ListBox.Item>
+                              ))}
+                            </ListBox>
+                          </Select.Popover>
+                        </Select>
                       </div>
 
                       <p className={`text-11 pt-2 border-t border-slate-100 dark:border-zinc-800 ${isBlueprint ? "text-slate-400" : "text-zinc-500"}`}>
@@ -2299,28 +2399,31 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                     </div>
 
                     <div className="space-y-3.5">
-                      <label className="flex items-center justify-between cursor-pointer select-none">
-                        <span className={isBlueprint ? "text-slate-700 font-medium" : "text-zinc-300 font-medium"}>
-                          开启每日定时播报
-                        </span>
-                        <input
-                          type="checkbox"
-                          checked={notificationSettings.rules.daily_report}
-                          onChange={(e) =>
-                            setNotificationSettings({
-                              ...notificationSettings,
-                              rules: { ...notificationSettings.rules, daily_report: e.target.checked },
-                            })
-                          }
-                          className="toggle toggle-info toggle-sm cursor-pointer"
-                        />
-                      </label>
+                      <Switch
+                        isSelected={notificationSettings.rules.daily_report}
+                        onChange={(v) =>
+                          setNotificationSettings({
+                            ...notificationSettings,
+                            rules: { ...notificationSettings.rules, daily_report: v },
+                          })
+                        }
+                        size="sm"
+                      >
+                        <Switch.Content className="w-full justify-between">
+                          <span className={isBlueprint ? "text-slate-700 font-medium" : "text-zinc-300 font-medium"}>
+                            开启每日定时播报
+                          </span>
+                          <Switch.Control>
+                            <Switch.Thumb />
+                          </Switch.Control>
+                        </Switch.Content>
+                      </Switch>
 
                       <div>
                         <span className={`block text-11 mb-1 font-medium ${isBlueprint ? "text-slate-600" : "text-zinc-400"}`}>
                           每日推送时间 (24小时制)
                         </span>
-                        <input
+                        <Input
                           type="time"
                           value={notificationSettings.rules.daily_report_time || "09:00"}
                           onChange={(e) =>
@@ -2329,11 +2432,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                               rules: { ...notificationSettings.rules, daily_report_time: e.target.value },
                             })
                           }
-                          className={`input input-bordered input-sm w-full font-mono text-xs focus:outline-none ${
-                            isBlueprint
-                              ? "bg-white border-slate-200 text-slate-900 focus:border-indigo-500"
-                              : "bg-zinc-950 border-zinc-800 text-zinc-100 focus:border-indigo-500"
-                          }`}
+                          className="w-full font-mono text-xs"
                         />
                       </div>
 
@@ -2363,23 +2462,27 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                   </div>
 
                   <div className="flex items-center gap-2 text-xs">
-                    <button
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       type="button"
-                      onClick={fetchNotificationLogs}
-                      className="btn btn-xs btn-ghost text-slate-600 hover:text-slate-900 dark:text-zinc-300 font-sans gap-1"
+                      onPress={fetchNotificationLogs}
+                      className="text-slate-600 hover:text-slate-900 dark:text-zinc-300 font-sans gap-1"
                     >
                       <RefreshCw className="h-3 w-3" />
                       <span>刷新</span>
-                    </button>
+                    </Button>
                     {notificationLogs.length > 0 && (
-                      <button
+                      <Button
+                        variant="ghost"
+                        size="sm"
                         type="button"
-                        onClick={handleClearNotificationLogs}
-                        className="btn btn-xs btn-ghost text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-sans gap-1"
+                        onPress={handleClearNotificationLogs}
+                        className="text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-sans gap-1"
                       >
                         <Trash2 className="h-3 w-3" />
                         <span>清空历史</span>
-                      </button>
+                      </Button>
                     )}
                   </div>
                 </div>
@@ -2497,14 +2600,16 @@ export const AdminModal: React.FC<AdminModalProps> = ({
               <h2 className={`text-lg font-bold font-sans tracking-tight ${isBlueprint ? "text-slate-900" : "text-zinc-100"}`}>
                 {editingTargetId ? "编辑监测目标" : "添加网络监测目标"}
               </h2>
-              <button
+              <Button
+                variant="ghost"
+                size="sm"
+                isIconOnly
                 type="button"
-                onClick={() => setIsTargetModalOpen(false)}
-                className="btn btn-sm btn-circle btn-ghost"
-                title="关闭"
+                onPress={() => setIsTargetModalOpen(false)}
+                aria-label="关闭"
               >
                 <X className="h-4 w-4" />
-              </button>
+              </Button>
             </div>
 
             <div className="space-y-4 font-sans text-sm">
@@ -2513,16 +2618,12 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                 <label className={`block font-medium text-xs mb-1.5 ${isBlueprint ? "text-slate-700" : "text-zinc-300"}`}>
                   目标名称 (Label)
                 </label>
-                <input
+                <Input
                   type="text"
                   value={targetFormName}
                   onChange={(e) => setTargetFormName(e.target.value)}
                   placeholder="如: Google, 电信, YouTube"
-                  className={`input input-bordered input-sm w-full font-sans text-xs focus:outline-none ${
-                    isBlueprint
-                      ? "bg-white border-slate-200 text-slate-900 focus:border-indigo-500"
-                      : "bg-zinc-950 border-zinc-700 text-zinc-100 focus:border-indigo-500"
-                  }`}
+                  className="w-full font-sans text-xs"
                 />
               </div>
 
@@ -2531,16 +2632,12 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                 <label className={`block font-medium text-xs mb-1.5 ${isBlueprint ? "text-slate-700" : "text-zinc-300"}`}>
                   目标地址 (Target IP 或域名)
                 </label>
-                <input
+                <Input
                   type="text"
                   value={targetFormAddress}
                   onChange={(e) => setTargetFormAddress(e.target.value)}
                   placeholder="如: 8.8.8.8, 223.5.5.5, www.google.com"
-                  className={`input input-bordered input-sm w-full font-mono text-xs focus:outline-none ${
-                    isBlueprint
-                      ? "bg-white border-slate-200 text-slate-900 focus:border-indigo-500"
-                      : "bg-zinc-950 border-zinc-700 text-zinc-100 focus:border-indigo-500"
-                  }`}
+                  className="w-full font-mono text-xs"
                 />
               </div>
 
@@ -2603,14 +2700,12 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                   <label className={`block font-medium text-xs mb-1.5 ${isBlueprint ? "text-slate-700" : "text-zinc-300"}`}>
                     TCP 端口 (Port)
                   </label>
-                  <input
+                  <Input
                     type="number"
                     value={targetFormPort}
                     onChange={(e) => setTargetFormPort(parseInt(e.target.value) || 443)}
                     placeholder="443"
-                    className={`input input-bordered input-sm w-full font-mono text-xs focus:outline-none ${
-                      isBlueprint ? "bg-white border-slate-200 text-slate-900 focus:border-indigo-500" : "bg-zinc-950 border-zinc-700 text-zinc-100 focus:border-indigo-500"
-                    }`}
+                    className="w-full font-mono text-xs"
                   />
                 </div>
               )}
@@ -2621,14 +2716,16 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                   执行监测的探针服务器
                 </label>
                 <div className="flex items-center gap-3">
-                  <button
+                  <Button
+                    variant="outline"
+                    size="sm"
                     type="button"
-                    onClick={() => setIsServerPickerOpen(!isServerPickerOpen)}
-                    className="btn btn-sm btn-outline btn-primary font-sans font-medium gap-1.5"
+                    onPress={() => setIsServerPickerOpen(!isServerPickerOpen)}
+                    className="font-sans font-medium gap-1.5"
                   >
                     <span>{isServerPickerOpen ? "收起选择" : "选择服务器"}</span>
                     <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 ${isServerPickerOpen ? "rotate-180" : ""}`} />
-                  </button>
+                  </Button>
                   <span className={`text-xs font-sans font-medium ${isBlueprint ? "text-slate-700" : "text-zinc-300"}`}>
                     {targetFormServers.length === 0
                       ? "所有服务器 (默认全部)"
@@ -2700,17 +2797,20 @@ export const AdminModal: React.FC<AdminModalProps> = ({
 
                 {/* Checkbox: 默认开启 */}
                 <div className="mt-3">
-                  <label className="flex items-center gap-2 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={targetFormAutoStart}
-                      onChange={(e) => setTargetFormAutoStart(e.target.checked)}
-                      className="toggle toggle-primary toggle-sm cursor-pointer"
-                    />
-                    <span className={`text-xs font-medium ${isBlueprint ? "text-slate-800" : "text-zinc-200"}`}>
-                      默认自动开启监测
-                    </span>
-                  </label>
+                  <Switch
+                    isSelected={targetFormAutoStart}
+                    onChange={setTargetFormAutoStart}
+                    size="sm"
+                  >
+                    <Switch.Content className="gap-2">
+                      <Switch.Control>
+                        <Switch.Thumb />
+                      </Switch.Control>
+                      <span className={`text-xs font-medium ${isBlueprint ? "text-slate-800" : "text-zinc-200"}`}>
+                        默认自动开启监测
+                      </span>
+                    </Switch.Content>
+                  </Switch>
                   <p className={`text-11 mt-0.5 ml-11 ${isBlueprint ? "text-slate-400" : "text-zinc-500"}`}>
                     开启后，新接入的服务器将自动启动对该目标的监控，已存在的服务器不受影响。
                   </p>
@@ -2722,37 +2822,37 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                 <label className={`block font-medium text-xs mb-1.5 ${isBlueprint ? "text-slate-700" : "text-zinc-300"}`}>
                   检测采样间隔 (秒)
                 </label>
-                <input
+                <Input
                   type="number"
                   min="5"
                   value={targetFormInterval}
                   onChange={(e) => setTargetFormInterval(parseInt(e.target.value) || 60)}
                   placeholder="60"
-                  className={`input input-bordered input-sm w-full font-mono text-xs focus:outline-none ${
-                    isBlueprint
-                      ? "bg-white border-slate-200 text-slate-900 focus:border-indigo-500"
-                      : "bg-zinc-950 border-zinc-700 text-zinc-100 focus:border-indigo-500"
-                  }`}
+                  className="w-full font-mono text-xs"
                 />
               </div>
             </div>
 
             {/* Modal Actions */}
             <div className={`mt-6 flex items-center justify-end gap-3 font-sans text-xs pt-4 border-t ${isBlueprint ? "border-slate-100" : "border-zinc-800"}`}>
-              <button
+              <Button
+                variant="ghost"
+                size="sm"
                 type="button"
-                onClick={() => setIsTargetModalOpen(false)}
-                className="btn btn-sm btn-ghost font-sans text-slate-600 dark:text-zinc-400"
+                onPress={() => setIsTargetModalOpen(false)}
+                className="font-sans text-slate-600 dark:text-zinc-400"
               >
                 关闭
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
                 type="button"
-                onClick={handleSavePingTargetModal}
-                className="btn btn-sm btn-primary font-sans font-medium"
+                onPress={handleSavePingTargetModal}
+                className="font-sans font-medium"
               >
                 {editingTargetId ? "保存修改" : "确认添加"}
-              </button>
+              </Button>
             </div>
           </div>
         </div>

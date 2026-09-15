@@ -32,6 +32,7 @@ import {
   Eye,
   EyeOff,
 } from "lucide-react";
+import { Tabs } from "@heroui/react";
 import { HistoryPoint, NodeState, PingHistoryPoint, PingStat, PingTargetConfig } from "../types";
 import { formatBytes, formatRate } from "../utils/format";
 import { getRegionFlag } from "../utils/flags";
@@ -431,14 +432,8 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
     isBlueprint ? "text-slate-600 font-medium" : "text-zinc-400"
   );
 
-  // daisyUI tabs, tinted to match the existing emerald "selected range" accent.
+  // Tab list background; HeroUI's Tabs supplies the selected/unselected states.
   const tabsClass = isBlueprint ? "bg-slate-100" : "bg-zinc-900/70";
-  const activeTabClass = isBlueprint
-    ? "tab-active !bg-emerald-50 !text-emerald-700 font-bold"
-    : "tab-active !bg-emerald-500/15 !text-emerald-400 font-bold";
-  const inactiveTabClass = isBlueprint
-    ? "text-slate-600 hover:text-slate-900"
-    : "text-zinc-400 hover:text-zinc-200";
 
   return (
     <div
@@ -1034,22 +1029,19 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
             isBlueprint ? "border-slate-200" : "border-zinc-800"
           }`}
         >
-          <div role="tablist" className={cn("tabs tabs-boxed tabs-sm", tabsClass)}>
-            {(["realtime", "4h", "1d"] as const).map((mode) => (
-              <button
-                key={mode}
-                role="tab"
-                aria-selected={timeRange === mode}
-                onClick={() => setTimeRange(mode)}
-                className={cn(
-                  "tab text-xs font-semibold transition-colors",
-                  timeRange === mode ? activeTabClass : inactiveTabClass
-                )}
-              >
-                {mode === "realtime" ? "实时" : mode === "4h" ? "4 小时" : "1 天"}
-              </button>
-            ))}
-          </div>
+          <Tabs
+            selectedKey={timeRange}
+            onSelectionChange={(key) => setTimeRange(key as typeof timeRange)}
+            aria-label="遥测时间范围"
+          >
+            <Tabs.List className={cn("rounded-xl p-1", tabsClass)}>
+              {(["realtime", "4h", "1d"] as const).map((mode) => (
+                <Tabs.Tab key={mode} id={mode} className="text-xs font-semibold">
+                  {mode === "realtime" ? "实时" : mode === "4h" ? "4 小时" : "1 天"}
+                </Tabs.Tab>
+              ))}
+            </Tabs.List>
+          </Tabs>
         </div>
 
         {/* 6 Modular Telemetry Charts (3x2 Grid) */}
@@ -1126,22 +1118,19 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
         <div className={`mt-8 rounded-2xl border p-5 ${cardBgClass}`}>
           <div className={`flex flex-wrap items-center justify-between gap-3 border-b pb-3 font-sans ${isBlueprint ? "border-slate-100" : "border-zinc-800/80"}`}>
             {/* Time range buttons */}
-            <div role="tablist" className={cn("tabs tabs-boxed tabs-sm", tabsClass)}>
-              {(["1h", "6h", "12h", "1d"] as const).map((r) => (
-                <button
-                  key={r}
-                  role="tab"
-                  aria-selected={pingRange === r}
-                  onClick={() => setPingRange(r)}
-                  className={cn(
-                    "tab text-xs transition-colors",
-                    pingRange === r ? activeTabClass : inactiveTabClass
-                  )}
-                >
-                  {r === "1h" ? "1 小时" : r === "6h" ? "6 小时" : r === "12h" ? "12 小时" : "1 天"}
-                </button>
-              ))}
-            </div>
+            <Tabs
+              selectedKey={pingRange}
+              onSelectionChange={(key) => setPingRange(key as typeof pingRange)}
+              aria-label="延迟统计时间范围"
+            >
+              <Tabs.List className={cn("rounded-xl p-1", tabsClass)}>
+                {(["1h", "6h", "12h", "1d"] as const).map((r) => (
+                  <Tabs.Tab key={r} id={r} className="text-xs">
+                    {r === "1h" ? "1 小时" : r === "6h" ? "6 小时" : r === "12h" ? "12 小时" : "1 天"}
+                  </Tabs.Tab>
+                ))}
+              </Tabs.List>
+            </Tabs>
 
             {/* Target filter hint */}
             <div className="flex items-center gap-2 text-xs">

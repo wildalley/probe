@@ -6,6 +6,8 @@ import { ServerTable } from "./components/ServerTable";
 import { NodeDetailView } from "./components/NodeDetailView";
 import { AddNodeModal } from "./components/AddNodeModal";
 import { AdminModal } from "./components/AdminModal";
+import { LoginModal } from "./components/LoginModal";
+import { Button } from "@heroui/react";
 import { Server, Activity, ShieldCheck, Terminal, Cpu } from "lucide-react";
 import { BlurFade } from "./components/ui/BlurFade";
 import { Ripple } from "./components/ui/Ripple";
@@ -44,6 +46,16 @@ export function App() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
 
+  // Auth state. `isAuthed` starts false so admin controls stay hidden until the
+  // server confirms a session, rather than flashing in and disappearing.
+  const [isAuthed, setIsAuthed] = useState(false);
+  const [adminUser, setAdminUser] = useState<string | null>(null);
+  const [passwordIsTemp, setPasswordIsTemp] = useState(false);
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  // Set when a protected action was attempted while logged out, so the login
+  // modal can reopen the intended target once authentication succeeds.
+  const [pendingAdminOpen, setPendingAdminOpen] = useState(false);
+
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<number | null>(null);
 
@@ -60,6 +72,62 @@ export function App() {
         }
       })
       .catch(() => {});
+  };
+
+  // Ask the server who we are. The dashboard renders either way — this only
+  // decides whether the admin controls are offered.
+  const refreshAuth = () => {
+    fetch("/api/v1/auth/status", { credentials: "same-origin" })
+      .then((r) => r.json())
+      .then((data) => {
+        setIsAuthed(Boolean(data.authenticated));
+        setAdminUser(data.username || null);
+        setPasswordIsTemp(Boolean(data.password_is_temp));
+      })
+      .catch(() => {
+        setIsAuthed(false);
+        setAdminUser(null);
+      });
+  };
+
+  useEffect(() => {
+    refreshAuth();
+  }, []);
+
+  // Admin entry point: signed-in users go straight in, everyone else gets the
+  // login dialog and is forwarded into the console once it succeeds.
+  const handleRequestAdmin = () => {
+    if (isAuthed) {
+      setIsAdminModalOpen(true);
+      return;
+    }
+    setPendingAdminOpen(true);
+    setIsLoginModalOpen(true);
+  };
+
+  const handleLoginSuccess = () => {
+    setIsLoginModalOpen(false);
+    refreshAuth();
+    if (pendingAdminOpen) {
+      setPendingAdminOpen(false);
+      setIsAdminModalOpen(true);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/v1/auth/logout", {
+        method: "POST",
+        credentials: "same-origin",
+      });
+    } catch {
+      // Even if the call fails, drop local admin state so the UI stops
+      // offering actions the server will now reject.
+    }
+    setIsAdminModalOpen(false);
+    setIsAuthed(false);
+    setAdminUser(null);
+    setPasswordIsTemp(false);
   };
 
   // Connect WebSocket to Hub
@@ -289,7 +357,10 @@ export function App() {
             viewMode={viewMode}
             onViewModeChange={setViewMode}
             onOpenAddModal={() => setIsAddModalOpen(true)}
-            onOpenAdminModal={() => setIsAdminModalOpen(true)}
+            onOpenAdminModal={handleRequestAdmin}
+            isAuthed={isAuthed}
+            adminUser={adminUser}
+            onLogout={handleLogout}
             theme={theme}
             onToggleTheme={toggleTheme}
           />
@@ -343,13 +414,15 @@ export function App() {
                     : "没有符合当前搜索关键字或地区筛选条件的主机节点。"}
                 </p>
                 {nodesList.length === 0 && (
-                  <button
-                    onClick={() => setIsAddModalOpen(true)}
-                    className="btn btn-primary btn-sm relative mt-5 gap-2 rounded-xl font-sans text-xs font-medium shadow-lg shadow-indigo-600/25"
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onPress={() => setIsAddModalOpen(true)}
+                    className="relative mt-5 gap-2 rounded-xl font-sans text-xs font-medium shadow-lg shadow-indigo-600/25"
                   >
                     <Terminal className="h-4 w-4" />
                     <span>一键部署首台探针</span>
-                  </button>
+                  </Button>
                 )}
               </div>
             )}
@@ -382,13 +455,28 @@ export function App() {
         theme={theme}
       />
 
-      {/* Admin Management Modal */}
+      {/* Admin Sign-in Modal */}
+      <LoginModal
+        isOpen={isLoginModalOpen}
+        onClose={() => {
+          setIsLoginModalOpen(false);
+          setPendingAdminOpen(false);
+        }}
+        onSuccess={handleLoginSuccess}
+        theme={theme}
+      />
+
+      {/* Admin Management Modal. Gated on `isAuthed` as well as the open flag so
+          a logout (or an expired session) closes it instead of leaving a console
+          on screen whose every request the server would now reject. */}
       <AdminModal
-        isOpen={isAdminModalOpen}
+        isOpen={isAdminModalOpen && isAuthed}
         onClose={() => setIsAdminModalOpen(false)}
         nodes={Array.from(nodes.values())}
         theme={theme}
         onRefreshNodes={fetchNodes}
+        passwordIsTemp={passwordIsTemp}
+        onPasswordChanged={handleLogout}
       />
     </div>
   );
