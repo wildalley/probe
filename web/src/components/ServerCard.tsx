@@ -267,14 +267,14 @@ export function ServerCard({ node, onSelect, theme = "dark" }: ServerCardProps) 
           {/* 1. Star Button Badge */}
           <button
             onClick={toggleStar}
-            className={`h-7 w-7 rounded-lg flex items-center justify-center border transition-all cursor-pointer active:scale-90 ${
+            className={`h-7 w-7 rounded-lg flex items-center justify-center transition-all cursor-pointer active:scale-90 ${
               isStarred
                 ? isBlueprint
-                  ? "bg-amber-50 border-amber-300 text-amber-500 shadow-sm"
-                  : "bg-amber-500/15 border-amber-500/30 text-amber-400 shadow-sm"
+                  ? "bg-amber-50 text-amber-500"
+                  : "bg-amber-500/15 text-amber-400"
                 : isBlueprint
-                ? "bg-slate-50 border-slate-200 text-slate-400 hover:text-amber-500 hover:border-slate-300"
-                : "bg-zinc-900/80 border-zinc-800 text-zinc-400 hover:text-amber-400 hover:border-zinc-700"
+                ? "text-slate-400 hover:bg-slate-100 hover:text-amber-500"
+                : "text-zinc-400 hover:bg-zinc-800/80 hover:text-amber-400"
             }`}
             title={isStarred ? "取消星标" : "加入星标"}
           >
@@ -299,10 +299,8 @@ export function ServerCard({ node, onSelect, theme = "dark" }: ServerCardProps) 
 
           {/* 3. Region Flag Badge */}
           <div
-            className={`h-7 px-2 rounded-lg flex items-center justify-center gap-1 border text-xs font-mono font-bold ${
-              isBlueprint
-                ? "bg-slate-50 border-slate-200 text-slate-700"
-                : "bg-zinc-900/80 border-zinc-800 text-zinc-200"
+            className={`h-7 px-1.5 rounded-lg flex items-center justify-center gap-1 text-xs font-mono font-bold ${
+              isBlueprint ? "text-slate-700" : "text-zinc-200"
             }`}
             title={node.region}
           >

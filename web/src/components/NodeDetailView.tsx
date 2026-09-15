@@ -496,14 +496,14 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
           <div className="flex items-center gap-2 font-mono text-xs">
             <button
               onClick={toggleStar}
-              className={`flex h-9 w-9 items-center justify-center rounded-xl border transition-all cursor-pointer active:scale-95 ${
+              className={`flex h-9 w-9 items-center justify-center rounded-xl transition-all cursor-pointer active:scale-95 ${
                 isStarred
                   ? isBlueprint
-                    ? "bg-amber-50 border-amber-300 text-amber-500 shadow-sm"
-                    : "bg-amber-500/15 border-amber-500/30 text-amber-400 shadow-sm"
+                    ? "bg-amber-50 text-amber-500"
+                    : "bg-amber-500/15 text-amber-400"
                   : isBlueprint
-                  ? "bg-white border-slate-200 text-slate-400 hover:text-amber-500 hover:border-slate-300 shadow-sm"
-                  : "bg-zinc-900/80 border-zinc-800 text-zinc-400 hover:text-amber-400 hover:border-zinc-700"
+                  ? "text-slate-400 hover:bg-slate-100 hover:text-amber-500"
+                  : "text-zinc-400 hover:bg-zinc-800/80 hover:text-amber-400"
               }`}
               title={isStarred ? "取消星标关注" : "添加星标关注"}
             >

@@ -135,14 +135,14 @@ export const ServerTable: React.FC<ServerTableProps> = ({ nodes, onSelect, theme
                       type="button"
                       onClick={(e) => toggleStar(e, node.node_id)}
                       className={cn(
-                        "flex h-6 w-6 cursor-pointer items-center justify-center rounded-md border transition-all active:scale-90",
+                        "flex h-6 w-6 cursor-pointer items-center justify-center rounded-md transition-all active:scale-90",
                         isStarred
                           ? isBlueprint
-                            ? "border-amber-300 bg-amber-50 text-amber-500 shadow-sm"
-                            : "border-amber-500/30 bg-amber-500/15 text-amber-400 shadow-sm"
+                            ? "bg-amber-50 text-amber-500"
+                            : "bg-amber-500/15 text-amber-400"
                           : isBlueprint
-                          ? "border-slate-200 bg-slate-100/70 text-slate-300 hover:border-slate-300 hover:text-amber-500"
-                          : "border-zinc-700/50 bg-zinc-800/50 text-zinc-500 hover:border-zinc-600 hover:text-amber-400"
+                          ? "text-slate-300 hover:bg-slate-100 hover:text-amber-500"
+                          : "text-zinc-500 hover:bg-zinc-800/80 hover:text-amber-400"
                       )}
                       title={isStarred ? "取消星标" : "加入星标"}
                     >
@@ -171,10 +171,8 @@ export const ServerTable: React.FC<ServerTableProps> = ({ nodes, onSelect, theme
                     </span>
                     <span
                       className={cn(
-                        "flex items-center gap-1 rounded border px-1.5 py-0.5 text-10",
-                        isBlueprint
-                          ? "border-slate-200 bg-slate-100 text-slate-600"
-                          : "border-zinc-700/40 bg-zinc-800 text-zinc-400"
+                        "flex items-center gap-1 rounded px-1 py-0.5 text-10",
+                        isBlueprint ? "text-slate-600" : "text-zinc-400"
                       )}
                     >
                       <span className="text-sm leading-none">{getRegionFlag(node.region)}</span>
