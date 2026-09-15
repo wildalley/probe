@@ -285,16 +285,15 @@ export function ServerCard({ node, onSelect, theme = "dark" }: ServerCardProps) 
             />
           </button>
 
-          {/* 2. OS Icon Badge */}
+          {/* 2. OS Icon Badge. Borderless, so the icon itself carries the weight
+              and is sized up to match the flag glyph beside it. */}
           <div
-            className={`h-7 w-7 rounded-lg flex items-center justify-center border ${
-              isBlueprint
-                ? "bg-slate-50 border-slate-200 text-slate-600"
-                : "bg-zinc-900/80 border-zinc-800 text-zinc-300"
+            className={`h-7 w-7 rounded-lg flex items-center justify-center ${
+              isBlueprint ? "text-slate-600" : "text-zinc-300"
             }`}
             title={`${node.system.os || "Linux"} (${node.system.kernel || ""})`}
           >
-            <OsIcon os={node.system.os} className="h-3.5 w-3.5" />
+            <OsIcon os={node.system.os} className="h-5 w-5" />
           </div>
 
           {/* 3. Region Flag Badge */}
