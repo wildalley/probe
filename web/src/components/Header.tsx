@@ -196,6 +196,8 @@ export const Header: React.FC<HeaderProps> = ({
                     : "text-zinc-400 hover:text-zinc-200"
                 }`}
                 title="网格卡片视图"
+                aria-label="网格卡片视图"
+                aria-pressed={viewMode === "grid"}
               >
                 <LayoutGrid className="h-4 w-4" />
               </button>
@@ -209,6 +211,8 @@ export const Header: React.FC<HeaderProps> = ({
                     : "text-zinc-400 hover:text-zinc-200"
                 }`}
                 title="表格机架视图"
+                aria-label="表格机架视图"
+                aria-pressed={viewMode === "table"}
               >
                 <List className="h-4 w-4" />
               </button>
@@ -361,8 +365,8 @@ export const Header: React.FC<HeaderProps> = ({
           </BlurFade>
         </div>
 
-        {/* Search, region filter & view mode. The view toggle sits here, directly
-            above the list it controls, rather than up in the global action row. */}
+        {/* Search & region filter. The grid/table toggle lives in the action row
+            above, alongside the other view-level controls. */}
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-[200px] max-w-sm">
             <Search className={`absolute left-3 top-2.5 h-4 w-4 ${isBlueprint ? "text-slate-400" : "text-zinc-500"}`} />
@@ -390,42 +394,6 @@ export const Header: React.FC<HeaderProps> = ({
             )}
           </div>
 
-          {/* View Mode Toggle */}
-          <div className={`flex shrink-0 items-center rounded-lg border p-0.5 ${
-            isBlueprint ? "border-slate-200 bg-slate-100" : "border-zinc-800 bg-zinc-900/60"
-          }`}>
-            <button
-              onClick={() => onViewModeChange("grid")}
-              className={`rounded p-1.5 transition-colors ${
-                viewMode === "grid"
-                  ? "bg-indigo-600 text-white shadow-sm"
-                  : isBlueprint
-                  ? "text-slate-500 hover:text-slate-900"
-                  : "text-zinc-400 hover:text-zinc-200"
-              }`}
-              title="网格卡片视图"
-              aria-label="网格卡片视图"
-              aria-pressed={viewMode === "grid"}
-            >
-              <LayoutGrid className="h-4 w-4" />
-            </button>
-            <button
-              onClick={() => onViewModeChange("table")}
-              className={`rounded p-1.5 transition-colors ${
-                viewMode === "table"
-                  ? "bg-indigo-600 text-white shadow-sm"
-                  : isBlueprint
-                  ? "text-slate-500 hover:text-slate-900"
-                  : "text-zinc-400 hover:text-zinc-200"
-              }`}
-              title="表格机架视图"
-              aria-label="表格机架视图"
-              aria-pressed={viewMode === "table"}
-            >
-              <List className="h-4 w-4" />
-            </button>
-          </div>
-
           <div className="flex flex-1 flex-wrap items-center justify-end gap-1.5 font-mono text-xs">
             <button
               onClick={() => onRegionChange("ALL")}
@@ -451,8 +419,8 @@ export const Header: React.FC<HeaderProps> = ({
                     : "bg-zinc-900/60 text-zinc-400 hover:text-zinc-200 border border-zinc-800"
                 }`}
               >
-                <span>{getRegionFlag(reg)}</span>
-                <span>{reg}</span>
+                <span className="text-sm leading-none">{getRegionFlag(reg)}</span>
+                <span className="leading-none">{reg}</span>
               </button>
             ))}
           </div>

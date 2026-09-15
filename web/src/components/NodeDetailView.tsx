@@ -537,8 +537,8 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
                 }`}
                 title="点击选择主机"
               >
-                <span className="text-sm">{getRegionFlag(node.region)}</span>
-                <span className="truncate max-w-[120px]">{node.name}</span>
+                <span className="text-sm leading-none">{getRegionFlag(node.region)}</span>
+                <span className="truncate max-w-[120px] leading-none">{node.name}</span>
                 <ChevronDown className={`h-3 w-3 transition-transform duration-200 ${
                   isDropdownOpen ? "rotate-180 text-indigo-500" : "text-slate-400"
                 }`} />
