@@ -1,14 +1,105 @@
-@import "uplot/dist/uPlot.min.css";
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@layer theme, base, components, utilities;
 
-@layer base {
-  :root {
-    --font-mono: 'JetBrains Mono', monospace;
-    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/* HeroUI v3 ships its styles as layered pieces plus an `index.css` that pulls in
+   Tailwind itself. Importing that entry here would import Tailwind twice, so the
+   pieces are imported individually and Tailwind stays imported once, above. */
+@import "@heroui/styles/base";
+@import "@heroui/styles/base/scrollbar.css" layer(base);
+@import "@heroui/styles/components/index.css" layer(components);
+@import "@heroui/styles/themes/default";
+@import "@heroui/styles/utilities";
+@import "@heroui/styles/variants";
+
+@import "uplot/dist/uPlot.min.css";
+
+/* Tailwind 4 defaults to `prefers-color-scheme` for `dark:`. This app toggles a
+   `.dark` class on <html> instead, so the variant is redefined to match that. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  /* Inter and JetBrains Mono carry no CJK glyphs, so Noto Sans SC follows in
+     both stacks. Without it CJK fell through to whatever the OS had installed,
+     which made vertical metrics (and so text centering) machine-dependent. */
+  --font-sans: "Inter", "Noto Sans SC", system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-mono: "JetBrains Mono", "Noto Sans SC", ui-monospace, SFMono-Regular, Menlo,
+    Monaco, Consolas, "PingFang SC", "Microsoft YaHei", monospace;
+
+  /* Arbitrary sizes (text-[11px]) emit font-size with no line-height, so those
+     elements inherited an ancestor's line-height set for a different size. These
+     named steps carry a line-height that fits Inter plus the CJK face, whose ink
+     box runs ~1.25x the font size. */
+  --text-9: 9px;
+  --text-9--line-height: 13px;
+  --text-10: 10px;
+  --text-10--line-height: 14px;
+  --text-11: 11px;
+  --text-11--line-height: 16px;
+
+  --color-cyber-bg: #09090b;
+  --color-cyber-card: rgba(24, 24, 27, 0.65);
+  --color-cyber-border: #27272a;
+  --color-cyber-glow: rgba(120, 119, 198, 0.15);
+
+  --animate-pulse-slow: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  --animate-fade-in: fadeIn 0.3s ease-in-out;
+  --animate-border-beam: border-beam calc(var(--duration) * 1s) infinite linear;
+  --animate-shiny-text: shiny-text 8s infinite;
+  --animate-gradient-flow: gradient-flow var(--bg-speed, 8s) linear infinite;
+  --animate-ripple: ripple var(--duration, 2s) ease calc(var(--i, 0) * 0.2s) infinite;
+
+  @keyframes fadeIn {
+    0% {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
 
+  @keyframes border-beam {
+    100% {
+      offset-distance: 100%;
+    }
+  }
+
+  @keyframes shiny-text {
+    0%,
+    90%,
+    100% {
+      background-position: calc(-100% - var(--shiny-width)) 0;
+    }
+    30%,
+    60% {
+      background-position: calc(100% + var(--shiny-width)) 0;
+    }
+  }
+
+  @keyframes gradient-flow {
+    to {
+      background-position: var(--bg-size, 300%) 0;
+    }
+  }
+
+  @keyframes ripple {
+    0%,
+    100% {
+      transform: translate(-50%, -50%) scale(1);
+      opacity: 0.28;
+    }
+    50% {
+      transform: translate(-50%, -50%) scale(0.9);
+      opacity: 0.12;
+    }
+  }
+}
+
+@layer base {
   body {
     font-family: var(--font-sans);
     background-color: #09090b;
@@ -20,7 +111,7 @@
 /* Cyber dark background grid pattern */
 .cyber-grid {
   background-size: 40px 40px;
-  background-image: 
+  background-image:
     linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
     linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
 }
@@ -29,7 +120,7 @@
 .blueprint-grid {
   background-color: #f1f5f9;
   background-size: 24px 24px;
-  background-image: 
+  background-image:
     linear-gradient(to right, rgba(203, 213, 225, 0.5) 1px, transparent 1px),
     linear-gradient(to bottom, rgba(203, 213, 225, 0.5) 1px, transparent 1px);
 }
@@ -84,4 +175,3 @@
 .uplot .u-cursor-y {
   border-bottom: 1px dashed rgba(129, 140, 248, 0.4) !important;
 }
-

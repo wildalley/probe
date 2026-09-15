@@ -34,11 +34,12 @@ type Server struct {
 	hub         *Hub
 	storage     *Storage
 	downsampler *Downsampler
+	notifier    *Notifier
 	distFS      fs.FS
 }
 
 // NewServer initializes Gin and binds endpoints.
-func NewServer(hub *Hub, storage *Storage, downsampler *Downsampler, distFS fs.FS) *Server {
+func NewServer(hub *Hub, storage *Storage, downsampler *Downsampler, notifier *Notifier, distFS fs.FS) *Server {
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
 	router.Use(gin.Recovery())
@@ -60,6 +61,7 @@ func NewServer(hub *Hub, storage *Storage, downsampler *Downsampler, distFS fs.F
 		hub:         hub,
 		storage:     storage,
 		downsampler: downsampler,
+		notifier:    notifier,
 		distFS:      distFS,
 	}
 
@@ -122,6 +124,16 @@ func (s *Server) setupRoutes() {
 		api.GET("/settings/rates", s.handleGetExchangeRates)
 		api.POST("/settings/rates", s.handleSaveExchangeRates)
 		api.POST("/settings/rates/refresh", s.handleRefreshExchangeRates)
+
+		// Notifications & Custom Alerts
+		api.GET("/notifications/settings", s.handleGetNotificationSettings)
+		api.POST("/notifications/settings", s.handleSaveNotificationSettings)
+		api.POST("/notifications/test", s.handleTestNotification)
+		api.GET("/notifications/logs", s.handleGetNotificationLogs)
+		api.DELETE("/notifications/logs", s.handleClearNotificationLogs)
+
+		// GeoIP, ASN & Line Auto-Discovery
+		api.GET("/geoip/lookup", s.handleGeoIPLookup)
 	}
 
 	// Static Assets / Embedded SPA
@@ -925,3 +937,94 @@ func (s *Server) handleRefreshExchangeRates(c *gin.Context) {
 
 	c.JSON(http.StatusOK, sysSettings)
 }
+
+// handleGetNotificationSettings returns the active notification configuration.
+func (s *Server) handleGetNotificationSettings(c *gin.Context) {
+	settings, err := s.storage.GetNotificationSettings()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, settings)
+}
+
+// handleSaveNotificationSettings updates notification configuration.
+func (s *Server) handleSaveNotificationSettings(c *gin.Context) {
+	var req model.NotificationSettings
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload: " + err.Error()})
+		return
+	}
+
+	if err := s.storage.SaveNotificationSettings(&req); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save settings: " + err.Error()})
+		return
+	}
+
+	if s.notifier != nil {
+		s.notifier.ReloadSettings()
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "saved", "settings": req})
+}
+
+// handleTestNotification sends a test notification through the specified channel or all channels.
+func (s *Server) handleTestNotification(c *gin.Context) {
+	var req struct {
+		Channel string `json:"channel"`
+	}
+	_ = c.ShouldBindJSON(&req)
+	if req.Channel == "" {
+		req.Channel = "all"
+	}
+
+	if s.notifier == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "notifier service unavailable"})
+		return
+	}
+
+	if err := s.notifier.SendTest(req.Channel); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "测试通知发送成功"})
+}
+
+// handleGetNotificationLogs retrieves recent notification history logs.
+func (s *Server) handleGetNotificationLogs(c *gin.Context) {
+	limitStr := c.DefaultQuery("limit", "50")
+	limit, _ := strconv.Atoi(limitStr)
+	if limit <= 0 {
+		limit = 50
+	}
+
+	logs, err := s.storage.GetNotificationLogs(limit)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, logs)
+}
+
+// handleClearNotificationLogs clears all alert history logs.
+func (s *Server) handleClearNotificationLogs(c *gin.Context) {
+	if err := s.storage.ClearNotificationLogs(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "通知历史已清空"})
+}
+
+// handleGeoIPLookup performs real-time geolocation, ASN, and provider auto-discovery for an IP.
+func (s *Server) handleGeoIPLookup(c *gin.Context) {
+	ip := strings.TrimSpace(c.Query("ip"))
+	if ip == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ip parameter is required"})
+		return
+	}
+	details := ResolveNodeGeoAndProvider(ip)
+	c.JSON(http.StatusOK, details)
+}
+
+

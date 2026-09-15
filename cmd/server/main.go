@@ -61,12 +61,17 @@ func main() {
 	// Initialize pure in-memory Hub
 	hub := server.NewHub(storage, downsampler)
 
+	// Initialize Custom Notifier
+	notifier := server.NewNotifier(storage, hub)
+	hub.SetNotifier(notifier)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	// Start background routines
 	go hub.Start(ctx)
 	go downsampler.Start(ctx)
+	go notifier.Start(ctx)
 
 	// Setup embedded filesystem
 	var distFS fs.FS
@@ -75,7 +80,7 @@ func main() {
 		distFS = sub
 	}
 
-	srv := server.NewServer(hub, storage, downsampler, distFS)
+	srv := server.NewServer(hub, storage, downsampler, notifier, distFS)
 
 	httpServer := &http.Server{
 		Addr:    listenAddr,

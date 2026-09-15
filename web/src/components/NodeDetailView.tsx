@@ -38,6 +38,9 @@ import { getRegionFlag } from "../utils/flags";
 import { getTagStyle } from "../utils/tagColors";
 import { OsIcon } from "./OsIcon";
 import { TimeSeriesChart, ChartSeries } from "./TimeSeriesChart";
+import { cn } from "../lib/utils";
+import { NumberTicker } from "./ui/NumberTicker";
+import { BlurFade } from "./ui/BlurFade";
 
 interface NodeDetailViewProps {
   node: NodeState;
@@ -92,6 +95,33 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
       return false;
     }
   });
+
+  const [isStarred, setIsStarred] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(`starred_${node.node_id}`) === "true";
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      setIsStarred(localStorage.getItem(`starred_${node.node_id}`) === "true");
+    } catch {
+      setIsStarred(false);
+    }
+  }, [node.node_id]);
+
+  const toggleStar = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsStarred((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(`starred_${node.node_id}`, String(next));
+      } catch {}
+      return next;
+    });
+  };
 
   const toggleMaskIP = () => {
     setMaskIP((prev) => {
@@ -185,23 +215,13 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
     ];
   }, [configuredTargets, node.pings]);
 
-  // Selected ping targets filter
-  const [selectedTargets, setSelectedTargets] = useState<Set<string>>(
-    new Set(["Google", "电信", "Youtube", "ChatGPT", "Claude"])
-  );
+  // Hidden ping targets filter (tracks labels the user intentionally hid)
+  const [hiddenTargets, setHiddenTargets] = useState<Set<string>>(new Set());
 
-  // Sync selected targets when displayPings changes
+  // Reset hidden targets when switching to another node
   useEffect(() => {
-    if (displayPings.length > 0) {
-      setSelectedTargets((prev) => {
-        const next = new Set(prev);
-        displayPings.forEach((p) => {
-          if (!prev.has(p.label)) next.add(p.label);
-        });
-        return next;
-      });
-    }
-  }, [displayPings]);
+    setHiddenTargets(new Set());
+  }, [node.node_id]);
 
   // Copy helper
   const copyText = (text: string, id: string) => {
@@ -358,7 +378,7 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
 
   const pingChartSeries: ChartSeries[] = useMemo(() => {
     return displayPings
-      .filter((target) => selectedTargets.has(target.label))
+      .filter((target) => !hiddenTargets.has(target.label))
       .map((target) => {
         const valMap = new Map<number, number>();
         pingHistory.forEach((p) => {
@@ -377,18 +397,22 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
           format: (v) => `${v.toFixed(1)}ms`,
         };
       });
-  }, [displayPings, selectedTargets, pingHistory, pingTimestamps]);
+  }, [displayPings, hiddenTargets, pingHistory, pingTimestamps]);
 
   const toggleTarget = (label: string) => {
-    setSelectedTargets((prev) => {
+    setHiddenTargets((prev) => {
       const next = new Set(prev);
       if (next.has(label)) {
-        if (next.size > 1) next.delete(label);
+        next.delete(label); // Unhide
       } else {
-        next.add(label);
+        next.add(label); // Hide
       }
       return next;
     });
+  };
+
+  const showAllTargets = () => {
+    setHiddenTargets(new Set());
   };
 
 
@@ -400,6 +424,21 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
   const statCardClass = isBlueprint
     ? "bg-white border-slate-200/80 shadow-sm text-slate-800"
     : "bg-zinc-900/50 border-zinc-800/80 shadow-inner text-zinc-100";
+
+  // Shared label row for the 8 summary stat cards.
+  const statLabelClass = cn(
+    "flex items-center justify-between text-xs",
+    isBlueprint ? "text-slate-600 font-medium" : "text-zinc-400"
+  );
+
+  // daisyUI tabs, tinted to match the existing emerald "selected range" accent.
+  const tabsClass = isBlueprint ? "bg-slate-100" : "bg-zinc-900/70";
+  const activeTabClass = isBlueprint
+    ? "tab-active !bg-emerald-50 !text-emerald-700 font-bold"
+    : "tab-active !bg-emerald-500/15 !text-emerald-400 font-bold";
+  const inactiveTabClass = isBlueprint
+    ? "text-slate-600 hover:text-slate-900"
+    : "text-zinc-400 hover:text-zinc-200";
 
   return (
     <div
@@ -430,13 +469,13 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
             <div className="flex items-center gap-2">
               <span className="text-2xl leading-none">{getRegionFlag(node.region)}</span>
               <h2
-                className={`text-xl font-bold tracking-tight font-mono ${
+                className={`text-xl font-bold tracking-tight font-sans ${
                   isBlueprint ? "text-slate-900" : "text-zinc-100"
                 }`}
               >
                 {node.name}
               </h2>
-              <span className="rounded bg-sky-500/10 px-2 py-0.5 text-xs font-semibold text-sky-600 border border-sky-500/30 flex items-center gap-1">
+              <span className="rounded bg-sky-500/10 px-2 py-0.5 text-xs font-semibold text-sky-600 border border-sky-500/30 flex items-center gap-1 font-sans">
                 <span className="h-1.5 w-1.5 rounded-full bg-sky-500 animate-pulse" />
                 在线
               </span>
@@ -447,7 +486,7 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
               {(node.tags && node.tags.length > 0 ? node.tags : ["电信CN2", "1Gbps", "CU4837"]).map((tag) => (
                 <span
                   key={tag}
-                  className={`rounded-lg px-2.5 py-0.5 text-xs font-mono font-semibold border transition-all ${getTagStyle(
+                  className={`rounded-lg px-2.5 py-0.5 text-xs font-sans font-medium border transition-all ${getTagStyle(
                     tag,
                     isBlueprint
                   )}`}
@@ -461,11 +500,19 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
           {/* Right side controls: Star, Node Switcher, Provider, Theme Toggle */}
           <div className="flex items-center gap-2 font-mono text-xs">
             <button
-              className={`p-1.5 transition-colors ${
-                isBlueprint ? "text-slate-400 hover:text-amber-500" : "text-zinc-500 hover:text-amber-400"
+              onClick={toggleStar}
+              className={`flex h-9 w-9 items-center justify-center rounded-xl border transition-all cursor-pointer active:scale-95 ${
+                isStarred
+                  ? isBlueprint
+                    ? "bg-amber-50 border-amber-300 text-amber-500 shadow-sm"
+                    : "bg-amber-500/15 border-amber-500/30 text-amber-400 shadow-sm"
+                  : isBlueprint
+                  ? "bg-white border-slate-200 text-slate-400 hover:text-amber-500 hover:border-slate-300 shadow-sm"
+                  : "bg-zinc-900/80 border-zinc-800 text-zinc-400 hover:text-amber-400 hover:border-zinc-700"
               }`}
+              title={isStarred ? "取消星标关注" : "添加星标关注"}
             >
-              <Star className="h-4 w-4" />
+              <Star className={`h-4 w-4 ${isStarred ? "fill-amber-400 text-amber-400" : ""}`} />
             </button>
 
             {/* Node dropdown switcher */}
@@ -522,7 +569,7 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
                       : "bg-zinc-900/95 border-zinc-700/80 text-zinc-100 shadow-black/80 backdrop-blur-xl"
                   }`}
                 >
-                  <div className={`flex items-center justify-between px-2.5 py-1.5 text-[11px] font-semibold border-b mb-1 ${
+                  <div className={`flex items-center justify-between px-2.5 py-1.5 text-11 font-semibold border-b mb-1 ${
                     isBlueprint ? "border-slate-100 text-slate-500" : "border-zinc-800 text-zinc-400"
                   }`}>
                     <span>切换主机 ({nodesList.length})</span>
@@ -552,7 +599,7 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
                             <span className="text-base leading-none shrink-0">{getRegionFlag(n.region)}</span>
                             <div className="overflow-hidden">
                               <div className="truncate font-medium">{n.name}</div>
-                              <div className={`text-[10px] truncate ${isBlueprint ? "text-slate-400" : "text-zinc-500"}`}>
+                              <div className={`text-10 truncate ${isBlueprint ? "text-slate-400" : "text-zinc-500"}`}>
                                 {n.system.os || n.region} {n.system.public_ip ? `· ${n.system.public_ip}` : ""}
                               </div>
                             </div>
@@ -592,129 +639,138 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
             {/* Theme Toggle */}
             <button
               onClick={toggleTheme}
-              className={`p-1.5 rounded-lg border transition-colors ${
+              className={`flex h-9 w-9 items-center justify-center rounded-xl border transition-all cursor-pointer active:scale-95 ${
                 isBlueprint
-                  ? "bg-white border-slate-200 text-slate-600 hover:text-slate-900 shadow-sm"
-                  : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-100"
+                  ? "bg-white border-slate-200 text-slate-600 hover:text-slate-900 hover:border-slate-300 shadow-sm"
+                  : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-700"
               }`}
               title={isBlueprint ? "切换到暗黑模式" : "切换到 Blueprint 模式"}
             >
-              {isBlueprint ? <Moon className="h-3.5 w-3.5" /> : <Sun className="h-3.5 w-3.5" />}
+              {isBlueprint ? <Moon className="h-4 w-4 text-slate-600" /> : <Sun className="h-4 w-4 text-amber-400" />}
             </button>
           </div>
         </div>
 
         {/* 2. Top 8 Summary Stat Cards (4x2 grid) */}
         <div className="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-3 font-mono">
-          <div className={`rounded-xl border p-3.5 ${statCardClass}`}>
-            <div className={`flex items-center justify-between text-xs ${isBlueprint ? "text-slate-600 font-medium" : "text-zinc-400"}`}>
+          <BlurFade delay={0.02} className={`rounded-xl border p-3.5 ${statCardClass}`}>
+            <div className={statLabelClass}>
               <span>节点定价</span>
               <CreditCard className={`h-3.5 w-3.5 ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`} />
             </div>
             <div className={`mt-1.5 text-lg font-bold truncate ${isBlueprint ? "text-slate-900" : "text-zinc-100"}`}>
-              {node.billing?.currency || "$"}{node.billing?.price != null && node.billing.price > 0 ? node.billing.price : (node.billing?.price_per_month || 9.9)}
+              {node.billing?.currency || "$"}
+              <NumberTicker
+                value={node.billing?.price != null && node.billing.price > 0 ? node.billing.price : (node.billing?.price_per_month || 9.9)}
+                decimals={2}
+              />
               <span className={`text-xs font-normal ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}> / {getCycleLabel(node.billing?.billing_cycle)}</span>
             </div>
-          </div>
+          </BlurFade>
 
-          <div className={`rounded-xl border p-3.5 ${statCardClass}`}>
-            <div className={`flex items-center justify-between text-xs ${isBlueprint ? "text-slate-600 font-medium" : "text-zinc-400"}`}>
+          <BlurFade delay={0.05} className={`rounded-xl border p-3.5 ${statCardClass}`}>
+            <div className={statLabelClass}>
               <span>月均支出</span>
               <DollarSign className={`h-3.5 w-3.5 ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`} />
             </div>
             <div className={`mt-1.5 text-lg font-bold truncate ${isBlueprint ? "text-slate-900" : "text-zinc-100"}`}>
-              {node.billing?.currency || "$"}{(node.billing?.price_per_month || 9.9).toFixed(2)}
+              {node.billing?.currency || "$"}
+              <NumberTicker value={node.billing?.price_per_month || 9.9} decimals={2} />
               <span className={`text-xs font-normal ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}> / 月</span>
             </div>
-          </div>
+          </BlurFade>
 
-          <div className={`rounded-xl border p-3.5 ${statCardClass}`}>
-            <div className={`flex items-center justify-between text-xs ${isBlueprint ? "text-slate-600 font-medium" : "text-zinc-400"}`}>
+          <BlurFade delay={0.08} className={`rounded-xl border p-3.5 ${statCardClass}`}>
+            <div className={statLabelClass}>
               <span>剩余时间</span>
               <Calendar className={`h-3.5 w-3.5 ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`} />
             </div>
             <div className="mt-1.5 flex items-baseline justify-between gap-1">
               <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
-                {node.billing?.remaining_days != null ? node.billing.remaining_days : 27}
+                <NumberTicker value={node.billing?.remaining_days != null ? node.billing.remaining_days : 27} />
                 <span className={`text-xs font-normal ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}> 天</span>
               </span>
               {node.billing?.expiry_date ? (
-                <span className={`text-[10px] truncate max-w-[90px] ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`} title={`到期日: ${node.billing.expiry_date}`}>
+                <span className={`text-10 truncate max-w-[90px] ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`} title={`到期日: ${node.billing.expiry_date}`}>
                   {node.billing.expiry_date}
                 </span>
               ) : (
-                <span className={`text-[10px] ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}>自动续费</span>
+                <span className={`text-10 ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}>自动续费</span>
               )}
             </div>
-          </div>
+          </BlurFade>
 
-          <div className={`rounded-xl border p-3.5 ${statCardClass}`}>
-            <div className={`flex items-center justify-between text-xs ${isBlueprint ? "text-slate-600 font-medium" : "text-zinc-400"}`}>
+          <BlurFade delay={0.11} className={`rounded-xl border p-3.5 ${statCardClass}`}>
+            <div className={statLabelClass}>
               <span>剩余价值</span>
               <Coins className={`h-3.5 w-3.5 ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`} />
             </div>
             <div className="mt-1.5 flex items-baseline justify-between gap-1">
               <span className="text-lg font-bold text-cyan-600 dark:text-cyan-400">
-                ¥{(node.billing?.remaining_value != null ? node.billing.remaining_value : 59.84).toFixed(2)}
+                <NumberTicker
+                  value={node.billing?.remaining_value != null ? node.billing.remaining_value : 59.84}
+                  decimals={2}
+                  prefix="¥"
+                />
               </span>
-              <span className={`text-[10px] font-mono ${isBlueprint ? "text-cyan-700" : "text-cyan-400/80"}`}>
+              <span className={`text-10 font-mono ${isBlueprint ? "text-cyan-700" : "text-cyan-400/80"}`}>
                 实时折算
               </span>
             </div>
-          </div>
+          </BlurFade>
 
-          <div className={`rounded-xl border p-3.5 ${statCardClass}`}>
-            <div className={`flex items-center justify-between text-xs ${isBlueprint ? "text-slate-600 font-medium" : "text-zinc-400"}`}>
+          <BlurFade delay={0.14} className={`rounded-xl border p-3.5 ${statCardClass}`}>
+            <div className={statLabelClass}>
               <span>已用流量</span>
               <ArrowUpDown className={`h-3.5 w-3.5 ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`} />
             </div>
             <div className={`mt-1.5 text-lg font-bold ${isBlueprint ? "text-slate-900" : "text-zinc-100"}`}>
               {formatBytes(usedTraffic)}
             </div>
-          </div>
+          </BlurFade>
 
-          <div className={`rounded-xl border p-3.5 ${statCardClass}`}>
-            <div className={`flex items-center justify-between text-xs ${isBlueprint ? "text-slate-600 font-medium" : "text-zinc-400"}`}>
+          <BlurFade delay={0.17} className={`rounded-xl border p-3.5 ${statCardClass}`}>
+            <div className={statLabelClass}>
               <span>流量配额</span>
               <PieChart className={`h-3.5 w-3.5 ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`} />
             </div>
             <div className="mt-1.5 text-lg font-bold text-blue-600 dark:text-blue-400 flex items-baseline gap-1">
               {quotaBytes > 0 ? (
                 <>
-                  <span>{quotaPercent.toFixed(1)}%</span>
+                  <NumberTicker value={quotaPercent} decimals={1} suffix="%" />
                   <span className={`text-xs font-normal ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}>/ {formatBytes(quotaBytes)}</span>
                 </>
               ) : (
                 <span className={`text-sm font-semibold ${isBlueprint ? "text-slate-700" : "text-zinc-300"}`}>无限制</span>
               )}
             </div>
-          </div>
+          </BlurFade>
 
-          <div className={`rounded-xl border p-3.5 ${statCardClass}`}>
-            <div className={`flex items-center justify-between text-xs ${isBlueprint ? "text-slate-600 font-medium" : "text-zinc-400"}`}>
+          <BlurFade delay={0.2} className={`rounded-xl border p-3.5 ${statCardClass}`}>
+            <div className={statLabelClass}>
               <span>运行时间</span>
               <Clock className={`h-3.5 w-3.5 ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`} />
             </div>
             <div className={`mt-1.5 text-sm font-bold truncate ${isBlueprint ? "text-slate-900" : "text-zinc-100"}`} title={node.uptime_str}>
               {node.uptime_str}
             </div>
-          </div>
+          </BlurFade>
 
-          <div className={`rounded-xl border p-3.5 ${statCardClass}`}>
-            <div className={`flex items-center justify-between text-xs ${isBlueprint ? "text-slate-600 font-medium" : "text-zinc-400"}`}>
+          <BlurFade delay={0.23} className={`rounded-xl border p-3.5 ${statCardClass}`}>
+            <div className={statLabelClass}>
               <span>连接数</span>
               <LinkIcon className={`h-3.5 w-3.5 ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`} />
             </div>
             <div className={`mt-1.5 text-lg font-bold ${isBlueprint ? "text-slate-900" : "text-zinc-100"}`}>
-              {node.network.tcp_established + (node.network.udp_established || 4)}
+              <NumberTicker value={node.network.tcp_established + (node.network.udp_established || 4)} />
             </div>
-          </div>
+          </BlurFade>
         </div>
 
         {/* 3. 4 Information Cards (2x2 Grid) */}
-        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3.5 font-mono text-xs">
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3.5 font-sans text-xs">
           {/* Hardware Info */}
-          <div className={`rounded-xl border p-4 ${cardBgClass}`}>
+          <BlurFade delay={0.04} className={`rounded-xl border p-4 ${cardBgClass}`}>
             <div className={`flex items-center justify-between border-b pb-2.5 font-bold ${isBlueprint ? "border-slate-100 text-slate-900" : "border-zinc-800/70 text-zinc-100"}`}>
               <span className="flex items-center gap-2">
                 <Cpu className="h-4 w-4 text-indigo-500" />
@@ -728,29 +784,40 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
                     <Cpu className={`h-3.5 w-3.5 ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`} />
                     CPU
                   </span>
-                  <span className={`rounded px-1.5 py-0.5 text-[10px] border flex items-center gap-1 cursor-pointer hover:underline ${
-                    isBlueprint ? "bg-indigo-50 text-indigo-600 border-indigo-200" : "bg-indigo-500/10 text-indigo-300 border-indigo-500/30"
-                  }`}>
-                    CPU Mark 排行 <ExternalLink className="h-2.5 w-2.5" />
-                  </span>
+                  <a
+                    href={`https://www.google.com/search?q=${encodeURIComponent(
+                      (node.system.cpu_model || "CPU") + " passmark cpubenchmark ranking"
+                    )}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`rounded-lg px-2 py-0.5 text-10 border flex items-center gap-1 transition-all cursor-pointer active:scale-95 ${
+                      isBlueprint
+                        ? "bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border-indigo-200"
+                        : "bg-indigo-500/10 text-indigo-300 hover:bg-indigo-500/20 border-indigo-500/30"
+                    }`}
+                    title="在 CPU Mark 查看性能排行榜"
+                  >
+                    <span>CPU Mark 排行</span>
+                    <ExternalLink className="h-2.5 w-2.5" />
+                  </a>
                 </div>
                 <div className={`font-semibold truncate ${isBlueprint ? "text-slate-900" : "text-zinc-100"}`} title={node.system.cpu_model || "Intel/AMD Processor"}>
                   {node.system.cpu_model || "Intel(R) Xeon(R) Platinum 9242 CPU @ 2.30GHz"} ({node.system.cpu_count || 1} vCPU)
                 </div>
                 {/* Benchmark score bar */}
                 <div className="mt-2 flex items-center gap-2">
-                  <span className="rounded bg-emerald-500/20 px-1 py-0.2 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">B</span>
+                  <span className="rounded bg-emerald-500/20 px-1 py-0.2 text-10 font-bold text-emerald-600 dark:text-emerald-400">B</span>
                   <div className={`flex-1 h-2 rounded-full overflow-hidden ${isBlueprint ? "bg-slate-200" : "bg-zinc-800"}`}>
                     <div className="h-full bg-emerald-500 rounded-full w-[65%]" />
                   </div>
-                  <span className={`text-[10px] ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}>{node.system.cpu_mark || "中端服务器级"}</span>
+                  <span className={`text-10 ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}>{node.system.cpu_mark || "中端服务器级"}</span>
                 </div>
               </div>
 
               <div className={`grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-2.5 border-t ${isBlueprint ? "border-slate-100" : "border-zinc-800/60"}`}>
                 {/* IPv4 */}
                 <div>
-                  <div className={`text-[10px] flex items-center justify-between ${isBlueprint ? "text-slate-500 font-medium" : "text-zinc-400"}`}>
+                  <div className={`text-10 flex items-center justify-between ${isBlueprint ? "text-slate-500 font-medium" : "text-zinc-400"}`}>
                     <span>公网 IPv4</span>
                     <button
                       onClick={toggleMaskIP}
@@ -758,7 +825,7 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
                       title={maskIP ? "点击显示完整 IP" : "点击脱敏隐藏 IP"}
                     >
                       {maskIP ? <EyeOff className="h-2.5 w-2.5" /> : <Eye className="h-2.5 w-2.5" />}
-                      <span className="text-[9px]">{maskIP ? "已脱敏" : "显"}</span>
+                      <span className="text-9">{maskIP ? "已脱敏" : "显"}</span>
                     </button>
                   </div>
                   <div className={`flex items-center gap-1 mt-0.5 font-semibold ${isBlueprint ? "text-slate-800" : "text-zinc-200"}`}>
@@ -777,7 +844,7 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
 
                 {/* IPv6 */}
                 <div>
-                  <div className={`text-[10px] ${isBlueprint ? "text-slate-500 font-medium" : "text-zinc-400"}`}>
+                  <div className={`text-10 ${isBlueprint ? "text-slate-500 font-medium" : "text-zinc-400"}`}>
                     公网 IPv6
                   </div>
                   <div className={`flex items-center gap-1 mt-0.5 font-semibold ${isBlueprint ? "text-slate-800" : "text-zinc-200"}`}>
@@ -796,7 +863,7 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
 
                 {/* CPU Cores */}
                 <div>
-                  <div className={`text-[10px] ${isBlueprint ? "text-slate-500 font-medium" : "text-zinc-400"}`}>物理核心</div>
+                  <div className={`text-10 ${isBlueprint ? "text-slate-500 font-medium" : "text-zinc-400"}`}>物理核心</div>
                   <div className={`mt-0.5 font-semibold ${isBlueprint ? "text-slate-800" : "text-zinc-200"}`}>
                     {node.system.cpu_count || 1} 核
                   </div>
@@ -804,17 +871,17 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
 
                 {/* Virtualization */}
                 <div>
-                  <div className={`text-[10px] ${isBlueprint ? "text-slate-500 font-medium" : "text-zinc-400"}`}>虚拟化</div>
+                  <div className={`text-10 ${isBlueprint ? "text-slate-500 font-medium" : "text-zinc-400"}`}>虚拟化</div>
                   <div className={`mt-0.5 font-semibold uppercase ${isBlueprint ? "text-slate-800" : "text-zinc-200"}`}>
                     {node.system.virtualization || "kvm"}
                   </div>
                 </div>
               </div>
             </div>
-          </div>
+          </BlurFade>
 
           {/* System Info */}
-          <div className={`rounded-xl border p-4 ${cardBgClass}`}>
+          <BlurFade delay={0.08} className={`rounded-xl border p-4 ${cardBgClass}`}>
             <div className={`flex items-center justify-between border-b pb-2.5 font-bold ${isBlueprint ? "border-slate-100 text-slate-900" : "border-zinc-800/70 text-zinc-100"}`}>
               <span className="flex items-center gap-2">
                 <ShieldCheck className="h-4 w-4 text-cyan-600" />
@@ -823,7 +890,7 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
             </div>
             <div className="mt-3 grid grid-cols-2 gap-y-3 gap-x-4">
               <div>
-                <div className={`text-[10px] ${isBlueprint ? "text-slate-500 font-medium" : "text-zinc-400"}`}>操作系统</div>
+                <div className={`text-10 ${isBlueprint ? "text-slate-500 font-medium" : "text-zinc-400"}`}>操作系统</div>
                 <div className="mt-1 flex items-center gap-2">
                   <span className={`h-7 w-7 rounded-lg flex items-center justify-center border shrink-0 ${
                     isBlueprint ? "bg-slate-50 border-slate-200 text-slate-700 shadow-sm" : "bg-zinc-800/80 border-zinc-700 text-zinc-300"
@@ -837,7 +904,7 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
               </div>
 
               <div>
-                <div className={`text-[10px] ${isBlueprint ? "text-slate-500 font-medium" : "text-zinc-400"}`}>内核版本</div>
+                <div className={`text-10 ${isBlueprint ? "text-slate-500 font-medium" : "text-zinc-400"}`}>内核版本</div>
                 <div className={`flex items-center gap-1 mt-1 font-semibold ${isBlueprint ? "text-slate-800" : "text-zinc-200"}`}>
                   <span className="truncate text-xs" title={node.system.kernel}>{node.system.kernel || "6.12.43+deb13-amd64"}</span>
                   <button
@@ -851,23 +918,23 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
               </div>
 
               <div>
-                <div className={`text-[10px] ${isBlueprint ? "text-slate-500 font-medium" : "text-zinc-400"}`}>运行时间</div>
+                <div className={`text-10 ${isBlueprint ? "text-slate-500 font-medium" : "text-zinc-400"}`}>运行时间</div>
                 <div className={`mt-1 font-semibold text-xs ${isBlueprint ? "text-slate-800" : "text-zinc-200"}`}>
                   {node.uptime_str}
                 </div>
               </div>
 
               <div>
-                <div className={`text-[10px] ${isBlueprint ? "text-slate-500 font-medium" : "text-zinc-400"}`}>厂商</div>
+                <div className={`text-10 ${isBlueprint ? "text-slate-500 font-medium" : "text-zinc-400"}`}>厂商</div>
                 <div className={`mt-0.5 font-semibold truncate ${isBlueprint ? "text-slate-800" : "text-zinc-200"}`} title={node.billing?.provider}>
                   {node.billing?.provider || "圣何塞 · Zillion Network Inc. · AS54801"}
                 </div>
               </div>
             </div>
-          </div>
+          </BlurFade>
 
           {/* Storage Info */}
-          <div className={`rounded-xl border p-4 ${cardBgClass}`}>
+          <BlurFade delay={0.11} className={`rounded-xl border p-4 ${cardBgClass}`}>
             <div className={`flex items-center justify-between border-b pb-2.5 font-bold ${isBlueprint ? "border-slate-100 text-slate-900" : "border-zinc-800/70 text-zinc-100"}`}>
               <span className="flex items-center gap-2">
                 <HardDrive className="h-4 w-4 text-amber-500" />
@@ -876,7 +943,7 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
             </div>
             <div className="mt-3 grid grid-cols-3 gap-2">
               <div>
-                <div className={`text-[10px] flex items-center gap-1 ${isBlueprint ? "text-slate-500 font-medium" : "text-zinc-400"}`}>
+                <div className={`text-10 flex items-center gap-1 ${isBlueprint ? "text-slate-500 font-medium" : "text-zinc-400"}`}>
                   <Layers className={`h-3 w-3 ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`} />
                   内存
                 </div>
@@ -886,7 +953,7 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
               </div>
 
               <div>
-                <div className={`text-[10px] flex items-center gap-1 ${isBlueprint ? "text-slate-500 font-medium" : "text-zinc-400"}`}>
+                <div className={`text-10 flex items-center gap-1 ${isBlueprint ? "text-slate-500 font-medium" : "text-zinc-400"}`}>
                   <ArrowUpDown className={`h-3 w-3 ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`} />
                   内存交换
                 </div>
@@ -896,7 +963,7 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
               </div>
 
               <div>
-                <div className={`text-[10px] flex items-center gap-1 ${isBlueprint ? "text-slate-500 font-medium" : "text-zinc-400"}`}>
+                <div className={`text-10 flex items-center gap-1 ${isBlueprint ? "text-slate-500 font-medium" : "text-zinc-400"}`}>
                   <HardDrive className={`h-3 w-3 ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`} />
                   硬盘
                 </div>
@@ -905,10 +972,10 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
                 </div>
               </div>
             </div>
-          </div>
+          </BlurFade>
 
           {/* Network Info */}
-          <div className={`rounded-xl border p-4 ${cardBgClass}`}>
+          <BlurFade delay={0.15} className={`rounded-xl border p-4 ${cardBgClass}`}>
             <div className={`flex items-center justify-between border-b pb-2.5 font-bold ${isBlueprint ? "border-slate-100 text-slate-900" : "border-zinc-800/70 text-zinc-100"}`}>
               <span className="flex items-center gap-2">
                 <Network className="h-4 w-4 text-emerald-500" />
@@ -917,10 +984,10 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
             </div>
             <div className="mt-3 grid grid-cols-2 gap-4">
               <div>
-                <div className={`flex items-center gap-1 text-[10px] ${isBlueprint ? "text-slate-500 font-medium" : "text-zinc-400"}`}>
+                <div className={`flex items-center gap-1 text-10 ${isBlueprint ? "text-slate-500 font-medium" : "text-zinc-400"}`}>
                   <ArrowUpDown className={`h-3 w-3 ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`} />
                   <span>总流量</span>
-                  <span className={`rounded px-1 text-[9px] font-semibold ${isBlueprint ? "bg-slate-100 text-slate-700" : "bg-zinc-800 text-zinc-300"}`}>IPv4</span>
+                  <span className={`rounded px-1 text-9 font-semibold ${isBlueprint ? "bg-slate-100 text-slate-700" : "bg-zinc-800 text-zinc-300"}`}>IPv4</span>
                   <span className={`ml-auto font-mono ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}>
                     {formatBytes(node.network.bytes_recv)} / {formatBytes(node.network.bytes_sent)}
                   </span>
@@ -928,7 +995,7 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
                 <div className={`font-bold text-sm mt-1 ${isBlueprint ? "text-slate-900" : "text-zinc-100"}`}>
                   {formatBytes(usedTraffic)} {quotaBytes > 0 ? `/ ${formatBytes(quotaBytes)}` : "（无限制）"}
                 </div>
-                <div className={`text-[10px] mt-1.5 flex items-center gap-2 ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}>
+                <div className={`text-10 mt-1.5 flex items-center gap-2 ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}>
                   <span>近一周峰值</span>
                   <span className="flex items-center gap-0.5 text-emerald-600 dark:text-emerald-400 font-semibold">
                     <ArrowUp className="h-3 w-3" />
@@ -942,7 +1009,7 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
               </div>
 
               <div>
-                <div className={`text-[10px] flex items-center gap-1 ${isBlueprint ? "text-slate-500 font-medium" : "text-zinc-400"}`}>
+                <div className={`text-10 flex items-center gap-1 ${isBlueprint ? "text-slate-500 font-medium" : "text-zinc-400"}`}>
                   <Activity className={`h-3 w-3 ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`} />
                   网络速率
                 </div>
@@ -958,29 +1025,26 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
                 </div>
               </div>
             </div>
-          </div>
+          </BlurFade>
         </div>
 
         {/* 4. Real-time Telemetry Charts Header (Tabs: 实时, 4 小时, 1 天, 自定义) */}
         <div
-          className={`mt-7 flex flex-wrap items-center justify-between gap-3 border-b pb-2.5 font-mono ${
+          className={`mt-7 flex flex-wrap items-center justify-between gap-3 border-b pb-2.5 font-sans ${
             isBlueprint ? "border-slate-200" : "border-zinc-800"
           }`}
         >
-          <div className="flex items-center gap-2">
+          <div role="tablist" className={cn("tabs tabs-boxed tabs-sm", tabsClass)}>
             {(["realtime", "4h", "1d"] as const).map((mode) => (
               <button
                 key={mode}
+                role="tab"
+                aria-selected={timeRange === mode}
                 onClick={() => setTimeRange(mode)}
-                className={`px-3 py-1 rounded-md text-xs font-semibold transition-colors ${
-                  timeRange === mode
-                    ? isBlueprint
-                      ? "text-emerald-700 font-bold bg-emerald-50 border border-emerald-200"
-                      : "text-emerald-400 font-bold bg-emerald-500/15 border border-emerald-500/30"
-                    : isBlueprint
-                    ? "text-slate-600 hover:text-slate-900"
-                    : "text-zinc-400 hover:text-zinc-200"
-                }`}
+                className={cn(
+                  "tab text-xs font-semibold transition-colors",
+                  timeRange === mode ? activeTabClass : inactiveTabClass
+                )}
               >
                 {mode === "realtime" ? "实时" : mode === "4h" ? "4 小时" : "1 天"}
               </button>
@@ -1060,22 +1124,19 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
 
         {/* 5. Latency & Packet Loss Section (延迟 / 丢包) */}
         <div className={`mt-8 rounded-2xl border p-5 ${cardBgClass}`}>
-          <div className={`flex flex-wrap items-center justify-between gap-3 border-b pb-3 font-mono ${isBlueprint ? "border-slate-100" : "border-zinc-800/80"}`}>
+          <div className={`flex flex-wrap items-center justify-between gap-3 border-b pb-3 font-sans ${isBlueprint ? "border-slate-100" : "border-zinc-800/80"}`}>
             {/* Time range buttons */}
-            <div className="flex items-center gap-1 text-xs">
+            <div role="tablist" className={cn("tabs tabs-boxed tabs-sm", tabsClass)}>
               {(["1h", "6h", "12h", "1d"] as const).map((r) => (
                 <button
                   key={r}
+                  role="tab"
+                  aria-selected={pingRange === r}
                   onClick={() => setPingRange(r)}
-                  className={`px-2.5 py-1 rounded-md transition-colors ${
-                    pingRange === r
-                      ? isBlueprint
-                        ? "text-emerald-700 font-bold bg-emerald-50 border border-emerald-200"
-                        : "text-emerald-400 font-bold bg-emerald-500/15 border border-emerald-500/30"
-                      : isBlueprint
-                      ? "text-slate-600 hover:text-slate-900"
-                      : "text-zinc-400 hover:text-zinc-200"
-                  }`}
+                  className={cn(
+                    "tab text-xs transition-colors",
+                    pingRange === r ? activeTabClass : inactiveTabClass
+                  )}
                 >
                   {r === "1h" ? "1 小时" : r === "6h" ? "6 小时" : r === "12h" ? "12 小时" : "1 天"}
                 </button>
@@ -1084,40 +1145,74 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
 
             {/* Target filter hint */}
             <div className="flex items-center gap-2 text-xs">
-              <span className={`text-[11px] ${isBlueprint ? "text-slate-600" : "text-zinc-500"}`}>
+              <span className={`text-11 ${isBlueprint ? "text-slate-600" : "text-zinc-500"}`}>
                 点击下方节点可单选/多选对比
               </span>
+              {hiddenTargets.size > 0 && (
+                <button
+                  type="button"
+                  onClick={showAllTargets}
+                  className={`text-11 font-semibold px-2 py-0.5 rounded-md border transition-all cursor-pointer active:scale-95 ${
+                    isBlueprint
+                      ? "bg-indigo-50 text-indigo-600 border-indigo-200 hover:bg-indigo-100"
+                      : "bg-indigo-950/50 text-indigo-400 border-indigo-800/60 hover:bg-indigo-900/50"
+                  }`}
+                >
+                  恢复全部显示 ({displayPings.length - hiddenTargets.size}/{displayPings.length})
+                </button>
+              )}
             </div>
           </div>
 
           {/* Target Ping Summary Badges (Google, 电信, Youtube, ChatGPT, Claude) */}
-          <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 font-mono text-xs">
+          <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 font-sans text-xs">
             {displayPings.map((target) => {
-              const isSelected = selectedTargets.has(target.label);
+              const isSelected = !hiddenTargets.has(target.label);
               return (
                 <div
                   key={target.label}
                   onClick={() => toggleTarget(target.label)}
-                  className={`cursor-pointer rounded-xl border p-3 transition-all relative overflow-hidden ${
+                  className={`cursor-pointer rounded-xl border p-3 transition-all relative overflow-hidden select-none active:scale-[0.98] ${
                     isBlueprint
                       ? isSelected
-                        ? "border-slate-300 bg-white shadow-sm"
-                        : "border-slate-200/60 bg-slate-50/60 opacity-60 hover:opacity-100"
+                        ? "border-slate-200/90 bg-white shadow-sm ring-1 ring-slate-100"
+                        : "border-slate-200/60 bg-slate-100/60 opacity-45 hover:opacity-80"
                       : isSelected
-                      ? "border-zinc-700 bg-zinc-950/80 shadow-md shadow-indigo-500/5"
-                      : "border-zinc-800/60 bg-zinc-950/30 opacity-60 hover:opacity-100"
+                      ? "border-zinc-700 bg-zinc-950/80 shadow-md shadow-indigo-500/5 ring-1 ring-zinc-700/50"
+                      : "border-zinc-800/60 bg-zinc-950/30 opacity-45 hover:opacity-80"
                   }`}
+                  title={isSelected ? `点击隐藏 ${target.label} 对比` : `点击显示 ${target.label} 对比`}
                 >
                   <div
-                    className="absolute left-0 top-0 bottom-0 w-1.5 rounded-l"
+                    className={`absolute left-0 top-0 bottom-0 w-1.5 rounded-l transition-opacity ${
+                      isSelected ? "opacity-100" : "opacity-30"
+                    }`}
                     style={{ backgroundColor: target.color || "#3b82f6" }}
                   />
                   <div className="flex items-center justify-between font-bold mb-1 pl-1.5">
-                    <span className={isBlueprint ? "text-slate-900 font-bold" : "text-zinc-100 font-bold"}>{target.label}</span>
-                    <Info className={`h-3 w-3 ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`} />
+                    <span className={`${
+                      isSelected
+                        ? isBlueprint ? "text-slate-900 font-bold" : "text-zinc-100 font-bold"
+                        : isBlueprint ? "text-slate-400 line-through" : "text-zinc-500 line-through"
+                    }`}>
+                      {target.label}
+                    </span>
+                    {isSelected ? (
+                      <Eye className={`h-3 w-3 ${isBlueprint ? "text-slate-400" : "text-zinc-500"}`} />
+                    ) : (
+                      <EyeOff className={`h-3 w-3 ${isBlueprint ? "text-slate-400" : "text-zinc-600"}`} />
+                    )}
                   </div>
-                  <div className={`text-xs pl-1.5 ${isBlueprint ? "text-slate-600" : "text-zinc-400"}`}>
-                    <span className={`font-bold ${isBlueprint ? "text-slate-900" : "text-zinc-100"}`}>
+                  <div className={`text-xs pl-1.5 ${
+                    isSelected
+                      ? isBlueprint ? "text-slate-600" : "text-zinc-400"
+                      : isBlueprint ? "text-slate-400" : "text-zinc-600"
+                  }`}>
+                    <span className={`font-bold ${
+                      isSelected
+                        ? isBlueprint ? "text-slate-900" : "text-zinc-100"
+                        : isBlueprint ? "text-slate-400" : "text-zinc-600"
+                    }`}>
                       {target.latency_ms.toFixed(0)}ms
                     </span>
                     {" · "}
@@ -1133,26 +1228,47 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
           {/* Smooth peaks indicator */}
           <div className={`mt-4 flex items-center gap-1.5 text-xs font-mono pl-1 ${isBlueprint ? "text-slate-600" : "text-zinc-400"}`}>
             <span className={`font-semibold ${isBlueprint ? "text-slate-800" : "text-zinc-200"}`}>平滑峰值</span>
-            <Info className={`h-3 w-3 ${isBlueprint ? "text-slate-500" : "text-zinc-400"} cursor-pointer`} />
+            <span
+              className="cursor-help inline-flex items-center"
+              title="已启用滑动均值平滑算法，过滤异常网络抖动尖刺，保持指标趋势清晰呈现"
+            >
+              <Info className={`h-3.5 w-3.5 ${isBlueprint ? "text-slate-500 hover:text-slate-700" : "text-zinc-400 hover:text-zinc-200"}`} />
+            </span>
           </div>
 
           {/* uPlot Latency Time-Series Chart */}
           <div className="mt-2">
-            <TimeSeriesChart
-              yAxisLabel="延迟 (ms)"
-              timestamps={pingTimestamps.length > 0 ? pingTimestamps : timestamps}
-              seriesList={pingChartSeries}
-              theme={theme}
-              legendPosition="bottom"
-              height={180}
-            />
+            {pingChartSeries.length > 0 ? (
+              <TimeSeriesChart
+                yAxisLabel="延迟 (ms)"
+                timestamps={pingTimestamps.length > 0 ? pingTimestamps : timestamps}
+                seriesList={pingChartSeries}
+                theme={theme}
+                legendPosition="bottom"
+                height={180}
+                onToggleSeries={toggleTarget}
+              />
+            ) : (
+              <div className={`h-[180px] rounded-xl border flex flex-col items-center justify-center font-mono text-xs ${
+                isBlueprint ? "bg-slate-50/50 border-slate-200 text-slate-500" : "bg-zinc-900/30 border-zinc-800 text-zinc-500"
+              }`}>
+                <span>已隐藏所有监测目标</span>
+                <button
+                  type="button"
+                  onClick={showAllTargets}
+                  className="mt-2 text-xs px-3 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition-all cursor-pointer active:scale-95"
+                >
+                  恢复显示所有目标
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* 6. Footer matching screenshot */}
+        {/* 6. Footer */}
         <div className={`mt-8 flex items-center justify-between text-xs font-mono pb-6 ${isBlueprint ? "text-slate-500" : "text-zinc-500"}`}>
-          <div>Powered by Komari Monitor</div>
-          <div>Theme by blueprint</div>
+          <div>CYBER PROBE · 高性能极简探针系统</div>
+          <div>Theme: {isBlueprint ? "Blueprint (架构图风格)" : "Cyber Dark (极客暗黑)"}</div>
         </div>
       </div>
     </div>
