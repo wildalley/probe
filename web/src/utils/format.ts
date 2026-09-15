@@ -19,6 +19,23 @@ export function formatRate(bytesPerSec: number, decimals = 1): string {
 }
 
 /**
+ * Same scaling as formatRate, but keeps the number and its unit apart so the
+ * caller can animate the digits while the unit label stays static.
+ */
+export function splitRate(bytesPerSec: number, decimals = 1): { value: number; unit: string } {
+  if (bytesPerSec <= 0 || isNaN(bytesPerSec)) return { value: 0, unit: "B/s" };
+  const k = 1024;
+  const sizes = ["B/s", "KB/s", "MB/s", "GB/s", "TB/s"];
+  const i = Math.floor(Math.log(bytesPerSec) / Math.log(k));
+  const safeI = Math.min(i, sizes.length - 1);
+  const dm = decimals < 0 ? 0 : decimals;
+  return {
+    value: parseFloat((bytesPerSec / Math.pow(k, safeI)).toFixed(dm)),
+    unit: sizes[safeI],
+  };
+}
+
+/**
  * Conforms to PDF Section 4.2:
  * <70%: emerald-500
  * 70%~85%: amber-500

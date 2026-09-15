@@ -1,7 +1,6 @@
 package server
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -18,50 +17,206 @@ import (
 )
 
 var (
-	geoIPCache sync.Map // map[string]string (IP -> CountryCode)
+	geoIPCache sync.Map // map[string]*GeoIPDetails
 )
 
-// resolveIPRegion queries IP geolocation service with caching and timeouts.
-func resolveIPRegion(ip string) string {
+// GeoIPDetails contains resolved geographic location, ISP, ASN, provider, and line tag.
+type GeoIPDetails struct {
+	IP          string `json:"ip"`
+	CountryCode string `json:"country_code"`
+	Country     string `json:"country"`
+	City        string `json:"city"`
+	ISP         string `json:"isp"`
+	Org         string `json:"org"`
+	ASN         string `json:"asn"`
+	Provider    string `json:"provider"`
+	LineTag     string `json:"line_tag"`
+}
+
+// ResolveNodeGeoAndProvider queries multi-source IP geolocation & ASN APIs with caching.
+func ResolveNodeGeoAndProvider(ip string) *GeoIPDetails {
 	ip = strings.TrimSpace(ip)
 	if ip == "" || ip == "127.0.0.1" || ip == "::1" || strings.HasPrefix(ip, "192.168.") || strings.HasPrefix(ip, "10.") || strings.HasPrefix(ip, "172.") {
-		return "LOCAL"
+		return &GeoIPDetails{
+			IP:          ip,
+			CountryCode: "LOCAL",
+			Country:     "Localhost",
+			City:        "Local LAN",
+			Provider:    "Local Network · 局域网",
+			LineTag:     "本地内网",
+		}
 	}
 
 	if val, ok := geoIPCache.Load(ip); ok {
-		return val.(string)
+		if details, ok := val.(*GeoIPDetails); ok {
+			return details
+		}
 	}
 
-	client := &http.Client{Timeout: 1500 * time.Millisecond}
+	client := &http.Client{Timeout: 4 * time.Second}
+	var details GeoIPDetails
+	details.IP = ip
 
-	// Try ip-api.com
-	if resp, err := client.Get("http://ip-api.com/line/" + ip + "?fields=countryCode"); err == nil {
+	// 1. Primary: ipwho.is (fast, HTTPS, rich ASN & ISP)
+	req1, _ := http.NewRequest("GET", "https://ipwho.is/"+ip, nil)
+	req1.Header.Set("User-Agent", "Probe-Server/1.0")
+	if resp, err := client.Do(req1); err == nil {
 		defer resp.Body.Close()
-		scanner := bufio.NewScanner(resp.Body)
-		if scanner.Scan() {
-			code := strings.TrimSpace(scanner.Text())
-			if len(code) == 2 {
-				code = strings.ToUpper(code)
-				geoIPCache.Store(ip, code)
-				return code
+		var res struct {
+			Success     bool   `json:"success"`
+			CountryCode string `json:"country_code"`
+			Country     string `json:"country"`
+			City        string `json:"city"`
+			Connection  struct {
+				ASN int    `json:"asn"`
+				Org string `json:"org"`
+				ISP string `json:"isp"`
+			} `json:"connection"`
+		}
+		if json.NewDecoder(resp.Body).Decode(&res) == nil && res.Success && res.CountryCode != "" {
+			details.CountryCode = strings.ToUpper(res.CountryCode)
+			details.Country = res.Country
+			details.City = res.City
+			details.ISP = res.Connection.ISP
+			details.Org = res.Connection.Org
+			if res.Connection.ASN > 0 {
+				details.ASN = fmt.Sprintf("AS%d", res.Connection.ASN)
 			}
 		}
 	}
 
-	// Try api.country.is
-	if resp, err := client.Get("https://api.country.is/" + ip); err == nil {
-		defer resp.Body.Close()
-		var res struct {
-			Country string `json:"country"`
-		}
-		if json.NewDecoder(resp.Body).Decode(&res) == nil && len(res.Country) == 2 {
-			code := strings.ToUpper(res.Country)
-			geoIPCache.Store(ip, code)
-			return code
+	// 2. Fallback: api.ip.sb
+	if details.CountryCode == "" {
+		req2, _ := http.NewRequest("GET", "https://api.ip.sb/geoip/"+ip, nil)
+		req2.Header.Set("User-Agent", "Probe-Server/1.0")
+		if resp, err := client.Do(req2); err == nil {
+			defer resp.Body.Close()
+			var res struct {
+				CountryCode  string `json:"country_code"`
+				Country      string `json:"country"`
+				City         string `json:"city"`
+				ISP          string `json:"isp"`
+				Organization string `json:"organization"`
+				ASN          int    `json:"asn"`
+				ASNOrg       string `json:"asn_organization"`
+			}
+			if json.NewDecoder(resp.Body).Decode(&res) == nil && res.CountryCode != "" {
+				details.CountryCode = strings.ToUpper(res.CountryCode)
+				details.Country = res.Country
+				details.City = res.City
+				details.ISP = res.ISP
+				if res.Organization != "" {
+					details.Org = res.Organization
+				} else {
+					details.Org = res.ASNOrg
+				}
+				if res.ASN > 0 {
+					details.ASN = fmt.Sprintf("AS%d", res.ASN)
+				}
+			}
 		}
 	}
 
-	return "GLOBAL"
+	// 3. Fallback: ip-api.com
+	if details.CountryCode == "" {
+		req3, _ := http.NewRequest("GET", "http://ip-api.com/json/"+ip+"?fields=status,country,countryCode,city,isp,org,as", nil)
+		if resp, err := client.Do(req3); err == nil {
+			defer resp.Body.Close()
+			var res struct {
+				Status      string `json:"status"`
+				Country     string `json:"country"`
+				CountryCode string `json:"countryCode"`
+				City        string `json:"city"`
+				ISP         string `json:"isp"`
+				Org         string `json:"org"`
+				AS          string `json:"as"`
+			}
+			if json.NewDecoder(resp.Body).Decode(&res) == nil && res.Status == "success" && res.CountryCode != "" {
+				details.CountryCode = strings.ToUpper(res.CountryCode)
+				details.Country = res.Country
+				details.City = res.City
+				details.ISP = res.ISP
+				details.Org = res.Org
+				parts := strings.Split(res.AS, " ")
+				if len(parts) > 0 && strings.HasPrefix(parts[0], "AS") {
+					details.ASN = parts[0]
+				}
+			}
+		}
+	}
+
+	if details.CountryCode == "" {
+		details.CountryCode = "GLOBAL"
+	}
+
+	// Build clean Provider representation
+	orgName := details.Org
+	if orgName == "" {
+		orgName = details.ISP
+	}
+	if orgName == "" {
+		orgName = "Global Cloud"
+	}
+
+	if details.ASN != "" {
+		details.Provider = fmt.Sprintf("%s · %s", orgName, details.ASN)
+	} else {
+		details.Provider = orgName
+	}
+
+	// Infer Route / Line Tag
+	details.LineTag = inferLineTag(details.ASN, orgName, details.ISP)
+
+	geoIPCache.Store(ip, &details)
+	return &details
+}
+
+// inferLineTag identifies telecom carrier or cloud routing (CN2, 4837, 9929, CMI, BGP, etc.)
+func inferLineTag(asn, org, isp string) string {
+	upper := strings.ToUpper(asn + " " + org + " " + isp)
+
+	switch {
+	case strings.Contains(upper, "AS4809") || strings.Contains(upper, "CN2"):
+		return "电信CN2 GIA"
+	case strings.Contains(upper, "AS9929") || strings.Contains(upper, "9929"):
+		return "联通9929精简"
+	case strings.Contains(upper, "AS4837") || strings.Contains(upper, "CHINA UNICOM"):
+		return "联通4837大带宽"
+	case strings.Contains(upper, "AS58453") || strings.Contains(upper, "AS58807") || strings.Contains(upper, "CMI"):
+		return "移动CMI直连"
+	case strings.Contains(upper, "AS4134") || strings.Contains(upper, "CHINANET"):
+		return "电信163骨干"
+	case strings.Contains(upper, "AS13335") || strings.Contains(upper, "CLOUDFLARE"):
+		return "Cloudflare Anycast"
+	case strings.Contains(upper, "AS16509") || strings.Contains(upper, "AMAZON"):
+		return "AWS 全球骨干"
+	case strings.Contains(upper, "AS15169") || strings.Contains(upper, "GOOGLE"):
+		return "Google Cloud Premium"
+	case strings.Contains(upper, "AS8075") || strings.Contains(upper, "MICROSOFT") || strings.Contains(upper, "AZURE"):
+		return "Azure 全球内网"
+	case strings.Contains(upper, "AS31898") || strings.Contains(upper, "ORACLE"):
+		return "甲骨文 Oracle Cloud"
+	case strings.Contains(upper, "AS24940") || strings.Contains(upper, "HETZNER"):
+		return "Hetzner 欧洲高防"
+	case strings.Contains(upper, "AS16276") || strings.Contains(upper, "OVH"):
+		return "OVH 极速抗D"
+	case strings.Contains(upper, "AS20473") || strings.Contains(upper, "CHOOPA") || strings.Contains(upper, "VULTR"):
+		return "Vultr 全球BGP"
+	case strings.Contains(upper, "AS14061") || strings.Contains(upper, "DIGITALOCEAN"):
+		return "DigitalOcean BGP"
+	case strings.Contains(upper, "AS45102") || strings.Contains(upper, "ALIBABA") || strings.Contains(upper, "ALIYUN"):
+		return "阿里云 BGP"
+	case strings.Contains(upper, "AS132203") || strings.Contains(upper, "TENCENT"):
+		return "腾讯云 BGP"
+	case strings.Contains(upper, "AS25820") || strings.Contains(upper, "IT7") || strings.Contains(upper, "BANDWAGON"):
+		return "搬瓦工 CN2 GIA"
+	case strings.Contains(upper, "AS54801") || strings.Contains(upper, "FRANTECH") || strings.Contains(upper, "BUYVM"):
+		return "BuyVM 优质路由"
+	case strings.Contains(upper, "AS63949") || strings.Contains(upper, "LINODE") || strings.Contains(upper, "AKAMAI"):
+		return "Linode/Akamai BGP"
+	default:
+		return "全网 BGP 多线"
+	}
 }
 
 // Hub manages purely in-memory node states and real-time event broadcasting to Web clients.
@@ -85,6 +240,22 @@ type Hub struct {
 
 	broadcastChan  chan *model.WSEvent
 	offlineTimeout int64 // in seconds, e.g. 6s
+
+	notifierMu sync.RWMutex
+	notifier   *Notifier
+}
+
+// SetNotifier associates the notification dispatcher with the Hub.
+func (h *Hub) SetNotifier(n *Notifier) {
+	h.notifierMu.Lock()
+	h.notifier = n
+	h.notifierMu.Unlock()
+}
+
+func (h *Hub) getNotifier() *Notifier {
+	h.notifierMu.RLock()
+	defer h.notifierMu.RUnlock()
+	return h.notifier
 }
 
 // NewHub initializes the in-memory Hub.
@@ -244,45 +415,84 @@ func (h *Hub) IngestReport(report *model.NodeReport) {
 		name = report.NodeID
 	}
 	region := strings.TrimSpace(report.Region)
-	if region == "" || strings.EqualFold(region, "auto") || strings.EqualFold(region, "default") {
-		ip := strings.TrimSpace(report.System.PublicIP)
-		if ip != "" && ip != "127.0.0.1" && ip != "::1" {
-			if cached, ok := geoIPCache.Load(ip); ok {
-				region = cached.(string)
-			} else {
-				region = "AUTO"
-				go func(nodeID, targetIP string) {
-					detected := resolveIPRegion(targetIP)
-					if detected != "" && detected != "GLOBAL" {
-						h.mu.Lock()
-						if st, found := h.nodeStates[nodeID]; found {
-							if st.Region == "" || strings.EqualFold(st.Region, "auto") || strings.EqualFold(st.Region, "default") || strings.EqualFold(st.Region, "global") {
-								st.Region = detected
-								_ = h.storage.UpsertNode(&model.NodeMetadata{
-									NodeID:   st.NodeID,
-									Name:     st.Name,
-									Region:   st.Region,
-									OS:       st.System.OS,
-									Kernel:   st.System.Kernel,
-									IsOnline: true,
-								})
-								h.sendBroadcast(&model.WSEvent{
-									Type:      "node_update",
-									Timestamp: time.Now().Unix(),
-									Data:      st,
-								})
-							}
-						}
-						h.mu.Unlock()
-					}
-				}(report.NodeID, ip)
-			}
-		} else {
-			region = "LOCAL"
-		}
-	}
 	tags := report.Tags
 	billing := report.Billing
+
+	ip := strings.TrimSpace(report.System.PublicIP)
+	var geoDetails *GeoIPDetails
+	if ip != "" && ip != "127.0.0.1" && ip != "::1" {
+		if val, ok := geoIPCache.Load(ip); ok {
+			geoDetails, _ = val.(*GeoIPDetails)
+		}
+	} else if ip == "127.0.0.1" || ip == "::1" {
+		region = "LOCAL"
+	}
+
+	// If cached geoDetails exists, apply immediately to region, provider and tags
+	if geoDetails != nil {
+		if region == "" || strings.EqualFold(region, "auto") || strings.EqualFold(region, "default") || strings.EqualFold(region, "global") {
+			if geoDetails.CountryCode != "" {
+				region = geoDetails.CountryCode
+			}
+		}
+		if billing.Provider == "" || strings.Contains(billing.Provider, "Zillion Network") {
+			if geoDetails.Provider != "" {
+				billing.Provider = geoDetails.Provider
+			}
+		}
+		if len(tags) == 0 || (len(tags) == 3 && tags[0] == "电信CN2" && tags[2] == "CU4837") {
+			if geoDetails.LineTag != "" {
+				tags = []string{geoDetails.LineTag, "1Gbps", geoDetails.CountryCode}
+			}
+		}
+	} else if ip != "" && ip != "127.0.0.1" && ip != "::1" {
+		// Launch background async resolution and push update when resolved
+		go func(nodeID, targetIP string) {
+			details := ResolveNodeGeoAndProvider(targetIP)
+			if details != nil && details.CountryCode != "" && details.CountryCode != "GLOBAL" {
+				h.mu.Lock()
+				if st, found := h.nodeStates[nodeID]; found {
+					h.settingsMu.RLock()
+					customSettings := h.nodeSettings[nodeID]
+					h.settingsMu.RUnlock()
+
+					updated := false
+					if (customSettings == nil || customSettings.Region == "") &&
+						(st.Region == "" || strings.EqualFold(st.Region, "auto") || strings.EqualFold(st.Region, "default") || strings.EqualFold(st.Region, "global")) {
+						st.Region = details.CountryCode
+						updated = true
+					}
+					if (customSettings == nil || customSettings.Provider == "") &&
+						(st.Billing.Provider == "" || strings.Contains(st.Billing.Provider, "Zillion Network")) {
+						st.Billing.Provider = details.Provider
+						updated = true
+					}
+					if (customSettings == nil || len(customSettings.Tags) == 0) &&
+						(len(st.Tags) == 0 || (len(st.Tags) == 3 && st.Tags[0] == "电信CN2" && st.Tags[2] == "CU4837")) {
+						st.Tags = []string{details.LineTag, "1Gbps", details.CountryCode}
+						updated = true
+					}
+					if updated {
+						_ = h.storage.UpsertNode(&model.NodeMetadata{
+							NodeID:   st.NodeID,
+							Name:     st.Name,
+							Region:   st.Region,
+							OS:       st.System.OS,
+							Kernel:   st.System.Kernel,
+							IsOnline: true,
+							LastSeen: st.LastSeen,
+						})
+						h.sendBroadcast(&model.WSEvent{
+							Type:      "node_update",
+							Timestamp: time.Now().Unix(),
+							Data:      st,
+						})
+					}
+				}
+				h.mu.Unlock()
+			}
+		}(report.NodeID, ip)
+	}
 
 	// Apply node settings overrides if configured
 	h.settingsMu.RLock()
@@ -361,8 +571,18 @@ func (h *Hub) IngestReport(report *model.NodeReport) {
 	}
 
 	h.mu.Lock()
+	prevState, wasKnown := h.nodeStates[report.NodeID]
+	wasOffline := wasKnown && !prevState.IsOnline
 	h.nodeStates[report.NodeID] = state
 	h.mu.Unlock()
+
+	notif := h.getNotifier()
+	if wasOffline && notif != nil {
+		notif.NotifyNodeRecovery(state)
+	}
+	if notif != nil {
+		notif.CheckTrafficQuota(state)
+	}
 
 	// Update SQLite node metadata asynchronously
 	go func() {
@@ -491,9 +711,18 @@ func (h *Hub) checkOfflineNodes() {
 	now := time.Now().Unix()
 	var transitionedOffline []*model.NodeState
 
+	notif := h.getNotifier()
+	timeout := h.offlineTimeout
+	if notif != nil {
+		sec := int64(notif.GetSettings().Rules.OfflineThresholdSec)
+		if sec >= 5 {
+			timeout = sec
+		}
+	}
+
 	h.mu.Lock()
 	for _, state := range h.nodeStates {
-		if state.IsOnline && (now-state.LastSeen > h.offlineTimeout) {
+		if state.IsOnline && (now-state.LastSeen > timeout) {
 			state.IsOnline = false
 			state.RateDown = 0
 			state.RateUp = 0
@@ -505,7 +734,7 @@ func (h *Hub) checkOfflineNodes() {
 	h.mu.Unlock()
 
 	for _, state := range transitionedOffline {
-		log.Printf("[Hub] Node %s (%s) marked OFFLINE (timeout: %ds)", state.NodeID, state.Name, h.offlineTimeout)
+		log.Printf("[Hub] Node %s (%s) marked OFFLINE (timeout: %ds)", state.NodeID, state.Name, timeout)
 		_ = h.storage.UpsertNode(&model.NodeMetadata{
 			NodeID:   state.NodeID,
 			Name:     state.Name,
@@ -519,6 +748,10 @@ func (h *Hub) checkOfflineNodes() {
 			Timestamp: now,
 			Data:      state,
 		})
+
+		if notif != nil {
+			notif.NotifyNodeOffline(state)
+		}
 	}
 }
 

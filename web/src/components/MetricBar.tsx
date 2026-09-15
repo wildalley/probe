@@ -25,7 +25,7 @@ export const MetricBar: React.FC<MetricBarProps> = ({
       <div className={`flex justify-between items-center text-xs mb-1 font-mono ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}>
         <span className={isBlueprint ? "text-slate-600 font-medium" : "text-zinc-400"}>{label}</span>
         <div className="flex items-center gap-1.5">
-          {subValue && <span className={`text-[11px] ${isBlueprint ? "text-slate-400" : "text-zinc-500"}`}>{subValue}</span>}
+          {subValue && <span className={`text-11 ${isBlueprint ? "text-slate-400" : "text-zinc-500"}`}>{subValue}</span>}
           {showPercent && (
             <span className={`font-semibold ${colors.text}`}>
               {safeVal.toFixed(1)}%

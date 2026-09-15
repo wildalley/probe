@@ -148,7 +148,7 @@ export const ServerDetailModal: React.FC<ServerDetailModalProps> = ({
             <div className="text-zinc-200 font-semibold truncate">
               {node.system.cpu_count || 1} Cores · {node.cpu.toFixed(1)}%
             </div>
-            <div className="text-[11px] text-zinc-400 mt-1">
+            <div className="text-11 text-zinc-400 mt-1">
               Load: {node.system.load_1 || 0}, {node.system.load_5 || 0}, {node.system.load_15 || 0}
             </div>
           </div>
@@ -161,7 +161,7 @@ export const ServerDetailModal: React.FC<ServerDetailModalProps> = ({
             <div className="text-zinc-200 font-semibold truncate">
               {formatBytes(node.system.mem_used)} / {formatBytes(node.system.mem_total)}
             </div>
-            <div className="text-[11px] text-zinc-400 mt-1">
+            <div className="text-11 text-zinc-400 mt-1">
               Usage: {node.mem.toFixed(1)}%
             </div>
           </div>
@@ -174,7 +174,7 @@ export const ServerDetailModal: React.FC<ServerDetailModalProps> = ({
             <div className="text-zinc-200 font-semibold truncate">
               {node.system.disk_used ? formatBytes(node.system.disk_used) : "--"} / {node.system.disk_total ? formatBytes(node.system.disk_total) : "--"}
             </div>
-            <div className="text-[11px] text-zinc-400 mt-1">
+            <div className="text-11 text-zinc-400 mt-1">
               Usage: {node.disk.toFixed(1)}%
             </div>
           </div>
@@ -187,7 +187,7 @@ export const ServerDetailModal: React.FC<ServerDetailModalProps> = ({
             <div className="text-zinc-200 font-semibold truncate" title={node.system.os}>
               {node.system.os || "Linux"}
             </div>
-            <div className="text-[11px] text-zinc-400 mt-1 truncate">
+            <div className="text-11 text-zinc-400 mt-1 truncate">
               Uptime: {node.uptime_str}
             </div>
           </div>

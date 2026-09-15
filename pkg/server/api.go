@@ -52,6 +52,7 @@ type Server struct {
 	hub         *Hub
 	storage     *Storage
 	downsampler *Downsampler
+	notifier    *Notifier
 	distFS      fs.FS
 	auth        *AuthManager
 
@@ -64,7 +65,7 @@ type Server struct {
 }
 
 // NewServer initializes Gin and binds endpoints.
-func NewServer(hub *Hub, storage *Storage, downsampler *Downsampler, distFS fs.FS, auth *AuthManager, privateMode bool) *Server {
+func NewServer(hub *Hub, storage *Storage, downsampler *Downsampler, notifier *Notifier, distFS fs.FS, auth *AuthManager, privateMode bool) *Server {
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
 	router.Use(gin.Recovery())
@@ -86,6 +87,7 @@ func NewServer(hub *Hub, storage *Storage, downsampler *Downsampler, distFS fs.F
 		hub:         hub,
 		storage:     storage,
 		downsampler: downsampler,
+		notifier:    notifier,
 		distFS:      distFS,
 		auth:        auth,
 		privateMode: privateMode,
@@ -185,6 +187,16 @@ func (s *Server) setupRoutes() {
 		// Exchange rates
 		admin.POST("/settings/rates", s.handleSaveExchangeRates)
 		admin.POST("/settings/rates/refresh", s.handleRefreshExchangeRates)
+
+		// Notifications & Custom Alerts
+		admin.GET("/notifications/settings", s.handleGetNotificationSettings)
+		admin.POST("/notifications/settings", s.handleSaveNotificationSettings)
+		admin.POST("/notifications/test", s.handleTestNotification)
+		admin.GET("/notifications/logs", s.handleGetNotificationLogs)
+		admin.DELETE("/notifications/logs", s.handleClearNotificationLogs)
+
+		// GeoIP, ASN & Line Auto-Discovery
+		admin.GET("/geoip/lookup", s.handleGeoIPLookup)
 	}
 
 	// Static Assets / Embedded SPA
@@ -1000,4 +1012,117 @@ func (s *Server) handleRefreshExchangeRates(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, sysSettings)
+}
+
+// handleGetNotificationSettings returns the active notification configuration.
+func (s *Server) handleGetNotificationSettings(c *gin.Context) {
+	settings, err := s.storage.GetNotificationSettings()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, settings)
+}
+
+// handleSaveNotificationSettings updates notification configuration.
+func (s *Server) handleSaveNotificationSettings(c *gin.Context) {
+	var req model.NotificationSettings
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload: " + err.Error()})
+		return
+	}
+
+	if err := s.storage.SaveNotificationSettings(&req); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save settings: " + err.Error()})
+		return
+	}
+
+	if s.notifier != nil {
+		s.notifier.ReloadSettings()
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "saved", "settings": req})
+}
+
+// handleTestNotification sends a test notification through the specified channel or all channels.
+func (s *Server) handleTestNotification(c *gin.Context) {
+	var req struct {
+		Channel string `json:"channel"`
+	}
+	_ = c.ShouldBindJSON(&req)
+	if req.Channel == "" {
+		req.Channel = "all"
+	}
+
+	if s.notifier == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "notifier service unavailable"})
+		return
+	}
+
+	if err := s.notifier.SendTest(req.Channel); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "测试通知发送成功"})
+}
+
+// handleGetNotificationLogs retrieves one page of notification history.
+//
+// The response is an object rather than a bare array so it can carry `total`:
+// without it the dashboard could only report how many rows this page held, and
+// silently gave the impression that older alerts did not exist.
+func (s *Server) handleGetNotificationLogs(c *gin.Context) {
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	if limit <= 0 {
+		limit = 50
+	}
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	if offset < 0 {
+		offset = 0
+	}
+
+	logs, err := s.storage.GetNotificationLogs(limit, offset)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	total, err := s.storage.CountNotificationLogs()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Normalize nil to an empty slice so the client always sees an array.
+	if logs == nil {
+		logs = []*model.NotificationLog{}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"logs":   logs,
+		"total":  total,
+		"limit":  limit,
+		"offset": offset,
+	})
+}
+
+// handleClearNotificationLogs clears all alert history logs.
+func (s *Server) handleClearNotificationLogs(c *gin.Context) {
+	if err := s.storage.ClearNotificationLogs(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "通知历史已清空"})
+}
+
+// handleGeoIPLookup performs real-time geolocation, ASN, and provider auto-discovery for an IP.
+func (s *Server) handleGeoIPLookup(c *gin.Context) {
+	ip := strings.TrimSpace(c.Query("ip"))
+	if ip == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ip parameter is required"})
+		return
+	}
+	details := ResolveNodeGeoAndProvider(ip)
+	c.JSON(http.StatusOK, details)
 }

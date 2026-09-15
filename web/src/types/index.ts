@@ -163,3 +163,53 @@ export interface TokenItem {
   label: string;
   created_at: number;
 }
+
+export interface TelegramConfig {
+  enabled: boolean;
+  bot_token: string;
+  chat_id: string;
+}
+
+export interface WebhookConfig {
+  enabled: boolean;
+  url: string;
+  secret?: string;
+  format: "generic" | "feishu" | "dingtalk" | "wecom" | "bark";
+}
+
+export interface DiscordConfig {
+  enabled: boolean;
+  webhook_url: string;
+  /** Overrides the webhook's default bot name when set. */
+  username?: string;
+}
+
+export interface NotificationRules {
+  offline_alert: boolean;
+  offline_threshold_sec: number;
+  recovery_alert: boolean;
+  traffic_alert: boolean;
+  traffic_threshold_pct: number;
+  daily_report: boolean;
+  daily_report_time: string;
+}
+
+export interface NotificationSettings {
+  telegram: TelegramConfig;
+  webhook: WebhookConfig;
+  discord: DiscordConfig;
+  rules: NotificationRules;
+  updated_at?: number;
+}
+
+export interface NotificationLog {
+  id: number;
+  timestamp: number;
+  channel: string;
+  type: string;
+  title: string;
+  content: string;
+  status: "success" | "failed";
+  error_msg?: string;
+}
+
