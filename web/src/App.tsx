@@ -13,6 +13,7 @@ import { Button } from "@heroui/react";
 import { Server, Activity, ShieldCheck, Terminal, Cpu } from "lucide-react";
 import { BlurFade } from "./components/ui/BlurFade";
 import { Ripple } from "./components/ui/Ripple";
+import { AnimatedShinyText } from "./components/ui/AnimatedShinyText";
 
 export function App() {
   const [theme, setTheme] = useState<"blueprint" | "dark">(() => {
@@ -299,11 +300,18 @@ export function App() {
       <div className={`min-h-screen flex items-center justify-center ${
         isBlueprint ? "blueprint-grid bg-slate-100/50" : "cyber-grid bg-zinc-950"
       }`}>
-        <div className={`flex items-center gap-3 font-mono text-xs ${
+        <div className={`flex items-center gap-3 font-sans text-xs ${
           isBlueprint ? "text-slate-500" : "text-zinc-400"
         }`}>
           <Activity className="h-4 w-4 animate-pulse text-indigo-500" />
-          <span>正在校验会话...</span>
+          {/* Short cycle: the probe usually resolves in well under a second, so
+              the default 8s sweep would never be seen. */}
+          <AnimatedShinyText
+            duration="2.2s"
+            shimmerColor={isBlueprint ? "via-slate-900/45" : "via-white/85"}
+          >
+            正在校验会话...
+          </AnimatedShinyText>
         </div>
       </div>
     );
@@ -405,7 +413,19 @@ export function App() {
                   <Server className="h-7 w-7" />
                 </div>
                 <h3 className={`relative text-base font-semibold ${isBlueprint ? "text-slate-900" : "text-zinc-200"}`}>
-                  {nodesList.length === 0 ? "暂无接入的主机节点" : "未找到匹配的主机"}
+                  {nodesList.length === 0 ? (
+                    /* Only while waiting for a first agent: the sweep reinforces
+                       the Ripple behind it ("the hub is listening"). A filter
+                       miss is a settled result, so it stays static. */
+                    <AnimatedShinyText
+                      duration="4s"
+                      shimmerColor={isBlueprint ? "via-slate-900/35" : "via-white/70"}
+                    >
+                      暂无接入的主机节点
+                    </AnimatedShinyText>
+                  ) : (
+                    "未找到匹配的主机"
+                  )}
                 </h3>
                 <p className={`relative mt-1 max-w-md text-xs font-sans ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}>
                   {nodesList.length === 0
