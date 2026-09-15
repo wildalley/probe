@@ -793,7 +793,7 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
                     title="在 CPU Mark 查看性能排行榜"
                   >
                     <span>CPU Mark 排行</span>
-                    <ExternalLink className="h-2.5 w-2.5" />
+                    <ExternalLink className="h-3 w-3 shrink-0" />
                   </a>
                 </div>
                 <div className={`font-semibold truncate ${isBlueprint ? "text-slate-900" : "text-zinc-100"}`} title={node.system.cpu_model || "Intel/AMD Processor"}>
@@ -801,7 +801,7 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
                 </div>
                 {/* Benchmark score bar */}
                 <div className="mt-2 flex items-center gap-2">
-                  <span className="rounded bg-emerald-500/20 px-1 py-0.2 text-10 font-bold text-emerald-600 dark:text-emerald-400">B</span>
+                  <span className="rounded bg-emerald-500/20 px-1 py-0.5 text-10 font-bold leading-none text-emerald-600 dark:text-emerald-400">B</span>
                   <div className={`flex-1 h-2 rounded-full overflow-hidden ${isBlueprint ? "bg-slate-200" : "bg-zinc-800"}`}>
                     <div className="h-full bg-emerald-500 rounded-full w-[65%]" />
                   </div>
@@ -819,8 +819,8 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
                       className={`flex items-center gap-1 hover:underline cursor-pointer ${isBlueprint ? "text-indigo-600" : "text-indigo-400"}`}
                       title={maskIP ? "点击显示完整 IP" : "点击脱敏隐藏 IP"}
                     >
-                      {maskIP ? <EyeOff className="h-2.5 w-2.5" /> : <Eye className="h-2.5 w-2.5" />}
-                      <span className="text-9">{maskIP ? "已脱敏" : "显"}</span>
+                      {maskIP ? <EyeOff className="h-3 w-3 shrink-0" /> : <Eye className="h-3 w-3 shrink-0" />}
+                      <span className="text-10 leading-none">{maskIP ? "已脱敏" : "显示"}</span>
                     </button>
                   </div>
                   <div className={`flex items-center gap-1 mt-0.5 font-semibold ${isBlueprint ? "text-slate-800" : "text-zinc-200"}`}>
@@ -982,7 +982,7 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
                 <div className={`flex items-center gap-1 text-10 ${isBlueprint ? "text-slate-500 font-medium" : "text-zinc-400"}`}>
                   <ArrowUpDown className={`h-3 w-3 ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`} />
                   <span>总流量</span>
-                  <span className={`rounded px-1 text-9 font-semibold ${isBlueprint ? "bg-slate-100 text-slate-700" : "bg-zinc-800 text-zinc-300"}`}>IPv4</span>
+                  <span className={`rounded px-1 py-0.5 text-10 font-semibold leading-none ${isBlueprint ? "bg-slate-100 text-slate-700" : "bg-zinc-800 text-zinc-300"}`}>IPv4</span>
                   <span className={`ml-auto font-mono ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}>
                     {formatBytes(node.network.bytes_recv)} / {formatBytes(node.network.bytes_sent)}
                   </span>

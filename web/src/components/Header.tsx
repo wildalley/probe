@@ -8,8 +8,6 @@ import {
   LayoutGrid,
   List,
   Plus,
-  Wifi,
-  WifiOff,
   Cpu,
   Sun,
   Moon,
@@ -26,7 +24,6 @@ import { getRegionFlag } from "../utils/flags";
 import { cn } from "../lib/utils";
 import { NumberTicker } from "./ui/NumberTicker";
 import { AnimatedGradientText } from "./ui/AnimatedGradientText";
-import { AnimatedShinyText } from "./ui/AnimatedShinyText";
 import { BlurFade } from "./ui/BlurFade";
 
 interface HeaderProps {
@@ -153,71 +150,9 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           </div>
 
-          {/* Connection Status Pill & Actions */}
+          {/* Actions. Connection state is already carried by the beacon on the
+              brand mark, so no separate status pill is rendered here. */}
           <div className="flex shrink-0 items-center gap-2 lg:gap-3">
-            {/* Live-stream indicator. The label collapses to a bare icon on narrow
-                viewports so it never crowds the brand block. */}
-            <div
-              className={cn(
-                "flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-1 text-xs font-mono transition-colors lg:px-3",
-                wsConnected
-                  ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-500"
-                  : "bg-rose-500/10 border-rose-500/30 text-rose-500"
-              )}
-              title={wsConnected ? "LIVE STREAMING" : "RECONNECTING..."}
-            >
-              {wsConnected ? (
-                <Wifi className="h-3.5 w-3.5" />
-              ) : (
-                <WifiOff className="h-3.5 w-3.5 animate-pulse" />
-              )}
-              {/* Label collapses to a bare icon on narrow viewports so it never
-                  crowds the brand block. */}
-              <span className="hidden lg:inline">
-                {wsConnected ? (
-                  <AnimatedShinyText shimmerWidth={60}>LIVE STREAMING</AnimatedShinyText>
-                ) : (
-                  "RECONNECTING..."
-                )}
-              </span>
-            </div>
-
-            {/* View Mode Toggle */}
-            <div className={`flex items-center rounded-xl border p-0.5 ${
-              isBlueprint ? "border-slate-200 bg-slate-100 shadow-xs" : "border-zinc-800 bg-zinc-900/60"
-            }`}>
-              <button
-                onClick={() => onViewModeChange("grid")}
-                className={`rounded-lg p-1.5 transition-all cursor-pointer active:scale-95 ${
-                  viewMode === "grid"
-                    ? "bg-indigo-600 text-white shadow-xs"
-                    : isBlueprint
-                    ? "text-slate-500 hover:text-slate-900"
-                    : "text-zinc-400 hover:text-zinc-200"
-                }`}
-                title="网格卡片视图"
-                aria-label="网格卡片视图"
-                aria-pressed={viewMode === "grid"}
-              >
-                <LayoutGrid className="h-4 w-4" />
-              </button>
-              <button
-                onClick={() => onViewModeChange("table")}
-                className={`rounded-lg p-1.5 transition-all cursor-pointer active:scale-95 ${
-                  viewMode === "table"
-                    ? "bg-indigo-600 text-white shadow-xs"
-                    : isBlueprint
-                    ? "text-slate-500 hover:text-slate-900"
-                    : "text-zinc-400 hover:text-zinc-200"
-                }`}
-                title="表格机架视图"
-                aria-label="表格机架视图"
-                aria-pressed={viewMode === "table"}
-              >
-                <List className="h-4 w-4" />
-              </button>
-            </div>
-
             {/* Theme Toggle Button (Moon / Sun) */}
             {onToggleTheme && (
               <button
@@ -365,8 +300,8 @@ export const Header: React.FC<HeaderProps> = ({
           </BlurFade>
         </div>
 
-        {/* Search & region filter. The grid/table toggle lives in the action row
-            above, alongside the other view-level controls. */}
+        {/* Search, region filter & view mode. The grid/table toggle sits here,
+            directly above the list it controls. */}
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-[200px] max-w-sm">
             <Search className={`absolute left-3 top-2.5 h-4 w-4 ${isBlueprint ? "text-slate-400" : "text-zinc-500"}`} />
@@ -423,6 +358,42 @@ export const Header: React.FC<HeaderProps> = ({
                 <span className="leading-none">{reg}</span>
               </button>
             ))}
+          </div>
+
+          {/* View Mode Toggle */}
+          <div className={`flex shrink-0 items-center rounded-xl border p-0.5 ${
+            isBlueprint ? "border-slate-200 bg-slate-100 shadow-xs" : "border-zinc-800 bg-zinc-900/60"
+          }`}>
+            <button
+              onClick={() => onViewModeChange("grid")}
+              className={`rounded-lg p-1.5 transition-all cursor-pointer active:scale-95 ${
+                viewMode === "grid"
+                  ? "bg-indigo-600 text-white shadow-xs"
+                  : isBlueprint
+                  ? "text-slate-500 hover:text-slate-900"
+                  : "text-zinc-400 hover:text-zinc-200"
+              }`}
+              title="网格卡片视图"
+              aria-label="网格卡片视图"
+              aria-pressed={viewMode === "grid"}
+            >
+              <LayoutGrid className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => onViewModeChange("table")}
+              className={`rounded-lg p-1.5 transition-all cursor-pointer active:scale-95 ${
+                viewMode === "table"
+                  ? "bg-indigo-600 text-white shadow-xs"
+                  : isBlueprint
+                  ? "text-slate-500 hover:text-slate-900"
+                  : "text-zinc-400 hover:text-zinc-200"
+              }`}
+              title="表格机架视图"
+              aria-label="表格机架视图"
+              aria-pressed={viewMode === "table"}
+            >
+              <List className="h-4 w-4" />
+            </button>
           </div>
         </div>
       </div>
