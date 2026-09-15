@@ -80,12 +80,17 @@ func main() {
 		log.Fatalf("Failed to initialize authentication: %v", err)
 	}
 
+	// Initialize Custom Notifier
+	notifier := server.NewNotifier(storage, hub)
+	hub.SetNotifier(notifier)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	// Start background routines
 	go hub.Start(ctx)
 	go downsampler.Start(ctx)
+	go notifier.Start(ctx)
 
 	authStop := make(chan struct{})
 	defer close(authStop)
@@ -98,7 +103,7 @@ func main() {
 		distFS = sub
 	}
 
-	srv := server.NewServer(hub, storage, downsampler, distFS, auth, !publicView)
+	srv := server.NewServer(hub, storage, downsampler, notifier, distFS, auth, !publicView)
 
 	httpServer := &http.Server{
 		Addr:    listenAddr,

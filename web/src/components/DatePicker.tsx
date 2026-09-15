@@ -1,5 +1,9 @@
 import React from "react";
-import { Calendar, Clock, X, Check } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
+import { Calendar, Clock, X } from "lucide-react";
+import { Button } from "@heroui/react";
+import { cn } from "../lib/utils";
+import { NumberTicker } from "./ui/NumberTicker";
 
 interface DatePickerProps {
   value: string;
@@ -37,7 +41,7 @@ export const DatePicker: React.FC<DatePickerProps> = ({ value, onChange, theme =
         <div
           className={`relative flex-1 min-w-[200px] flex items-center rounded-xl border transition-colors ${
             isBlueprint
-              ? "bg-white border-slate-300 focus-within:border-indigo-500 focus-within:ring-1 focus-within:ring-indigo-500/20"
+              ? "bg-white border-slate-200 focus-within:border-indigo-500 focus-within:ring-1 focus-within:ring-indigo-500/20"
               : "bg-zinc-950 border-zinc-800 focus-within:border-indigo-500 focus-within:ring-1 focus-within:ring-indigo-500/20"
           }`}
         >
@@ -56,8 +60,8 @@ export const DatePicker: React.FC<DatePickerProps> = ({ value, onChange, theme =
             <button
               type="button"
               onClick={() => onChange("")}
-              className={`mr-2.5 p-1 rounded-md transition-colors ${
-                isBlueprint ? "text-slate-400 hover:text-slate-700" : "text-zinc-500 hover:text-zinc-200"
+              className={`mr-2.5 p-1 rounded-md transition-all cursor-pointer active:scale-90 ${
+                isBlueprint ? "text-slate-400 hover:text-slate-700 hover:bg-slate-100" : "text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800"
               }`}
               title="清除日期"
             >
@@ -67,37 +71,49 @@ export const DatePicker: React.FC<DatePickerProps> = ({ value, onChange, theme =
         </div>
 
         {/* Days remaining badge */}
-        {daysRemaining !== null && (
-          <div
-            className={`flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-mono font-semibold shrink-0 border ${
-              daysRemaining > 30
-                ? isBlueprint
-                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                  : "bg-emerald-950/40 text-emerald-400 border-emerald-800/60"
-                : daysRemaining >= 0
-                ? isBlueprint
-                  ? "bg-amber-50 text-amber-700 border-amber-200"
-                  : "bg-amber-950/40 text-amber-400 border-amber-800/60"
-                : isBlueprint
-                ? "bg-rose-50 text-rose-700 border-rose-200"
-                : "bg-rose-950/40 text-rose-400 border-rose-800/60"
-            }`}
-          >
-            <Clock className="h-3.5 w-3.5" />
-            <span>
-              {daysRemaining > 0
-                ? `剩余 ${daysRemaining} 天`
-                : daysRemaining === 0
-                ? "今天到期"
-                : `已过期 ${Math.abs(daysRemaining)} 天`}
-            </span>
-          </div>
-        )}
+        <AnimatePresence>
+          {daysRemaining !== null && (
+            <motion.div
+              key={daysRemaining > 30 ? "safe" : daysRemaining >= 0 ? "soon" : "expired"}
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              transition={{ duration: 0.16 }}
+              className={cn(
+                "flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-mono font-semibold shrink-0 border",
+                daysRemaining > 30
+                  ? isBlueprint
+                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                    : "bg-emerald-950/40 text-emerald-400 border-emerald-800/60"
+                  : daysRemaining >= 0
+                  ? isBlueprint
+                    ? "bg-amber-50 text-amber-700 border-amber-200"
+                    : "bg-amber-950/40 text-amber-400 border-amber-800/60"
+                  : isBlueprint
+                  ? "bg-rose-50 text-rose-700 border-rose-200"
+                  : "bg-rose-950/40 text-rose-400 border-rose-800/60"
+              )}
+            >
+              <Clock className="h-3.5 w-3.5" />
+              {daysRemaining === 0 ? (
+                <span>今天到期</span>
+              ) : daysRemaining > 0 ? (
+                <span className="flex items-center gap-1">
+                  剩余 <NumberTicker value={daysRemaining} /> 天
+                </span>
+              ) : (
+                <span className="flex items-center gap-1">
+                  已过期 <NumberTicker value={Math.abs(daysRemaining)} /> 天
+                </span>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* Quick Presets */}
       <div className="flex flex-wrap items-center gap-1.5">
-        <span className={`text-[11px] font-mono ${isBlueprint ? "text-slate-500 font-medium" : "text-zinc-400"}`}>
+        <span className={`text-11 font-mono ${isBlueprint ? "text-slate-500 font-medium" : "text-zinc-400"}`}>
           快捷设定:
         </span>
         {[
@@ -108,18 +124,16 @@ export const DatePicker: React.FC<DatePickerProps> = ({ value, onChange, theme =
           { label: "+2年", months: 24 },
           { label: "+3年", months: 36 },
         ].map((p) => (
-          <button
+          <Button
             key={p.label}
             type="button"
-            onClick={() => addPeriod(p.months)}
-            className={`text-[11px] font-mono px-2 py-0.5 rounded-md border transition-all ${
-              isBlueprint
-                ? "bg-slate-100 text-slate-700 border-slate-200 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-200"
-                : "bg-zinc-900 text-zinc-300 border-zinc-800 hover:bg-indigo-950/50 hover:text-indigo-300 hover:border-indigo-700"
-            }`}
+            size="sm"
+            variant="secondary"
+            onPress={() => addPeriod(p.months)}
+            className="h-auto rounded-full px-2 py-0.5 font-mono text-11 active:scale-95"
           >
             {p.label}
-          </button>
+          </Button>
         ))}
       </div>
     </div>
