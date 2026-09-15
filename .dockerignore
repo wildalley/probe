@@ -1,0 +1,41 @@
+# Build artifacts — the image builds its own.
+bin/
+*.exe
+
+# Dependencies are reinstalled from the lockfile inside the image.
+node_modules/
+web/node_modules/
+*.tsbuildinfo
+
+# Local state that must never leak into an image layer.
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+*.log
+.env
+
+# Repo metadata the build does not need.
+.git/
+.gitignore
+.dockerignore
+
+# Editor / OS noise.
+.idea/
+.vscode/
+.DS_Store
+*.swp
+*.swo
+*~
+
+# Docs and host-side helpers are irrelevant to the container build.
+#
+# deploy/ is NOT excluded: the server reads deploy/install.sh from disk at
+# request time to serve GET /install.sh, so it has to be in the image.
+README.md
+LICENSE
+docs/
+scripts/
+docker-compose.yml
+Dockerfile

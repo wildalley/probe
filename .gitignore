@@ -35,3 +35,10 @@ web/dist/
 # Logs
 *.log
 logs/
+
+# Local environment files. docker-compose reads .env, and the example asks the
+# operator to put the admin password there — so it must never be committed.
+# The template itself is negated back in, since it carries no real values.
+.env
+.env.*
+!.env.example

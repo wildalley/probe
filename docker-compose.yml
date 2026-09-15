@@ -1,0 +1,48 @@
+services:
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: cyber-probe-server:latest
+    container_name: probe-server
+    restart: unless-stopped
+
+    ports:
+      # Host:container. Bind to 127.0.0.1 instead if a reverse proxy fronts this
+      # (recommended in production, so TLS terminates at the proxy and the
+      # session cookie gets its Secure attribute).
+      - "8080:8080"
+
+    environment:
+      # Admin account, created on first boot only. Set a real password in .env —
+      # leaving it unset makes the server generate one and print it once to the
+      # container log, which then needs `docker compose logs` to recover.
+      PROBE_ADMIN_USER: "${PROBE_ADMIN_USER:-admin}"
+      PROBE_ADMIN_PASSWORD: "${PROBE_ADMIN_PASSWORD:-}"
+
+      # Anonymous read-only dashboard. Default (unset/false) requires a login for
+      # every view, including the telemetry itself.
+      PROBE_PUBLIC_VIEW: "${PROBE_PUBLIC_VIEW:-false}"
+
+      # Extra origins allowed to send the session cookie, comma-separated. Needed
+      # only when the dashboard is served from a different host than the API.
+      PROBE_ALLOWED_ORIGINS: "${PROBE_ALLOWED_ORIGINS:-}"
+
+      # The daily report fires at a local wall-clock time, so this decides when
+      # "09:00" actually happens.
+      TZ: "${TZ:-Asia/Shanghai}"
+
+    volumes:
+      # SQLite history. Named volume rather than a bind mount so it works the
+      # same on Linux, macOS and Windows without host permission fixups.
+      - probe-data:/data
+
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/api/v1/auth/status"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+volumes:
+  probe-data:

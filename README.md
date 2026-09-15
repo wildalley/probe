@@ -94,9 +94,48 @@
 
 ## 🚀 快速上手
 
-### 1. 编译全部可执行文件
+服务端有两种部署方式，选其一即可：**方式 A（Docker Compose）** 开箱即用，无需本机安装 Go 与 Node；**方式 B（源码编译）** 适合二次开发调试。Agent 的部署（第 3 步起）两种方式通用。
 
-本系统支持一键打包编译：
+### 1. 方式 A · Docker Compose 部署（推荐）
+
+只需要 Docker，无需在宿主机安装 Go 或 Node —— 前端打包与二进制编译都在镜像内完成。
+
+```bash
+git clone https://github.com/wildalley/probe.git
+cd probe
+
+# 建议先设置管理员密码，否则会随机生成并只在启动日志里打印一次
+cp .env.example .env
+$EDITOR .env
+
+docker compose up -d
+```
+
+随后访问 `http://<服务器IP>:8080` 即可登录。常用运维命令：
+
+```bash
+docker compose logs -f          # 查看实时日志（首启的随机密码在这里）
+docker compose restart          # 重启服务
+git pull && docker compose up -d --build   # 拉取最新代码并重建镜像
+docker compose down             # 停止并删除容器（数据卷保留）
+```
+
+关于这套镜像的几点说明：
+
+- **单容器**：只有服务端一个服务，SQLite 内嵌、前端已编译进二进制，不需要额外的数据库或 Nginx 容器。
+- **数据持久化**：SQLite 落在命名卷 `probe-data`（容器内 `/data`）。`docker compose down` 不会删数据；确实要清空得显式执行 `docker compose down -v`。
+- **非 root 运行**：容器内以 `probe` 普通用户启动，仅对 `/data` 有写权限。
+- **时区**：每日简报按本地挂钟时间触发，因此镜像内置 tzdata，用 `.env` 里的 `TZ` 指定时区（默认 `Asia/Shanghai`），否则 `09:00` 会按 UTC 计算。
+- **健康检查**：内置 `HEALTHCHECK` 探测 `/api/v1/auth/status`，`docker compose ps` 可直接看到 healthy 状态。
+- **Agent 部署链路自带**：镜像内已包含 `install.sh` 与 Agent 二进制，管理后台给出的一键部署命令可直接使用。
+
+> **生产建议**：用反向代理（Caddy / Nginx / Traefik）终止 HTTPS，并把 `docker-compose.yml` 里的端口映射改为 `"127.0.0.1:8080:8080"`，只允许代理访问。走 HTTPS 后会话 Cookie 才会带上 `Secure` 属性。
+
+---
+
+### 2. 方式 B · 从源码编译
+
+本系统支持一键打包编译（需要本机具备 Go 与 Node 环境）：
 
 ```bash
 # 克隆仓库
@@ -113,7 +152,7 @@ make build-all
 
 ---
 
-### 2. 启动服务端 (Probe Server)
+### 3. 启动服务端 (Probe Server)
 
 ```bash
 # 推荐在首次启动前显式设置管理员密码
@@ -202,7 +241,7 @@ Agent 端可用环境变量（同样可用对应参数覆盖）：
 
 ---
 
-### 3. 一键部署被控端 (Agent)
+### 4. 一键部署被控端 (Agent)
 
 使用管理员账号登录后，在 Web 界面点击右上角 **「管理后台」** 或 **「快速部署」**，即可获取自动嵌入当前通信 Token 与自适应参数的命令。
 
@@ -230,7 +269,7 @@ bash install.sh --uninstall    # 一键彻底卸载探针与清理服务
 
 ---
 
-### 4. 手动运行 Agent (调试模式)
+### 5. 手动运行 Agent (调试模式)
 
 ```bash
 ./bin/probe-agent \
@@ -244,7 +283,7 @@ bash install.sh --uninstall    # 一键彻底卸载探针与清理服务
 
 ---
 
-### 5. 多节点仿真测试
+### 6. 多节点仿真测试
 
 无需真实部署多台 VPS，即可通过内置的仿真脚本体验 4 台分布式节点的实时动态监控：
 
@@ -278,6 +317,9 @@ probe/
 │   │   └── types/             # 前端 TypeScript 类型定义
 ├── deploy/                    # 一键部署脚本与 Systemd 模板
 ├── scripts/                   # 集群模拟器与辅助运维脚本
+├── Dockerfile                 # 三阶段构建：前端打包 → Go 编译 → 精简运行时镜像
+├── docker-compose.yml         # 单容器编排（命名卷持久化 SQLite）
+├── .env.example               # Compose 环境变量模板，复制为 .env 后使用
 ├── Makefile                   # 统一构建自动化
 └── README.md                  # 详细使用文档
 ```
