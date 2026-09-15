@@ -41,8 +41,12 @@
   - 自动拉取实时央行汇率，精确统计全集群每月总成本与当前各主机 **实时剩余价值（Remaining Value）**。
 - **流量配额智能换算**：支持总额（GB / TB / PB / 无限）与已用流量配置，智能换算用量进度条与超额预警。
 - **通信鉴权 Token 管理**：内置安全令牌体系，一键生成命令自动嵌入 Token，提供交互式换 Token 与动态吊销。
-- **管理后台会话鉴权**：公开看板保持只读访问；节点配置、Token、通知与其他写操作需管理员登录，并支持修改密码后注销全部既有会话。
+- **管理后台会话鉴权**：默认全站需登录，加 `-public` 后访客可只读浏览看板；节点配置、Token、通知渠道凭据与其他写操作始终要求管理员登录，并支持修改密码后注销全部既有会话。
 - **多色彩语义标签与收藏**：根据线路与特性（CN2, BGP, GIA, 1Gbps, 原生IP 等）自动渲染多彩色微光标签；支持单机星标置顶与收藏筛选。
+- **多通道告警与定时简报**：
+  - 三条独立通道：Telegram Bot、Discord Webhook 与自定义 Webhook；自定义 Webhook 内置报文格式预设，可直接对接飞书、钉钉、企业微信群机器人与 Bark（iOS），或用通用 JSON 自行处理。
+  - 可配置规则：节点离线告警（含离线判定阈值）、恢复上线通知、流量配额预警（阈值百分比可调）、每日定时集群简报。
+  - 内置推送审计日志，逐条记录投递通道、事件类型与成功/失败状态，支持分页翻阅与一键清空。
 
 ---
 
@@ -161,6 +165,7 @@ sqlite3 probe.db "DELETE FROM admin_users;"
 | Agent Token 查看 / 生成 | ❌ 401 | ✅ |
 | 节点删除、财务与定价配置 | ❌ 401 | ✅ |
 | 延迟监测目标增删改、汇率刷新 | ❌ 401 | ✅ |
+| 通知渠道配置、测试推送与审计日志 | ❌ 401 | ✅ |
 | `install.sh` 与 Agent 二进制下载 | ✅ 公开（部署链路需要，不含机密） | ✅ |
 
 反向代理或前后端分离部署时，如需允许其他来源携带 Cookie 访问，用环境变量声明可信来源：
@@ -171,13 +176,27 @@ PROBE_ALLOWED_ORIGINS="https://probe.example.com,http://localhost:5173"
 
 初始 Agent 通信 Token 同样按安装随机生成并写入启动日志，可登录管理后台复制或轮换，不再使用固定默认 Token。
 
-可用环境变量：
+服务端可用环境变量（每一项都有对应的命令行参数，参数优先）：
 
-| 变量 | 默认值 | 说明 |
-| --- | --- | --- |
-| `PROBE_ADMIN_USER` | `admin` | 首次创建管理员时使用的用户名 |
-| `PROBE_ADMIN_PASSWORD` | 随机生成 | 首次创建管理员时使用的密码；建议生产环境显式设置 |
-| `PROBE_ALLOWED_ORIGINS` | 服务自身来源 | 额外允许携带会话 Cookie 的跨域来源，多个来源用逗号分隔 |
+| 变量 | 对应参数 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `PROBE_ADMIN_USER` | — | `admin` | 首次创建管理员时使用的用户名 |
+| `PROBE_ADMIN_PASSWORD` | — | 随机生成 | 首次创建管理员时使用的密码；建议生产环境显式设置 |
+| `PROBE_ALLOWED_ORIGINS` | — | 服务自身来源 | 额外允许携带会话 Cookie 的跨域来源，多个来源用逗号分隔 |
+| `PROBE_SERVER_ADDR` | `-addr` | `:8080` | 监听地址与端口 |
+| `PROBE_DB_PATH` | `-db` | `probe.db` | SQLite 数据文件路径 |
+| `PROBE_PUBLIC_VIEW` | `-public` | `false` | 置为 `true` 等同于加 `-public`，开放匿名只读看板 |
+
+Agent 端可用环境变量（同样可用对应参数覆盖）：
+
+| 变量 | 对应参数 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `PROBE_SERVER` | `--server` | `ws://127.0.0.1:8080` | 服务端地址，公网部署建议用 `wss://` |
+| `PROBE_TOKEN` | `--token` | — | 通信鉴权 Token，须与服务端一致 |
+| `PROBE_NODE_ID` | `--node-id` | 主机名 | 节点唯一标识 |
+| `PROBE_NAME` | `--name` | 主机名 | 看板显示名称 |
+| `PROBE_REGION` | `--region` | `auto` | 归属地区，`auto` 表示按公网 IP 自动识别 |
+| `PROBE_INTERVAL` | `--interval` | `1` | 采集上报间隔秒数 |
 
 > 会话记录持久化在 SQLite 中，默认有效期 7 天（`-session-hours` 可调），重启服务端不会强制登出。生产环境建议通过 HTTPS 访问，以启用 Cookie 的 `Secure` 属性。
 
@@ -248,10 +267,13 @@ probe/
 ├── pkg/
 │   ├── agent/                 # 采集逻辑、网卡过滤、差分速率计算、WSS 客户端
 │   ├── model/                 # 协议模型与数据结构
-│   └── server/                # 纯内存 Hub、Downsampler 降采样、SQLite 持久化、REST API
+│   └── server/                # 纯内存 Hub、Downsampler 降采样、SQLite 持久化、会话鉴权、告警推送、REST API
 ├── web/                       # React 19 + Vite + Tailwind CSS 4 + HeroUI + uPlot 前端源码
 │   ├── src/
-│   │   ├── components/        # 仪表盘卡片、图表组件、管理弹窗、详情页等
+│   │   ├── components/        # 仪表盘卡片、图表组件、管理弹窗、详情页、登录与改密界面
+│   │   │   └── ui/            # 动效基元（扫光文字、渐变标题、呼吸圆环、数字滚动等）
+│   │   ├── hooks/             # 会话状态等自定义 Hook
+│   │   ├── lib/               # 类名合并等通用工具
 │   │   ├── utils/             # 标签配色系统、汇率计算、国旗解析、单位格式化
 │   │   └── types/             # 前端 TypeScript 类型定义
 ├── deploy/                    # 一键部署脚本与 Systemd 模板
