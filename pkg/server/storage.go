@@ -1,7 +1,9 @@
 package server
 
 import (
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -132,6 +134,19 @@ func (s *Storage) initSchema() error {
 		value TEXT NOT NULL
 	);
 
+	CREATE TABLE IF NOT EXISTS notification_logs (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		timestamp INTEGER NOT NULL,
+		channel TEXT NOT NULL,
+		type TEXT NOT NULL,
+		title TEXT NOT NULL,
+		content TEXT NOT NULL,
+		status TEXT NOT NULL,
+		error_msg TEXT
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_notify_logs_time ON notification_logs(timestamp DESC);
+
 	CREATE TABLE IF NOT EXISTS admin_users (
 		username TEXT PRIMARY KEY,
 		password_hash TEXT NOT NULL,
@@ -160,13 +175,19 @@ func (s *Storage) initSchema() error {
 	// Dynamic column migrations if table previously had fewer columns
 	s.migrateTableColumns()
 
-	// Insert default token if none exists
+	// Insert default token if none exists. This is generated per-install rather
+	// than hardcoded: a fixed literal shipped in the source is a known secret,
+	// so anyone reading the repo could impersonate an agent on any deployment.
 	var count int
 	_ = s.db.QueryRow("SELECT COUNT(*) FROM tokens").Scan(&count)
 	if count == 0 {
-		defaultToken := "sk_default_secret_probe_token"
+		buf := make([]byte, 16)
+		if _, err := rand.Read(buf); err != nil {
+			return fmt.Errorf("failed to generate initial agent token: %w", err)
+		}
+		defaultToken := "sk_agent_" + hex.EncodeToString(buf)
 		_ = s.AddToken(defaultToken, "Default System Token")
-		log.Printf("[Storage] Initialized default agent token: %s", defaultToken)
+		log.Printf("[Storage] Generated initial agent token: %s", defaultToken)
 	}
 
 	// Seed default ping targets if table is empty
@@ -847,6 +868,116 @@ func (s *Storage) CountTokens() (int, error) {
 	var count int
 	err := s.db.QueryRow(`SELECT COUNT(*) FROM tokens`).Scan(&count)
 	return count, err
+}
+
+// GetNotificationSettings loads user-configured notifications or returns defaults.
+func (s *Storage) GetNotificationSettings() (*model.NotificationSettings, error) {
+	val, err := s.GetSystemSetting("notification_settings")
+	if err != nil {
+		return nil, err
+	}
+	if val == "" {
+		return &model.NotificationSettings{
+			Telegram: model.TelegramConfig{Enabled: false},
+			Webhook:  model.WebhookConfig{Enabled: false, Format: "generic"},
+			Discord:  model.DiscordConfig{Enabled: false},
+			Rules: model.NotificationRules{
+				OfflineAlert:        true,
+				OfflineThresholdSec: 60,
+				RecoveryAlert:       true,
+				TrafficAlert:        true,
+				TrafficThresholdPct: 85,
+				DailyReport:         false,
+				DailyReportTime:     "09:00",
+			},
+			UpdatedAt: time.Now().Unix(),
+		}, nil
+	}
+	var settings model.NotificationSettings
+	if err := json.Unmarshal([]byte(val), &settings); err != nil {
+		return nil, err
+	}
+	// Fallback sensible defaults if zero values
+	if settings.Rules.OfflineThresholdSec <= 0 {
+		settings.Rules.OfflineThresholdSec = 60
+	}
+	if settings.Rules.TrafficThresholdPct <= 0 {
+		settings.Rules.TrafficThresholdPct = 85
+	}
+	if settings.Rules.DailyReportTime == "" {
+		settings.Rules.DailyReportTime = "09:00"
+	}
+	if settings.Webhook.Format == "" {
+		settings.Webhook.Format = "generic"
+	}
+	return &settings, nil
+}
+
+// SaveNotificationSettings writes user notification settings to storage.
+func (s *Storage) SaveNotificationSettings(settings *model.NotificationSettings) error {
+	settings.UpdatedAt = time.Now().Unix()
+	bytes, err := json.Marshal(settings)
+	if err != nil {
+		return err
+	}
+	return s.SetSystemSetting("notification_settings", string(bytes))
+}
+
+// AddNotificationLog logs a dispatched notification.
+func (s *Storage) AddNotificationLog(item *model.NotificationLog) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	now := time.Now().Unix()
+	if item.Timestamp == 0 {
+		item.Timestamp = now
+	}
+
+	res, err := s.db.Exec(`INSERT INTO notification_logs (timestamp, channel, type, title, content, status, error_msg)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		item.Timestamp, item.Channel, item.Type, item.Title, item.Content, item.Status, item.ErrorMsg)
+	if err != nil {
+		return err
+	}
+	id, _ := res.LastInsertId()
+	item.ID = id
+	return nil
+}
+
+// GetNotificationLogs retrieves the most recent alert logs.
+func (s *Storage) GetNotificationLogs(limit int) ([]*model.NotificationLog, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+
+	rows, err := s.db.Query(`SELECT id, timestamp, channel, type, title, content, status, COALESCE(error_msg, '')
+		FROM notification_logs ORDER BY timestamp DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var logs []*model.NotificationLog
+	for rows.Next() {
+		var item model.NotificationLog
+		if err := rows.Scan(&item.ID, &item.Timestamp, &item.Channel, &item.Type, &item.Title, &item.Content, &item.Status, &item.ErrorMsg); err != nil {
+			continue
+		}
+		logs = append(logs, &item)
+	}
+	return logs, nil
+}
+
+// ClearNotificationLogs wipes all notification history.
+func (s *Storage) ClearNotificationLogs() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	_, err := s.db.Exec(`DELETE FROM notification_logs`)
+	return err
 }
 
 // Close closes the SQLite database connection.

@@ -21,6 +21,7 @@ interface TimeSeriesChartProps {
   legendPosition?: "top" | "bottom" | "both" | "none";
   yAxisLabel?: string;
   height?: number;
+  onToggleSeries?: (label: string) => void;
 }
 
 interface TooltipItem {
@@ -47,6 +48,7 @@ export const TimeSeriesChart: React.FC<TimeSeriesChartProps> = ({
   legendPosition = "bottom",
   yAxisLabel,
   height = 140,
+  onToggleSeries,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -259,15 +261,25 @@ export const TimeSeriesChart: React.FC<TimeSeriesChartProps> = ({
   const renderLegend = () => (
     <div className="flex flex-wrap items-center justify-center gap-3 font-mono text-xs py-1">
       {seriesList.map((s, idx) => (
-        <div key={idx} className="flex items-center gap-1.5 text-xs">
+        <button
+          key={idx}
+          type="button"
+          onClick={() => onToggleSeries && onToggleSeries(s.label)}
+          className={`flex items-center gap-1.5 text-xs transition-all ${
+            onToggleSeries
+              ? "cursor-pointer hover:opacity-70 active:scale-95 select-none"
+              : ""
+          }`}
+          title={onToggleSeries ? `点击隐藏 ${s.label} 对比` : undefined}
+        >
           <span
-            className="h-2 w-2 rounded-full inline-block"
+            className="h-2 w-2 rounded-full inline-block shrink-0"
             style={{ backgroundColor: s.color }}
           />
           <span className={isBlueprint ? "text-slate-600 font-medium" : "text-zinc-400"}>
             {s.label}
           </span>
-        </div>
+        </button>
       ))}
     </div>
   );
@@ -317,7 +329,7 @@ export const TimeSeriesChart: React.FC<TimeSeriesChartProps> = ({
       {/* Axis Label if provided */}
       {yAxisLabel && (
         <div
-          className={`text-[10px] font-mono mb-1 ${
+          className={`text-10 font-mono mb-1 ${
             isBlueprint ? "text-slate-500 font-medium" : "text-zinc-400"
           }`}
         >
@@ -360,7 +372,7 @@ export const TimeSeriesChart: React.FC<TimeSeriesChartProps> = ({
             }}
           >
             <div
-              className={`font-bold text-[10px] mb-1.5 pb-1 border-b flex items-center justify-between ${
+              className={`font-bold text-10 mb-1.5 pb-1 border-b flex items-center justify-between ${
                 isBlueprint ? "border-slate-100 text-slate-500" : "border-zinc-800 text-zinc-400"
               }`}
             >
@@ -369,7 +381,7 @@ export const TimeSeriesChart: React.FC<TimeSeriesChartProps> = ({
             </div>
             <div className="space-y-1">
               {tooltip.items.map((item, idx) => (
-                <div key={idx} className="flex items-center justify-between gap-3 text-[11px]">
+                <div key={idx} className="flex items-center justify-between gap-3 text-11">
                   <span className="flex items-center gap-1.5 overflow-hidden">
                     <span
                       className="w-2 h-2 rounded-full shrink-0"

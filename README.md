@@ -3,7 +3,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Agent%20RAM-5~10MB-emerald?style=flat-square&logo=go" alt="Agent RAM" />
   <img src="https://img.shields.io/badge/Agent%20CPU-~0%25-blue?style=flat-square&logo=linux" alt="Agent CPU" />
-  <img src="https://img.shields.io/badge/UI%20Engine-uPlot%20%2B%20React%2018-violet?style=flat-square&logo=react" alt="Frontend" />
+  <img src="https://img.shields.io/badge/UI%20Engine-uPlot%20%2B%20React%2019-violet?style=flat-square&logo=react" alt="Frontend" />
   <img src="https://img.shields.io/badge/Themes-Cyber%20Dark%20%7C%20Blueprint-indigo?style=flat-square" alt="Themes" />
   <img src="https://img.shields.io/badge/License-MIT-gray?style=flat-square" alt="License" />
 </p>
@@ -27,6 +27,7 @@
 - **单二进制全内置**：Web 前端基于 `//go:embed` 完整编译进单一二进制，无须额外安装 Nginx 或配置反向代理即可直接运行。
 
 ### 3. 极客视觉与交互系统 (Web Dashboard)
+- **现代前端技术栈**：基于 React 19、Tailwind CSS 4 与 HeroUI 构建，兼顾统一交互、响应式布局与组件可访问性。
 - **双主题支持**：**赛博暗黑（Cyber Dark）** 与 **蓝图工程（Geek Blueprint）**，全面优化强对比度与视觉层次，一键平滑切换。
 - **uPlot 毫秒级时序图**：体积仅 30KB，微秒级渲染上万点数据；全功能 **Hover 垂直标尺 + 毛玻璃浮动指示气泡**，实时展示精确时间与数值。
 - **网络质量监测系统 (Network Probes)**：支持 ICMP / TCP / HTTP 探测（Google、电信、YouTube、ChatGPT、Claude 等），多目标延迟与丢包率对比分析。
@@ -40,6 +41,7 @@
   - 自动拉取实时央行汇率，精确统计全集群每月总成本与当前各主机 **实时剩余价值（Remaining Value）**。
 - **流量配额智能换算**：支持总额（GB / TB / PB / 无限）与已用流量配置，智能换算用量进度条与超额预警。
 - **通信鉴权 Token 管理**：内置安全令牌体系，一键生成命令自动嵌入 Token，提供交互式换 Token 与动态吊销。
+- **管理后台会话鉴权**：公开看板保持只读访问；节点配置、Token、通知与其他写操作需管理员登录，并支持修改密码后注销全部既有会话。
 - **多色彩语义标签与收藏**：根据线路与特性（CN2, BGP, GIA, 1Gbps, 原生IP 等）自动渲染多彩色微光标签；支持单机星标置顶与收藏筛选。
 
 ---
@@ -74,7 +76,7 @@
                   │ WebSocket Live Stream (1Hz 实时广播)
                   ▼
   ┌────────────────────────────────────────────────────────┐
-  │         Web Dashboard (React 18 + Tailwind + uPlot)    │
+  │    Web Dashboard (React 19 + Tailwind 4 + HeroUI)     │
   │                                                        │
   │  • 赛博暗黑 / 蓝图工程双主题，高对比度与网格微光纹理       │
   │  • uPlot 极速时序图 (带垂直光标指示与毛玻璃 Hover Tooltip)│
@@ -110,6 +112,9 @@ make build-all
 ### 2. 启动服务端 (Probe Server)
 
 ```bash
+# 推荐在首次启动前显式设置管理员密码
+PROBE_ADMIN_USER=admin \
+PROBE_ADMIN_PASSWORD='请替换为强密码' \
 ./bin/probe-server -addr :8080 -db probe.db
 ```
 
@@ -164,18 +169,30 @@ sqlite3 probe.db "DELETE FROM admin_users;"
 PROBE_ALLOWED_ORIGINS="https://probe.example.com,http://localhost:5173"
 ```
 
+初始 Agent 通信 Token 同样按安装随机生成并写入启动日志，可登录管理后台复制或轮换，不再使用固定默认 Token。
+
+可用环境变量：
+
+| 变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `PROBE_ADMIN_USER` | `admin` | 首次创建管理员时使用的用户名 |
+| `PROBE_ADMIN_PASSWORD` | 随机生成 | 首次创建管理员时使用的密码；建议生产环境显式设置 |
+| `PROBE_ALLOWED_ORIGINS` | 服务自身来源 | 额外允许携带会话 Cookie 的跨域来源，多个来源用逗号分隔 |
+
+> 会话记录持久化在 SQLite 中，默认有效期 7 天（`-session-hours` 可调），重启服务端不会强制登出。生产环境建议通过 HTTPS 访问，以启用 Cookie 的 `Secure` 属性。
+
 ---
 
 ### 3. 一键部署被控端 (Agent)
 
-在 Web 界面点击右上角 **「管理后台」** 或 **「快速部署」**，将自动生成内嵌通信 Token 与自适应参数的命令。
+使用管理员账号登录后，在 Web 界面点击右上角 **「管理后台」** 或 **「快速部署」**，即可获取自动嵌入当前通信 Token 与自适应参数的命令。
 
 只需在目标 Linux 服务器上以 root 身份执行：
 
 ```bash
 curl -sSL http://<你的服务端IP或域名>:8080/install.sh | sudo bash -s -- \
   --server "ws://<你的服务端IP或域名>:8080" \
-  --token "sk_default_secret_probe_token" \
+  --token "<从管理后台复制的 Agent Token>" \
   --name "Silicon Valley Gateway" \
   --region "US"
 ```
@@ -199,7 +216,7 @@ bash install.sh --uninstall    # 一键彻底卸载探针与清理服务
 ```bash
 ./bin/probe-agent \
   --server "ws://127.0.0.1:8080" \
-  --token "sk_default_secret_probe_token" \
+  --token "<从管理后台复制的 Agent Token>" \
   --node-id "node-01" \
   --name "本地主机" \
   --region "CN" \
@@ -214,7 +231,9 @@ bash install.sh --uninstall    # 一键彻底卸载探针与清理服务
 
 ```bash
 python3 -m pip install websocket-client
-python3 scripts/simulate_nodes.py ws://127.0.0.1:8080/api/v1/agent/ws sk_default_secret_probe_token
+python3 scripts/simulate_nodes.py \
+  ws://127.0.0.1:8080/api/v1/agent/ws \
+  "<从管理后台复制的 Agent Token>"
 ```
 
 ---
@@ -230,7 +249,7 @@ probe/
 │   ├── agent/                 # 采集逻辑、网卡过滤、差分速率计算、WSS 客户端
 │   ├── model/                 # 协议模型与数据结构
 │   └── server/                # 纯内存 Hub、Downsampler 降采样、SQLite 持久化、REST API
-├── web/                       # React 18 + Vite + Tailwind CSS + uPlot 前端源码
+├── web/                       # React 19 + Vite + Tailwind CSS 4 + HeroUI + uPlot 前端源码
 │   ├── src/
 │   │   ├── components/        # 仪表盘卡片、图表组件、管理弹窗、详情页等
 │   │   ├── utils/             # 标签配色系统、汇率计算、国旗解析、单位格式化
@@ -246,7 +265,7 @@ probe/
 ## 🛡️ 安全与权限规范
 
 1. **默认全站鉴权**：默认情况下未登录用户看不到任何监控数据，看板、节点时序与实时数据流一律返回 `401`，仅登录页可访问。需要对外公开只读看板时，才显式添加 `-public`。
-2. **后台登录鉴权**：所有写操作与凭据接口均要求管理员会话，未登录访问一律返回 `401`。会话令牌存放于 `HttpOnly` + `SameSite=Lax` Cookie，数据库内仅保存其 SHA-256 摘要，密码使用 bcrypt（cost 12）哈希存储。
+2. **后台登录鉴权**：所有写操作、Agent Token 与通知渠道凭据（Telegram Bot Token、Webhook 地址等）均要求管理员会话，未登录访问一律返回 `401`。会话令牌存放于 `HttpOnly` + `SameSite=Lax` Cookie，数据库内仅保存其 SHA-256 摘要，密码使用 bcrypt（cost 12）哈希存储。
 3. **登录防爆破**：同一 IP 连续 5 次密码错误后锁定 15 分钟；用户名不存在时同样执行一次 bcrypt 比对，避免通过响应耗时探测账号是否存在。
 4. **首次启动强制改密**：未预设环境变量时随机生成 16 位初始密码并仅打印一次，登录后强制修改；改密会吊销该账号的全部历史会话。
 5. **Token 鉴权机制**：服务端与被控端之间采用安全 Token 握手机制，未授权的连接直接被拒绝，支持后台多 Token 动态分发与废止。Agent Token 属于凭据，仅登录后可见。

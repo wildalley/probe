@@ -185,3 +185,57 @@ type WSEvent struct {
 	Timestamp int64       `json:"timestamp"`
 	Data      interface{} `json:"data"`
 }
+
+// NotificationSettings defines channel credentials and alerting rules.
+type NotificationSettings struct {
+	Telegram  TelegramConfig    `json:"telegram"`
+	Webhook   WebhookConfig     `json:"webhook"`
+	Discord   DiscordConfig     `json:"discord"`
+	Rules     NotificationRules `json:"rules"`
+	UpdatedAt int64             `json:"updated_at"`
+}
+
+// TelegramConfig defines Telegram bot integration.
+type TelegramConfig struct {
+	Enabled  bool   `json:"enabled"`
+	BotToken string `json:"bot_token"`
+	ChatID   string `json:"chat_id"`
+}
+
+// WebhookConfig defines generic and popular webhook platforms.
+type WebhookConfig struct {
+	Enabled bool   `json:"enabled"`
+	URL     string `json:"url"`
+	Secret  string `json:"secret,omitempty"`
+	Format  string `json:"format"` // "generic", "feishu", "dingtalk", "wecom", "bark"
+}
+
+// DiscordConfig defines Discord channel webhook.
+type DiscordConfig struct {
+	Enabled    bool   `json:"enabled"`
+	WebhookURL string `json:"webhook_url"`
+}
+
+// NotificationRules defines thresholds and schedules.
+type NotificationRules struct {
+	OfflineAlert        bool   `json:"offline_alert"`
+	OfflineThresholdSec int    `json:"offline_threshold_sec"` // e.g. 30, 60, 120
+	RecoveryAlert       bool   `json:"recovery_alert"`
+	TrafficAlert        bool   `json:"traffic_alert"`
+	TrafficThresholdPct int    `json:"traffic_threshold_pct"` // e.g. 80, 90
+	DailyReport         bool   `json:"daily_report"`
+	DailyReportTime     string `json:"daily_report_time"` // "09:00"
+}
+
+// NotificationLog records sent notification history.
+type NotificationLog struct {
+	ID        int64  `json:"id"`
+	Timestamp int64  `json:"timestamp"`
+	Channel   string `json:"channel"` // "telegram", "webhook", "discord"
+	Type      string `json:"type"`    // "offline", "recovery", "traffic", "daily_report", "test"
+	Title     string `json:"title"`
+	Content   string `json:"content"`
+	Status    string `json:"status"` // "success", "failed"
+	ErrorMsg  string `json:"error_msg,omitempty"`
+}
+

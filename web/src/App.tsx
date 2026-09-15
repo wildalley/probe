@@ -3,14 +3,16 @@ import { NodeState, SystemSummary, WSEvent } from "./types";
 import { Header } from "./components/Header";
 import { ServerCard } from "./components/ServerCard";
 import { ServerTable } from "./components/ServerTable";
-import { ServerDetailModal } from "./components/ServerDetailModal";
 import { NodeDetailView } from "./components/NodeDetailView";
 import { AddNodeModal } from "./components/AddNodeModal";
 import { AdminModal } from "./components/AdminModal";
 import { LoginScreen } from "./components/LoginScreen";
 import { ChangePasswordModal } from "./components/ChangePasswordModal";
 import { useAuth } from "./hooks/useAuth";
+import { Button } from "@heroui/react";
 import { Server, Activity, ShieldCheck, Terminal, Cpu } from "lucide-react";
+import { BlurFade } from "./components/ui/BlurFade";
+import { Ripple } from "./components/ui/Ripple";
 
 export function App() {
   const [theme, setTheme] = useState<"blueprint" | "dark">(() => {
@@ -25,9 +27,11 @@ export function App() {
     if (theme === "dark") {
       document.documentElement.classList.add("dark");
       document.documentElement.classList.remove("blueprint");
+      document.documentElement.setAttribute("data-theme", "dark");
     } else {
       document.documentElement.classList.remove("dark");
       document.documentElement.classList.add("blueprint");
+      document.documentElement.setAttribute("data-theme", "light");
     }
   }, [theme]);
 
@@ -365,13 +369,20 @@ export function App() {
             {filteredNodes.length > 0 ? (
               viewMode === "grid" ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-5">
-                  {filteredNodes.map((node) => (
-                    <ServerCard
+                  {filteredNodes.map((node, i) => (
+                    <BlurFade
                       key={node.node_id}
-                      node={node}
-                      onSelect={setSelectedNode}
-                      theme={theme}
-                    />
+                      // Cap the stagger so a large fleet doesn't leave the last
+                      // cards waiting seconds to appear.
+                      delay={Math.min(i * 0.05, 0.5)}
+                      yOffset={10}
+                    >
+                      <ServerCard
+                        node={node}
+                        onSelect={setSelectedNode}
+                        theme={theme}
+                      />
+                    </BlurFade>
                   ))}
                 </div>
               ) : (
@@ -382,32 +393,37 @@ export function App() {
                 />
               )
             ) : (
-              <div className={`flex flex-col items-center justify-center rounded-2xl border border-dashed p-12 text-center ${
-                isBlueprint ? "border-slate-300 bg-white/70 text-slate-600 shadow-sm" : "border-zinc-800 bg-zinc-900/30 text-zinc-200"
+              <div className={`relative flex flex-col items-center justify-center overflow-hidden rounded-2xl border border-dashed p-12 text-center ${
+                isBlueprint ? "border-slate-200/90 bg-white/70 text-slate-600 shadow-sm" : "border-zinc-800 bg-zinc-900/30 text-zinc-200"
               }`}>
-                <div className={`flex h-14 w-14 items-center justify-center rounded-2xl border mb-4 ${
+                {/* Breathing rings hint that the hub is listening for agents */}
+                <Ripple className="opacity-70" />
+
+                <div className={`relative flex h-14 w-14 items-center justify-center rounded-2xl border mb-4 ${
                   isBlueprint ? "bg-slate-100 border-slate-200 text-slate-500" : "bg-zinc-800/60 border-zinc-700/40 text-zinc-400"
                 }`}>
                   <Server className="h-7 w-7" />
                 </div>
-                <h3 className={`text-base font-semibold ${isBlueprint ? "text-slate-900" : "text-zinc-200"}`}>
-                  No Nodes Found
+                <h3 className={`relative text-base font-semibold ${isBlueprint ? "text-slate-900" : "text-zinc-200"}`}>
+                  {nodesList.length === 0 ? "暂无接入的主机节点" : "未找到匹配的主机"}
                 </h3>
-                <p className={`mt-1 max-w-md text-xs font-mono ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}>
+                <p className={`relative mt-1 max-w-md text-xs font-sans ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}>
                   {nodesList.length === 0
                     ? canManage
-                      ? "No server probe agents are currently reporting to the Hub. Click 'Add Node' to deploy an agent."
-                      : "No server probe agents are currently reporting to the Hub."
-                    : "No nodes match your current search or region filter criteria."}
+                      ? "当前暂无 Agent 探针向服务端 Hub 上报数据。点击下方按钮一键部署第一台探针。"
+                      : "当前暂无 Agent 探针向服务端 Hub 上报数据。"
+                    : "没有符合当前搜索关键字或地区筛选条件的主机节点。"}
                 </p>
                 {nodesList.length === 0 && canManage && (
-                  <button
-                    onClick={() => setIsAddModalOpen(true)}
-                    className="mt-5 flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-mono font-medium text-white hover:bg-indigo-500 transition-colors shadow-lg shadow-indigo-600/25"
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onPress={() => setIsAddModalOpen(true)}
+                    className="relative mt-5 gap-2 rounded-xl font-sans text-xs font-medium shadow-lg shadow-indigo-600/25"
                   >
                     <Terminal className="h-4 w-4" />
-                    <span>Deploy First Agent</span>
-                  </button>
+                    <span>一键部署首台探针</span>
+                  </Button>
                 )}
               </div>
             )}
@@ -438,9 +454,12 @@ export function App() {
       <AddNodeModal
         isOpen={canManage && isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
+        theme={theme}
       />
 
-      {/* Admin Management Modal */}
+      {/* Admin Management Modal. Gated on `canManage` as well as the open flag so
+          a logout (or an expired session) closes it instead of leaving a console
+          on screen whose every request the server would now reject. */}
       <AdminModal
         isOpen={canManage && isAdminModalOpen}
         onClose={() => setIsAdminModalOpen(false)}
