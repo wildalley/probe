@@ -55,6 +55,24 @@ func main() {
 	}
 	defer storage.Close()
 
+	// Bootstrap the admin account. PROBE_ADMIN_PASSWORD sets it explicitly on
+	// first boot; otherwise a random one is generated and printed once, flagged
+	// as temporary so the UI can nag until it is changed. Existing installs keep
+	// whatever password is already stored.
+	adminUser := getEnv("PROBE_ADMIN_USER", "admin")
+	generatedPassword, err := storage.EnsureAdminUser(adminUser, os.Getenv("PROBE_ADMIN_PASSWORD"))
+	if err != nil {
+		log.Fatalf("Failed to initialize admin account: %v", err)
+	}
+	if generatedPassword != "" {
+		log.Printf("==================================================")
+		log.Printf("  ADMIN ACCOUNT CREATED")
+		log.Printf("  Username : %s", adminUser)
+		log.Printf("  Password : %s", generatedPassword)
+		log.Printf("  This is shown once. Change it after logging in.")
+		log.Printf("==================================================")
+	}
+
 	// Initialize downsampling engine
 	downsampler := server.NewDownsampler(storage, time.Duration(flushSec)*time.Second, retentionDays)
 

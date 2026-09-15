@@ -36,6 +36,7 @@ type Server struct {
 	downsampler *Downsampler
 	notifier    *Notifier
 	distFS      fs.FS
+	sessions    *SessionStore
 }
 
 // NewServer initializes Gin and binds endpoints.
@@ -63,18 +64,29 @@ func NewServer(hub *Hub, storage *Storage, downsampler *Downsampler, notifier *N
 		downsampler: downsampler,
 		notifier:    notifier,
 		distFS:      distFS,
+		sessions:    NewSessionStore(),
 	}
+	s.sessions.StartSessionSweeper()
 
 	s.setupRoutes()
 	return s
 }
 
 func (s *Server) setupRoutes() {
-	// CORS for dev mode
+	// CORS. Session auth rides on a cookie, and browsers refuse to send
+	// credentials to a wildcard origin — so the origin is echoed back only for
+	// origins on the allow-list, which defaults to localhost dev servers. Set
+	// PROBE_ALLOWED_ORIGINS (comma-separated) to serve the UI from another host.
+	allowedOrigins := parseAllowedOrigins(os.Getenv("PROBE_ALLOWED_ORIGINS"))
 	s.router.Use(func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		origin := c.GetHeader("Origin")
+		if origin != "" && allowedOrigins[origin] {
+			c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
+			c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+			c.Writer.Header().Set("Vary", "Origin")
+		}
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "Origin, Content-Type, Authorization, X-Node-ID, X-Node-Name, X-Node-Region")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Origin, Content-Type, Authorization, X-Probe-Session, X-Node-ID, X-Node-Name, X-Node-Region")
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(http.StatusNoContent)
 			return
@@ -95,21 +107,39 @@ func (s *Server) setupRoutes() {
 	s.router.HEAD("/download/probe-agent", s.handleDownloadAgent)
 	s.router.GET("/api/v1/download/probe-agent", s.handleDownloadAgent)
 
-	// REST API endpoints
-	api := s.router.Group("/api/v1")
+	// Authentication endpoints. Login and status are necessarily public; the rest
+	// of the admin surface sits behind requireAuth below.
+	auth := s.router.Group("/api/v1/auth")
 	{
-		api.GET("/nodes", s.handleGetNodes)
-		api.GET("/nodes/:id", s.handleGetNode)
-		api.GET("/nodes/:id/history", s.handleGetNodeHistory)
-		api.GET("/nodes/:id/ping-history", s.handleGetNodePingHistory)
+		auth.POST("/login", s.handleLogin)
+		auth.POST("/logout", s.handleLogout)
+		auth.GET("/status", s.handleAuthStatus)
+		auth.POST("/password", s.requireAuth(), s.handleChangePassword)
+	}
+
+	// Public read-only API. These back the guest dashboard: node list, per-node
+	// telemetry, and the ping target labels needed to render the charts. Nothing
+	// here exposes credentials or accepts writes.
+	pub := s.router.Group("/api/v1")
+	{
+		pub.GET("/nodes", s.handleGetNodes)
+		pub.GET("/nodes/:id", s.handleGetNode)
+		pub.GET("/nodes/:id/history", s.handleGetNodeHistory)
+		pub.GET("/nodes/:id/ping-history", s.handleGetNodePingHistory)
+		pub.GET("/system/summary", s.handleSystemSummary)
+		pub.GET("/ping-targets", s.handleGetPingTargets)
+	}
+
+	// Everything that mutates state, reads credentials, or triggers outbound
+	// requests requires an authenticated admin session.
+	api := s.router.Group("/api/v1", s.requireAuth())
+	{
 		api.DELETE("/nodes/:id", s.handleDeleteNode)
 		api.GET("/tokens", s.handleListTokens)
 		api.GET("/tokens/active", s.handleGetActiveToken)
 		api.POST("/tokens", s.handleCreateToken)
-		api.GET("/system/summary", s.handleSystemSummary)
 
 		// Ping targets management & instant test
-		api.GET("/ping-targets", s.handleGetPingTargets)
 		api.POST("/ping-targets", s.handleAddPingTarget)
 		api.PUT("/ping-targets/:id", s.handleUpdatePingTarget)
 		api.DELETE("/ping-targets/:id", s.handleDeletePingTarget)

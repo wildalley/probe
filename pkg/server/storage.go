@@ -1,7 +1,9 @@
 package server
 
 import (
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -10,6 +12,7 @@ import (
 
 	"probe/pkg/model"
 
+	"golang.org/x/crypto/bcrypt"
 	_ "modernc.org/sqlite"
 )
 
@@ -144,6 +147,14 @@ func (s *Storage) initSchema() error {
 	);
 
 	CREATE INDEX IF NOT EXISTS idx_notify_logs_time ON notification_logs(timestamp DESC);
+
+	CREATE TABLE IF NOT EXISTS admin_users (
+		username TEXT PRIMARY KEY,
+		password_hash TEXT NOT NULL,
+		is_temporary INTEGER DEFAULT 0,
+		created_at INTEGER NOT NULL,
+		updated_at INTEGER NOT NULL
+	);
 	`
 	_, err := s.db.Exec(schema)
 	if err != nil {
@@ -153,13 +164,19 @@ func (s *Storage) initSchema() error {
 	// Dynamic column migrations if table previously had fewer columns
 	s.migrateTableColumns()
 
-	// Insert default token if none exists
+	// Insert default token if none exists. This is generated per-install rather
+	// than hardcoded: a fixed literal shipped in the source is a known secret,
+	// so anyone reading the repo could impersonate an agent on any deployment.
 	var count int
 	_ = s.db.QueryRow("SELECT COUNT(*) FROM tokens").Scan(&count)
 	if count == 0 {
-		defaultToken := "sk_default_secret_probe_token"
+		buf := make([]byte, 16)
+		if _, err := rand.Read(buf); err != nil {
+			return fmt.Errorf("failed to generate initial agent token: %w", err)
+		}
+		defaultToken := "sk_agent_" + hex.EncodeToString(buf)
 		_ = s.AddToken(defaultToken, "Default System Token")
-		log.Printf("[Storage] Initialized default agent token: %s", defaultToken)
+		log.Printf("[Storage] Generated initial agent token: %s", defaultToken)
 	}
 
 	// Seed default ping targets if table is empty
@@ -274,6 +291,110 @@ func (s *Storage) ListTokens() ([]map[string]interface{}, error) {
 		}
 	}
 	return result, nil
+}
+
+/* -----------------------------------------------------------------------------
+ * Admin credentials
+ * -------------------------------------------------------------------------- */
+
+// EnsureAdminUser creates the admin account on first boot. When plainPassword is
+// empty a random one is generated and returned so the caller can print it once;
+// the returned string is empty when an account already existed.
+func (s *Storage) EnsureAdminUser(username, plainPassword string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var count int
+	_ = s.db.QueryRow("SELECT COUNT(*) FROM admin_users").Scan(&count)
+	if count > 0 {
+		return "", nil
+	}
+
+	// A generated password is flagged temporary so the UI can nag until it is
+	// replaced; an operator-supplied one is treated as deliberate.
+	generated := plainPassword == ""
+	if generated {
+		plainPassword = GenerateInitialPassword()
+	}
+
+	hash, err := HashPassword(plainPassword)
+	if err != nil {
+		return "", err
+	}
+
+	now := time.Now().Unix()
+	if _, err := s.db.Exec(
+		"INSERT INTO admin_users (username, password_hash, is_temporary, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+		username, hash, boolToInt(generated), now, now,
+	); err != nil {
+		return "", err
+	}
+
+	if generated {
+		return plainPassword, nil
+	}
+	return "", nil
+}
+
+// VerifyAdminPassword reports whether the username/password pair is valid.
+func (s *Storage) VerifyAdminPassword(username, password string) bool {
+	if username == "" || password == "" {
+		return false
+	}
+
+	s.mu.RLock()
+	var hash string
+	err := s.db.QueryRow("SELECT password_hash FROM admin_users WHERE username = ?", username).Scan(&hash)
+	s.mu.RUnlock()
+
+	if err != nil {
+		// Still run a comparison against a dummy hash so a missing user costs
+		// roughly the same time as a wrong password.
+		_ = bcrypt.CompareHashAndPassword([]byte("$2a$10$invalidinvalidinvalidinvalidinvalidinvalidinvalidinvalidinva"), []byte(password))
+		return false
+	}
+	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil
+}
+
+// SetAdminPassword replaces the stored hash for username.
+func (s *Storage) SetAdminPassword(username, newPassword string, temporary bool) error {
+	hash, err := HashPassword(newPassword)
+	if err != nil {
+		return err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	res, err := s.db.Exec(
+		"UPDATE admin_users SET password_hash = ?, is_temporary = ?, updated_at = ? WHERE username = ?",
+		hash, boolToInt(temporary), time.Now().Unix(), username,
+	)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("admin user %q not found", username)
+	}
+	return nil
+}
+
+// AdminPasswordIsTemporary reports whether the account still uses the
+// auto-generated first-boot password.
+func (s *Storage) AdminPasswordIsTemporary(username string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var temp int
+	err := s.db.QueryRow("SELECT is_temporary FROM admin_users WHERE username = ?", username).Scan(&temp)
+	return err == nil && temp == 1
+}
+
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 // UpsertNode creates or updates node metadata.
