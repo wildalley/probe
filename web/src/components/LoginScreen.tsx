@@ -56,7 +56,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
           >
             CYBER<span className="text-indigo-500">PROBE</span>
           </h1>
-          <p className={`mt-1 text-xs font-mono ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}>
+          <p className={`mt-1 text-xs font-sans ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}>
             控制台登录 · Console Access
           </p>
         </div>
@@ -75,7 +75,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
             <div>
               <label
                 htmlFor="probe-username"
-                className={`block text-[11px] font-mono mb-1.5 ${
+                className={`block text-11 font-mono mb-1.5 ${
                   isBlueprint ? "text-slate-500" : "text-zinc-400"
                 }`}
               >
@@ -108,7 +108,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
             <div>
               <label
                 htmlFor="probe-password"
-                className={`block text-[11px] font-mono mb-1.5 ${
+                className={`block text-11 font-mono mb-1.5 ${
                   isBlueprint ? "text-slate-500" : "text-zinc-400"
                 }`}
               >
@@ -152,7 +152,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
             {error && (
               <div
                 role="alert"
-                className="flex items-start gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs font-mono text-rose-500"
+                className="flex items-start gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs font-sans text-rose-500"
               >
                 <AlertCircle className="h-4 w-4 shrink-0 mt-px" />
                 <span>{error}</span>
@@ -163,7 +163,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
             <button
               type="submit"
               disabled={submitting || !username.trim() || !password}
-              className="w-full flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-mono font-medium text-white transition-colors shadow-lg shadow-indigo-600/20 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-sans font-medium text-white transition-colors shadow-lg shadow-indigo-600/20 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <LogIn className="h-4 w-4" />
               <span>{submitting ? "验证中..." : "登录控制台"}</span>
@@ -173,7 +173,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
               <button
                 type="button"
                 onClick={onContinueAsGuest}
-                className={`w-full text-center text-[11px] font-mono transition-colors ${
+                className={`w-full text-center text-11 font-sans transition-colors ${
                   isBlueprint
                     ? "text-slate-500 hover:text-slate-800"
                     : "text-zinc-500 hover:text-zinc-300"
@@ -186,7 +186,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
         </form>
 
         <div
-          className={`mt-5 flex items-start gap-2 text-[11px] font-mono ${
+          className={`mt-5 flex items-start gap-2 text-11 font-sans ${
             isBlueprint ? "text-slate-500" : "text-zinc-500"
           }`}
         >

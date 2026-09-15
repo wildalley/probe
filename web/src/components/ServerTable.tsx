@@ -177,8 +177,8 @@ export const ServerTable: React.FC<ServerTableProps> = ({ nodes, onSelect, theme
                           : "border-zinc-700/40 bg-zinc-800 text-zinc-400"
                       )}
                     >
-                      <span>{getRegionFlag(node.region)}</span>
-                      <span>{node.region || "DEF"}</span>
+                      <span className="text-sm leading-none">{getRegionFlag(node.region)}</span>
+                      <span className="leading-none">{node.region || "DEF"}</span>
                     </span>
                   </div>
                 </td>

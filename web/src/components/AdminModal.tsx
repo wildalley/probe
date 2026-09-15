@@ -932,8 +932,8 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                         <Globe className="h-4 w-4 text-sky-500 shrink-0" />
                         <span className={isBlueprint ? "text-slate-700" : "text-zinc-300"}>归属地区:</span>
                         <Chip variant="soft" color="accent" size="sm" className="gap-1 font-bold">
-                          <span className="text-sm">{getRegionFlag(editingNode.region || "")}</span>
-                          <span>{editingNode.region || "自动识别中"}</span>
+                          <span className="text-sm leading-none">{getRegionFlag(editingNode.region || "")}</span>
+                          <span className="leading-none">{editingNode.region || "自动识别中"}</span>
                         </Chip>
                       </div>
 
@@ -1246,8 +1246,8 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                             </td>
                             <td className="py-3.5 px-4 whitespace-nowrap">
                               <span className="flex items-center gap-1.5 font-medium">
-                                <span className="text-base">{getRegionFlag(n.region)}</span>
-                                <span className={isBlueprint ? "text-slate-800" : "text-zinc-200"}>{n.region}</span>
+                                <span className="text-base leading-none">{getRegionFlag(n.region)}</span>
+                                <span className={cn("leading-none", isBlueprint ? "text-slate-800" : "text-zinc-200")}>{n.region}</span>
                               </span>
                             </td>
                             <td className="py-3.5 px-4 whitespace-nowrap">

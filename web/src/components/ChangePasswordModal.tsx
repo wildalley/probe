@@ -77,7 +77,7 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
       : "bg-zinc-900/80 border-zinc-800 text-zinc-100 placeholder-zinc-500 focus:border-indigo-500"
   }`;
 
-  const labelClass = `mb-1.5 block text-[11px] font-mono uppercase tracking-wider ${
+  const labelClass = `mb-1.5 block text-11 font-sans uppercase tracking-wider ${
     isBlueprint ? "text-slate-500" : "text-zinc-400"
   }`;
 
@@ -116,10 +116,10 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
               )}
             </div>
             <div>
-              <h2 className={`text-sm font-bold font-mono ${isBlueprint ? "text-slate-900" : "text-zinc-100"}`}>
+              <h2 className={`text-sm font-bold font-sans ${isBlueprint ? "text-slate-900" : "text-zinc-100"}`}>
                 {forced ? "请修改初始密码" : "修改登录密码"}
               </h2>
-              <p className={`text-[11px] font-mono ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}>
+              <p className={`text-11 font-sans ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}>
                 {forced ? "当前使用系统生成的临时密码" : "修改后其他设备需重新登录"}
               </p>
             </div>
@@ -141,7 +141,7 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
           {forced && (
             <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5">
               <ShieldAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
-              <p className={`text-[11px] font-mono leading-relaxed ${isBlueprint ? "text-amber-700" : "text-amber-300"}`}>
+              <p className={`text-11 font-sans leading-relaxed ${isBlueprint ? "text-amber-700" : "text-amber-300"}`}>
                 初始密码由服务端随机生成并打印在启动日志中。为保证集群安全，请立即设置你自己的密码。
               </p>
             </div>
@@ -189,7 +189,7 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
           <button
             type="button"
             onClick={() => setShowPasswords((v) => !v)}
-            className={`flex items-center gap-1.5 text-[11px] font-mono transition-colors ${
+            className={`flex items-center gap-1.5 text-11 font-sans transition-colors ${
               isBlueprint ? "text-slate-500 hover:text-slate-800" : "text-zinc-500 hover:text-zinc-300"
             }`}
           >
@@ -200,14 +200,14 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
           {error && (
             <div className="flex items-start gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2">
               <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-rose-500" />
-              <span className={`text-[11px] font-mono ${isBlueprint ? "text-rose-700" : "text-rose-300"}`}>{error}</span>
+              <span className={`text-11 font-sans ${isBlueprint ? "text-rose-700" : "text-rose-300"}`}>{error}</span>
             </div>
           )}
 
           {success && (
             <div className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2">
               <Check className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
-              <span className={`text-[11px] font-mono ${isBlueprint ? "text-emerald-700" : "text-emerald-300"}`}>
+              <span className={`text-11 font-sans ${isBlueprint ? "text-emerald-700" : "text-emerald-300"}`}>
                 密码已更新
               </span>
             </div>
@@ -217,7 +217,7 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
             <button
               type="submit"
               disabled={submitting || success || !currentPassword || !newPassword || !confirmPassword}
-              className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-xs font-mono font-semibold text-white shadow-lg shadow-indigo-600/25 transition-colors hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-xs font-sans font-semibold text-white shadow-lg shadow-indigo-600/25 transition-colors hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <KeyRound className="h-3.5 w-3.5" />
               <span>{submitting ? "提交中..." : "确认修改"}</span>
@@ -227,7 +227,7 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
               <button
                 type="button"
                 onClick={onClose}
-                className={`rounded-lg border px-4 py-2.5 text-xs font-mono transition-colors ${
+                className={`rounded-lg border px-4 py-2.5 text-xs font-sans transition-colors ${
                   isBlueprint
                     ? "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
                     : "border-zinc-800 bg-zinc-900 text-zinc-300 hover:bg-zinc-800"
