@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -26,12 +27,16 @@ func main() {
 		dbPath        string
 		flushSec      int
 		retentionDays int
+		publicView    bool
+		sessionHours  int
 	)
 
 	flag.StringVar(&listenAddr, "addr", getEnv("PROBE_SERVER_ADDR", ":8080"), "Server HTTP and WebSocket listen address")
 	flag.StringVar(&dbPath, "db", getEnv("PROBE_DB_PATH", "probe.db"), "Path to SQLite database file")
 	flag.IntVar(&flushSec, "flush-interval", 15, "Seconds between downsample batch writes to SQLite")
 	flag.IntVar(&retentionDays, "retention-days", 7, "Days of historical downsampled telemetry to retain")
+	flag.BoolVar(&publicView, "public", getEnvBool("PROBE_PUBLIC_VIEW", false), "Allow anonymous read-only viewing of telemetry (default: login required for every view)")
+	flag.IntVar(&sessionHours, "session-hours", 168, "Dashboard session lifetime in hours")
 	flag.Parse()
 
 	// Ensure DB directory exists
@@ -46,6 +51,11 @@ func main() {
 	log.Printf("  SQLite Database  : %s", dbPath)
 	log.Printf("  Downsample Flush : %ds", flushSec)
 	log.Printf("  Retention Window : %d days", retentionDays)
+	if publicView {
+		log.Printf("  Access Mode      : PUBLIC read-only (admin actions require login)")
+	} else {
+		log.Printf("  Access Mode      : PRIVATE (login required for every view)")
+	}
 	log.Printf("==================================================")
 
 	// Initialize SQLite storage
@@ -61,12 +71,25 @@ func main() {
 	// Initialize pure in-memory Hub
 	hub := server.NewHub(storage, downsampler)
 
+	// Initialize authentication (provisions the admin account on first boot)
+	if sessionHours <= 0 {
+		sessionHours = 168
+	}
+	auth, err := server.NewAuthManager(storage, time.Duration(sessionHours)*time.Hour)
+	if err != nil {
+		log.Fatalf("Failed to initialize authentication: %v", err)
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	// Start background routines
 	go hub.Start(ctx)
 	go downsampler.Start(ctx)
+
+	authStop := make(chan struct{})
+	defer close(authStop)
+	go auth.StartCleanup(authStop)
 
 	// Setup embedded filesystem
 	var distFS fs.FS
@@ -75,7 +98,7 @@ func main() {
 		distFS = sub
 	}
 
-	srv := server.NewServer(hub, storage, downsampler, distFS)
+	srv := server.NewServer(hub, storage, downsampler, distFS, auth, !publicView)
 
 	httpServer := &http.Server{
 		Addr:    listenAddr,
@@ -105,6 +128,20 @@ func main() {
 	}
 
 	fmt.Println("[Server] Stopped.")
+}
+
+// getEnvBool parses a boolean environment variable, falling back when unset or
+// unparseable.
+func getEnvBool(key string, defaultVal bool) bool {
+	val := os.Getenv(key)
+	if val == "" {
+		return defaultVal
+	}
+	parsed, err := strconv.ParseBool(val)
+	if err != nil {
+		return defaultVal
+	}
+	return parsed
 }
 
 func getEnv(key, defaultVal string) string {

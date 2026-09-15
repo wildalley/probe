@@ -7,6 +7,9 @@ import { ServerDetailModal } from "./components/ServerDetailModal";
 import { NodeDetailView } from "./components/NodeDetailView";
 import { AddNodeModal } from "./components/AddNodeModal";
 import { AdminModal } from "./components/AdminModal";
+import { LoginScreen } from "./components/LoginScreen";
+import { ChangePasswordModal } from "./components/ChangePasswordModal";
+import { useAuth } from "./hooks/useAuth";
 import { Server, Activity, ShieldCheck, Terminal, Cpu } from "lucide-react";
 
 export function App() {
@@ -32,6 +35,8 @@ export function App() {
     setTheme((prev) => (prev === "dark" ? "blueprint" : "dark"));
   };
 
+  const auth = useAuth();
+
   const [nodes, setNodes] = useState<Map<string, NodeState>>(new Map());
   const [wsConnected, setWsConnected] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -40,6 +45,31 @@ export function App() {
   const [selectedNode, setSelectedNode] = useState<NodeState | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+
+  // Guests may opt into the public read-only view instead of logging in.
+  const [guestMode, setGuestMode] = useState(false);
+
+  // Gate everything behind the login screen until we know the session state.
+  const showLogin = auth.ready && !auth.authenticated && !(auth.publicView && guestMode);
+
+  // Admin surfaces stay hidden for anonymous viewers.
+  const canManage = auth.authenticated;
+
+  // Force the rotation dialog while the bootstrap password is still in use.
+  useEffect(() => {
+    if (auth.authenticated && auth.mustChangePassword) {
+      setIsPasswordModalOpen(true);
+    }
+  }, [auth.authenticated, auth.mustChangePassword]);
+
+  // Close admin surfaces if the session ends underneath us.
+  useEffect(() => {
+    if (!auth.authenticated) {
+      setIsAddModalOpen(false);
+      setIsAdminModalOpen(false);
+    }
+  }, [auth.authenticated]);
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<number | null>(null);
@@ -59,8 +89,11 @@ export function App() {
       .catch(() => {});
   };
 
-  // Connect WebSocket to Hub
+  // Connect WebSocket to Hub. Held back until the session state is known so a
+  // private-mode server does not reject the stream and trigger a reconnect loop.
   useEffect(() => {
+    if (!auth.ready || showLogin) return;
+
     let isSubscribed = true;
 
     function connect() {
@@ -169,7 +202,7 @@ export function App() {
         clearTimeout(reconnectTimeoutRef.current);
       }
     };
-  }, []);
+  }, [auth.ready, showLogin]);
 
   const nodesList = useMemo(() => Array.from(nodes.values()), [nodes]);
 
@@ -256,6 +289,37 @@ export function App() {
     }
   };
 
+  // Initial session probe: avoid flashing the dashboard or the login form.
+  if (!auth.ready) {
+    return (
+      <div className={`min-h-screen flex items-center justify-center ${
+        isBlueprint ? "blueprint-grid bg-slate-100/50" : "cyber-grid bg-zinc-950"
+      }`}>
+        <div className={`flex items-center gap-3 font-mono text-xs ${
+          isBlueprint ? "text-slate-500" : "text-zinc-400"
+        }`}>
+          <Activity className="h-4 w-4 animate-pulse text-indigo-500" />
+          <span>正在校验会话...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (showLogin) {
+    return (
+      <div className={`min-h-screen ${
+        isBlueprint ? "blueprint-grid bg-slate-100/50" : "cyber-grid bg-zinc-950"
+      }`}>
+        <LoginScreen
+          onLogin={auth.login}
+          theme={theme}
+          allowPublicView={auth.publicView}
+          onContinueAsGuest={() => setGuestMode(true)}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className={`min-h-screen flex flex-col transition-colors duration-200 ${
       isBlueprint
@@ -289,6 +353,11 @@ export function App() {
             onOpenAdminModal={() => setIsAdminModalOpen(true)}
             theme={theme}
             onToggleTheme={toggleTheme}
+            canManage={canManage}
+            username={auth.username}
+            onLogout={auth.logout}
+            onOpenPasswordModal={() => setIsPasswordModalOpen(true)}
+            onRequestLogin={() => setGuestMode(false)}
           />
 
           {/* Main Content Area */}
@@ -326,10 +395,12 @@ export function App() {
                 </h3>
                 <p className={`mt-1 max-w-md text-xs font-mono ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}>
                   {nodesList.length === 0
-                    ? "No server probe agents are currently reporting to the Hub. Click 'Add Node' to deploy an agent."
+                    ? canManage
+                      ? "No server probe agents are currently reporting to the Hub. Click 'Add Node' to deploy an agent."
+                      : "No server probe agents are currently reporting to the Hub."
                     : "No nodes match your current search or region filter criteria."}
                 </p>
-                {nodesList.length === 0 && (
+                {nodesList.length === 0 && canManage && (
                   <button
                     onClick={() => setIsAddModalOpen(true)}
                     className="mt-5 flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-mono font-medium text-white hover:bg-indigo-500 transition-colors shadow-lg shadow-indigo-600/25"
@@ -362,19 +433,29 @@ export function App() {
         </div>
       </footer>
 
-      {/* Add / Deploy Node Modal */}
+      {/* Add / Deploy Node Modal. The install command embeds an agent token, so
+          it stays behind a session even though the dialog itself is inert. */}
       <AddNodeModal
-        isOpen={isAddModalOpen}
+        isOpen={canManage && isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
       />
 
       {/* Admin Management Modal */}
       <AdminModal
-        isOpen={isAdminModalOpen}
+        isOpen={canManage && isAdminModalOpen}
         onClose={() => setIsAdminModalOpen(false)}
         nodes={Array.from(nodes.values())}
         theme={theme}
         onRefreshNodes={fetchNodes}
+      />
+
+      {/* Password rotation. Not dismissable while the bootstrap password stands. */}
+      <ChangePasswordModal
+        isOpen={canManage && isPasswordModalOpen}
+        forced={auth.mustChangePassword}
+        onClose={() => setIsPasswordModalOpen(false)}
+        onSubmit={auth.changePassword}
+        theme={theme}
       />
     </div>
   );
