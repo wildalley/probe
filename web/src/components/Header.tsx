@@ -14,6 +14,10 @@ import {
   Sun,
   Moon,
   Sliders,
+  LogOut,
+  LogIn,
+  KeyRound,
+  UserCircle,
 } from "lucide-react";
 import { SystemSummary } from "../types";
 import { formatRate } from "../utils/format";
@@ -33,6 +37,13 @@ interface HeaderProps {
   onOpenAdminModal?: () => void;
   theme?: "blueprint" | "dark";
   onToggleTheme?: () => void;
+  /** True when the viewer holds an admin session. Hides write actions when false. */
+  canManage?: boolean;
+  username?: string | null;
+  onLogout?: () => void;
+  onOpenPasswordModal?: () => void;
+  /** Sends an anonymous viewer back to the login screen. */
+  onRequestLogin?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -49,6 +60,11 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenAdminModal,
   theme = "dark",
   onToggleTheme,
+  canManage = false,
+  username,
+  onLogout,
+  onOpenPasswordModal,
+  onRequestLogin,
 }) => {
   const isBlueprint = theme === "blueprint";
 
@@ -57,11 +73,12 @@ export const Header: React.FC<HeaderProps> = ({
       isBlueprint ? "border-slate-200 bg-white/90 text-slate-800 shadow-sm" : "border-zinc-800/80 bg-zinc-950/80 text-zinc-100"
     }`}>
       <div className="mx-auto max-w-[1600px] px-4 py-4 sm:px-6 lg:px-8">
-        {/* Top brand line & actions */}
-        <div className="flex flex-wrap items-center justify-between gap-4">
+        {/* Top brand line & actions. The brand may shrink and truncate; the action
+            cluster keeps its own width and wraps as a unit so the two never overlap. */}
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
           {/* Brand */}
-          <div className="flex items-center gap-3">
-            <div className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500/20 to-cyan-500/20 border border-indigo-500/40 shadow-inner">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500/20 to-cyan-500/20 border border-indigo-500/40 shadow-inner">
               <Server className="h-5 w-5 text-indigo-500" />
               <span className="absolute -top-1 -right-1 flex h-3 w-3">
                 <span
@@ -76,66 +93,39 @@ export const Header: React.FC<HeaderProps> = ({
                 />
               </span>
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <h1 className={`text-lg font-bold tracking-wider font-mono uppercase ${
+                <h1 className={`text-lg font-bold tracking-wider font-mono uppercase whitespace-nowrap ${
                   isBlueprint ? "text-slate-900" : "text-zinc-100"
                 }`}>
                   CYBER<span className="text-indigo-500">PROBE</span>
                 </h1>
-                <span className="rounded bg-indigo-500/10 px-2 py-0.5 text-[10px] font-mono text-indigo-500 border border-indigo-500/30">
+                <span className="shrink-0 rounded bg-indigo-500/10 px-2 py-0.5 text-[10px] font-mono text-indigo-500 border border-indigo-500/30">
                   v1.0
                 </span>
               </div>
-              <p className={`text-xs font-mono ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}>
+              {/* Tagline is decorative: hide it on narrow screens rather than let it
+                  squeeze the action cluster. */}
+              <p className={`hidden truncate text-xs font-mono sm:block ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}>
                 高性能极简探针 · 内存事件 Hub
               </p>
             </div>
           </div>
 
           {/* Connection Status Pill & Actions */}
-          <div className="flex items-center gap-3">
+          <div className="flex shrink-0 items-center gap-2 lg:gap-3">
+            {/* Live-stream indicator. The label collapses to a bare icon on narrow
+                viewports so it never crowds the brand block. */}
             <div
-              className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-mono border ${
+              className={`flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-1 text-xs font-mono lg:px-3 ${
                 wsConnected
                   ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-500"
                   : "bg-rose-500/10 border-rose-500/30 text-rose-500"
               }`}
+              title={wsConnected ? "LIVE STREAMING" : "RECONNECTING..."}
             >
               {wsConnected ? <Wifi className="h-3.5 w-3.5" /> : <WifiOff className="h-3.5 w-3.5" />}
-              <span>{wsConnected ? "LIVE STREAMING" : "RECONNECTING..."}</span>
-            </div>
-
-            {/* View Mode Toggle */}
-            <div className={`flex items-center rounded-lg border p-0.5 ${
-              isBlueprint ? "border-slate-200 bg-slate-100" : "border-zinc-800 bg-zinc-900/60"
-            }`}>
-              <button
-                onClick={() => onViewModeChange("grid")}
-                className={`rounded p-1.5 transition-colors ${
-                  viewMode === "grid"
-                    ? "bg-indigo-600 text-white shadow-sm"
-                    : isBlueprint
-                    ? "text-slate-500 hover:text-slate-900"
-                    : "text-zinc-400 hover:text-zinc-200"
-                }`}
-                title="网格卡片视图"
-              >
-                <LayoutGrid className="h-4 w-4" />
-              </button>
-              <button
-                onClick={() => onViewModeChange("table")}
-                className={`rounded p-1.5 transition-colors ${
-                  viewMode === "table"
-                    ? "bg-indigo-600 text-white shadow-sm"
-                    : isBlueprint
-                    ? "text-slate-500 hover:text-slate-900"
-                    : "text-zinc-400 hover:text-zinc-200"
-                }`}
-                title="表格机架视图"
-              >
-                <List className="h-4 w-4" />
-              </button>
+              <span className="hidden lg:inline">{wsConnected ? "LIVE STREAMING" : "RECONNECTING..."}</span>
             </div>
 
             {/* Theme Toggle Button (Moon / Sun) */}
@@ -153,8 +143,8 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
             )}
 
-            {/* Admin Console Button */}
-            {onOpenAdminModal && (
+            {/* Admin Console Button (session required) */}
+            {canManage && onOpenAdminModal && (
               <button
                 onClick={onOpenAdminModal}
                 className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-mono font-medium transition-colors ${
@@ -169,14 +159,65 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
             )}
 
-            {/* Add Node Button */}
-            <button
-              onClick={onOpenAddModal}
-              className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-1.5 text-xs font-mono font-medium text-white hover:bg-indigo-500 transition-colors shadow-lg shadow-indigo-600/20"
-            >
-              <Plus className="h-4 w-4" />
-              <span>Add Node</span>
-            </button>
+            {/* Add Node Button (session required) */}
+            {canManage && (
+              <button
+                onClick={onOpenAddModal}
+                className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-1.5 text-xs font-mono font-medium text-white hover:bg-indigo-500 transition-colors shadow-lg shadow-indigo-600/20"
+              >
+                <Plus className="h-4 w-4" />
+                <span>Add Node</span>
+              </button>
+            )}
+
+            {/* Session controls */}
+            {canManage ? (
+              <div className={`flex items-center gap-1 rounded-lg border pl-2.5 pr-0.5 py-0.5 ${
+                isBlueprint ? "border-slate-200 bg-white shadow-sm" : "border-zinc-800 bg-zinc-900/60"
+              }`}>
+                <UserCircle className="h-3.5 w-3.5 text-emerald-500" />
+                <span className={`text-xs font-mono ${isBlueprint ? "text-slate-600" : "text-zinc-300"}`}>
+                  {username || "admin"}
+                </span>
+                {onOpenPasswordModal && (
+                  <button
+                    onClick={onOpenPasswordModal}
+                    className={`ml-1 rounded p-1.5 transition-colors ${
+                      isBlueprint
+                        ? "text-slate-400 hover:text-indigo-600 hover:bg-slate-100"
+                        : "text-zinc-500 hover:text-indigo-400 hover:bg-zinc-800"
+                    }`}
+                    title="修改密码"
+                  >
+                    <KeyRound className="h-3.5 w-3.5" />
+                  </button>
+                )}
+                {onLogout && (
+                  <button
+                    onClick={onLogout}
+                    className={`rounded p-1.5 transition-colors ${
+                      isBlueprint
+                        ? "text-slate-400 hover:text-rose-600 hover:bg-rose-50"
+                        : "text-zinc-500 hover:text-rose-400 hover:bg-rose-500/10"
+                    }`}
+                    title="退出登录"
+                  >
+                    <LogOut className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+            ) : (
+              onRequestLogin && (
+                <button
+                  onClick={onRequestLogin}
+                  className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-1.5 text-xs font-mono font-medium text-white hover:bg-indigo-500 transition-colors shadow-lg shadow-indigo-600/20"
+                  title="登录以管理节点与配置"
+                >
+                  <LogIn className="h-4 w-4" />
+                  <span>登录</span>
+                </button>
+              )
+            )}
           </div>
         </div>
 
@@ -237,8 +278,9 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
 
-        {/* Search & Region Filter Bar */}
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+        {/* Search, region filter & view mode. The view toggle sits here, directly
+            above the list it controls, rather than up in the global action row. */}
+        <div className="mt-4 flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-[200px] max-w-sm">
             <Search className={`absolute left-3 top-2.5 h-4 w-4 ${isBlueprint ? "text-slate-400" : "text-zinc-500"}`} />
             <input
@@ -254,7 +296,43 @@ export const Header: React.FC<HeaderProps> = ({
             />
           </div>
 
-          <div className="flex flex-wrap items-center gap-1.5 font-mono text-xs">
+          {/* View Mode Toggle */}
+          <div className={`flex shrink-0 items-center rounded-lg border p-0.5 ${
+            isBlueprint ? "border-slate-200 bg-slate-100" : "border-zinc-800 bg-zinc-900/60"
+          }`}>
+            <button
+              onClick={() => onViewModeChange("grid")}
+              className={`rounded p-1.5 transition-colors ${
+                viewMode === "grid"
+                  ? "bg-indigo-600 text-white shadow-sm"
+                  : isBlueprint
+                  ? "text-slate-500 hover:text-slate-900"
+                  : "text-zinc-400 hover:text-zinc-200"
+              }`}
+              title="网格卡片视图"
+              aria-label="网格卡片视图"
+              aria-pressed={viewMode === "grid"}
+            >
+              <LayoutGrid className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => onViewModeChange("table")}
+              className={`rounded p-1.5 transition-colors ${
+                viewMode === "table"
+                  ? "bg-indigo-600 text-white shadow-sm"
+                  : isBlueprint
+                  ? "text-slate-500 hover:text-slate-900"
+                  : "text-zinc-400 hover:text-zinc-200"
+              }`}
+              title="表格机架视图"
+              aria-label="表格机架视图"
+              aria-pressed={viewMode === "table"}
+            >
+              <List className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div className="flex flex-1 flex-wrap items-center justify-end gap-1.5 font-mono text-xs">
             <button
               onClick={() => onRegionChange("ALL")}
               className={`rounded-lg px-2.5 py-1 text-xs transition-colors ${

@@ -20,12 +20,30 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-var upgrader = websocket.Upgrader{
+// agentUpgrader serves probe agents. They authenticate with a probe token and
+// are not browsers, so no Origin header is expected.
+var agentUpgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
-		return true // Allow cross-origin Web connections
+		return true
 	},
 	ReadBufferSize:  4096,
 	WriteBufferSize: 4096,
+}
+
+// clientUpgrader serves browser dashboards. Those carry a session cookie, so the
+// Origin must be checked to stop a hostile page from opening the stream.
+func (s *Server) clientUpgrader(c *gin.Context) websocket.Upgrader {
+	return websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool {
+			origin := r.Header.Get("Origin")
+			if origin == "" {
+				return true // non-browser client, e.g. a CLI consumer
+			}
+			return s.isTrustedOrigin(c, origin)
+		},
+		ReadBufferSize:  4096,
+		WriteBufferSize: 4096,
+	}
 }
 
 // Server encapsulates the HTTP/WebSocket router and business dependencies.
@@ -35,10 +53,18 @@ type Server struct {
 	storage     *Storage
 	downsampler *Downsampler
 	distFS      fs.FS
+	auth        *AuthManager
+
+	// privateMode requires a login even for read-only telemetry views.
+	privateMode bool
+
+	// allowedOrigins lists extra browser origins permitted to send credentialed
+	// requests, for setups where the dashboard is served from another host.
+	allowedOrigins []string
 }
 
 // NewServer initializes Gin and binds endpoints.
-func NewServer(hub *Hub, storage *Storage, downsampler *Downsampler, distFS fs.FS) *Server {
+func NewServer(hub *Hub, storage *Storage, downsampler *Downsampler, distFS fs.FS, auth *AuthManager, privateMode bool) *Server {
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
 	router.Use(gin.Recovery())
@@ -61,6 +87,16 @@ func NewServer(hub *Hub, storage *Storage, downsampler *Downsampler, distFS fs.F
 		storage:     storage,
 		downsampler: downsampler,
 		distFS:      distFS,
+		auth:        auth,
+		privateMode: privateMode,
+	}
+
+	// PROBE_ALLOWED_ORIGINS is a comma-separated list, e.g.
+	// "https://probe.example.com,http://localhost:5173" for Vite dev mode.
+	for _, o := range strings.Split(os.Getenv("PROBE_ALLOWED_ORIGINS"), ",") {
+		if o = strings.TrimSpace(o); o != "" {
+			s.allowedOrigins = append(s.allowedOrigins, strings.ToLower(strings.TrimSuffix(o, "/")))
+		}
 	}
 
 	s.setupRoutes()
@@ -68,11 +104,17 @@ func NewServer(hub *Hub, storage *Storage, downsampler *Downsampler, distFS fs.F
 }
 
 func (s *Server) setupRoutes() {
-	// CORS for dev mode
+	// CORS. Credentialed session cookies cannot be combined with a wildcard
+	// origin, so echo back only origins we explicitly trust.
 	s.router.Use(func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		origin := c.GetHeader("Origin")
+		if origin != "" && s.isTrustedOrigin(c, origin) {
+			c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
+			c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+			c.Writer.Header().Set("Vary", "Origin")
+		}
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "Origin, Content-Type, Authorization, X-Node-ID, X-Node-Name, X-Node-Region")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Origin, Content-Type, Authorization, X-Probe-Session, X-Node-ID, X-Node-Name, X-Node-Region")
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(http.StatusNoContent)
 			return
@@ -80,48 +122,69 @@ func (s *Server) setupRoutes() {
 		c.Next()
 	})
 
-	// WebSocket endpoints
+	// Agent WebSocket authenticates with its own probe token, not a session.
 	s.router.GET("/api/v1/agent/ws", s.handleAgentWS)
 	s.router.GET("/ws/agent", s.handleAgentWS)
+
+	// Dashboard live stream. Guarded in private mode.
 	s.router.GET("/api/v1/client/ws", s.handleClientWS)
 	s.router.GET("/ws/client", s.handleClientWS)
 
-	// One-click installer & binary download
+	// Auth endpoints. Login must stay reachable without a session.
+	auth := s.router.Group("/api/v1/auth")
+	{
+		auth.POST("/login", s.handleLogin)
+		auth.POST("/logout", s.handleLogout)
+		auth.GET("/status", s.handleAuthStatus)
+		auth.POST("/change-password", s.requireAuth(), s.handleChangePassword)
+	}
+
+	// Installer and agent binary stay public: they are fetched by curl/wget from
+	// the target machine, which has no dashboard session. Neither contains a
+	// secret — the agent token is passed as a command-line argument by the
+	// operator, and the endpoints that hand out tokens require a session.
 	s.router.GET("/install.sh", s.handleInstallScript)
 	s.router.HEAD("/install.sh", s.handleInstallScript)
 	s.router.GET("/download/probe-agent", s.handleDownloadAgent)
 	s.router.HEAD("/download/probe-agent", s.handleDownloadAgent)
 	s.router.GET("/api/v1/download/probe-agent", s.handleDownloadAgent)
 
-	// REST API endpoints
-	api := s.router.Group("/api/v1")
+	// Read-only telemetry. Public by default, session-gated in private mode.
+	pub := s.router.Group("/api/v1", s.requireViewer())
 	{
-		api.GET("/nodes", s.handleGetNodes)
-		api.GET("/nodes/:id", s.handleGetNode)
-		api.GET("/nodes/:id/history", s.handleGetNodeHistory)
-		api.GET("/nodes/:id/ping-history", s.handleGetNodePingHistory)
-		api.DELETE("/nodes/:id", s.handleDeleteNode)
-		api.GET("/tokens", s.handleListTokens)
-		api.GET("/tokens/active", s.handleGetActiveToken)
-		api.POST("/tokens", s.handleCreateToken)
-		api.GET("/system/summary", s.handleSystemSummary)
+		pub.GET("/nodes", s.handleGetNodes)
+		pub.GET("/nodes/:id", s.handleGetNode)
+		pub.GET("/nodes/:id/history", s.handleGetNodeHistory)
+		pub.GET("/nodes/:id/ping-history", s.handleGetNodePingHistory)
+		pub.GET("/system/summary", s.handleSystemSummary)
+		pub.GET("/ping-targets", s.handleGetPingTargets)
+		pub.GET("/settings/rates", s.handleGetExchangeRates)
+	}
+
+	// Everything that mutates state or exposes agent tokens requires a session.
+	admin := s.router.Group("/api/v1", s.requireAuth())
+	{
+		admin.DELETE("/nodes/:id", s.handleDeleteNode)
+
+		// Agent tokens are credentials: never expose them to anonymous callers.
+		admin.GET("/tokens", s.handleListTokens)
+		admin.GET("/tokens/active", s.handleGetActiveToken)
+		admin.POST("/tokens", s.handleCreateToken)
 
 		// Ping targets management & instant test
-		api.GET("/ping-targets", s.handleGetPingTargets)
-		api.POST("/ping-targets", s.handleAddPingTarget)
-		api.PUT("/ping-targets/:id", s.handleUpdatePingTarget)
-		api.DELETE("/ping-targets/:id", s.handleDeletePingTarget)
-		api.POST("/ping-targets/test", s.handleTestPingTarget)
+		admin.POST("/ping-targets", s.handleAddPingTarget)
+		admin.PUT("/ping-targets/:id", s.handleUpdatePingTarget)
+		admin.DELETE("/ping-targets/:id", s.handleDeletePingTarget)
+		admin.POST("/ping-targets/test", s.handleTestPingTarget)
 
 		// Node settings & billing overrides
-		api.GET("/nodes/:id/settings", s.handleGetNodeSettings)
-		api.POST("/nodes/:id/settings", s.handleSaveNodeSettings)
-		api.GET("/node-settings", s.handleGetAllNodeSettings)
+		admin.GET("/nodes/:id/settings", s.handleGetNodeSettings)
+		admin.POST("/nodes/:id/settings", s.handleSaveNodeSettings)
+		admin.GET("/node-settings", s.handleGetAllNodeSettings)
 
 		// Exchange rates
-		api.GET("/settings/rates", s.handleGetExchangeRates)
-		api.POST("/settings/rates", s.handleSaveExchangeRates)
-		api.POST("/settings/rates/refresh", s.handleRefreshExchangeRates)
+		admin.POST("/settings/rates", s.handleSaveExchangeRates)
+		admin.POST("/settings/rates/refresh", s.handleRefreshExchangeRates)
 	}
 
 	// Static Assets / Embedded SPA
@@ -174,7 +237,7 @@ func (s *Server) handleAgentWS(c *gin.Context) {
 	}
 
 	// 2. Upgrade to WebSocket
-	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+	conn, err := agentUpgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		log.Printf("[AgentWS] Upgrade failed: %v", err)
 		return
@@ -249,7 +312,20 @@ func (s *Server) handleAgentWS(c *gin.Context) {
 
 // handleClientWS handles live connections from browser dashboards.
 func (s *Server) handleClientWS(c *gin.Context) {
-	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+	// In private mode the live telemetry stream requires a session. Reject before
+	// upgrading so the client sees a plain 401 instead of a dropped socket.
+	if s.privateMode {
+		if _, ok := s.currentUser(c); !ok {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+				"error": "authentication required",
+				"code":  "unauthenticated",
+			})
+			return
+		}
+	}
+
+	up := s.clientUpgrader(c)
+	conn, err := up.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		log.Printf("[ClientWS] Upgrade failed: %v", err)
 		return

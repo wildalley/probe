@@ -131,6 +131,26 @@ func (s *Storage) initSchema() error {
 		key TEXT PRIMARY KEY,
 		value TEXT NOT NULL
 	);
+
+	CREATE TABLE IF NOT EXISTS admin_users (
+		username TEXT PRIMARY KEY,
+		password_hash TEXT NOT NULL,
+		must_change_password INTEGER DEFAULT 0,
+		created_at INTEGER NOT NULL,
+		updated_at INTEGER NOT NULL
+	);
+
+	CREATE TABLE IF NOT EXISTS sessions (
+		token_hash TEXT PRIMARY KEY,
+		username TEXT NOT NULL,
+		expires_at INTEGER NOT NULL,
+		client_ip TEXT,
+		user_agent TEXT,
+		created_at INTEGER NOT NULL
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_sessions_username ON sessions(username);
+	CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
 	`
 	_, err := s.db.Exec(schema)
 	if err != nil {
@@ -686,6 +706,147 @@ func (s *Storage) SetSystemSetting(key, val string) error {
 
 	_, err := s.db.Exec(`INSERT OR REPLACE INTO system_settings (key, value) VALUES (?, ?)`, key, val)
 	return err
+}
+
+// AdminUser represents a dashboard operator account.
+type AdminUser struct {
+	Username           string
+	PasswordHash       string
+	MustChangePassword bool
+	CreatedAt          int64
+	UpdatedAt          int64
+}
+
+// CountAdminUsers returns the number of provisioned operator accounts.
+func (s *Storage) CountAdminUsers() (int, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var count int
+	err := s.db.QueryRow("SELECT COUNT(*) FROM admin_users").Scan(&count)
+	return count, err
+}
+
+// CreateAdminUser inserts a new operator account with a bcrypt password hash.
+func (s *Storage) CreateAdminUser(username, passwordHash string, mustChange bool) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	mustChangeInt := 0
+	if mustChange {
+		mustChangeInt = 1
+	}
+	now := time.Now().Unix()
+	_, err := s.db.Exec(`INSERT INTO admin_users (username, password_hash, must_change_password, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?)`, username, passwordHash, mustChangeInt, now, now)
+	return err
+}
+
+// GetAdminUser looks up an operator account. A nil user with nil error means "not found".
+func (s *Storage) GetAdminUser(username string) (*AdminUser, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var u AdminUser
+	var mustChangeInt int
+	err := s.db.QueryRow(`SELECT username, password_hash, must_change_password, created_at, updated_at
+		FROM admin_users WHERE username = ?`, username).
+		Scan(&u.Username, &u.PasswordHash, &mustChangeInt, &u.CreatedAt, &u.UpdatedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	u.MustChangePassword = (mustChangeInt == 1)
+	return &u, nil
+}
+
+// UpdateAdminPassword stores a new password hash and clears the forced-rotation flag.
+func (s *Storage) UpdateAdminPassword(username, passwordHash string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	_, err := s.db.Exec(`UPDATE admin_users SET password_hash = ?, must_change_password = 0, updated_at = ?
+		WHERE username = ?`, passwordHash, time.Now().Unix(), username)
+	return err
+}
+
+// CreateSession persists a hashed session token.
+func (s *Storage) CreateSession(tokenHash, username string, expiresAt int64, clientIP, userAgent string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if len(userAgent) > 255 {
+		userAgent = userAgent[:255]
+	}
+	_, err := s.db.Exec(`INSERT INTO sessions (token_hash, username, expires_at, client_ip, user_agent, created_at)
+		VALUES (?, ?, ?, ?, ?, ?)`, tokenHash, username, expiresAt, clientIP, userAgent, time.Now().Unix())
+	return err
+}
+
+// GetSession resolves a hashed token to its owner and expiry.
+func (s *Storage) GetSession(tokenHash string) (string, int64, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var username string
+	var expiresAt int64
+	err := s.db.QueryRow(`SELECT username, expires_at FROM sessions WHERE token_hash = ?`, tokenHash).
+		Scan(&username, &expiresAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return "", 0, nil
+		}
+		return "", 0, err
+	}
+	return username, expiresAt, nil
+}
+
+// DeleteSession removes a single session (logout).
+func (s *Storage) DeleteSession(tokenHash string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	_, err := s.db.Exec(`DELETE FROM sessions WHERE token_hash = ?`, tokenHash)
+	return err
+}
+
+// DeleteSessionsForUser invalidates every session of a user, e.g. after a password change.
+func (s *Storage) DeleteSessionsForUser(username string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	_, err := s.db.Exec(`DELETE FROM sessions WHERE username = ?`, username)
+	return err
+}
+
+// DeleteExpiredSessions prunes sessions past their expiry.
+func (s *Storage) DeleteExpiredSessions(now int64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	_, err := s.db.Exec(`DELETE FROM sessions WHERE expires_at <= ?`, now)
+	return err
+}
+
+// DeleteToken revokes an agent token.
+func (s *Storage) DeleteToken(token string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	_, err := s.db.Exec(`DELETE FROM tokens WHERE token = ?`, token)
+	return err
+}
+
+// CountTokens returns how many agent tokens exist.
+func (s *Storage) CountTokens() (int, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var count int
+	err := s.db.QueryRow(`SELECT COUNT(*) FROM tokens`).Scan(&count)
+	return count, err
 }
 
 // Close closes the SQLite database connection.
