@@ -22,6 +22,8 @@ import {
   AlertCircle,
   ExternalLink,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   CheckSquare,
   Square,
   Bell,
@@ -51,6 +53,9 @@ import { DatePicker } from "./DatePicker";
 import { BandwidthConfig } from "./BandwidthConfig";
 
 type TabKey = "hosts" | "network" | "billing" | "tokens" | "notifications";
+
+/** Rows of notification history per page. The server caps a page at 200. */
+const LOG_PAGE_SIZE = 50;
 
 interface AdminModalProps {
   isOpen: boolean;
@@ -154,6 +159,10 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     },
   });
   const [notificationLogs, setNotificationLogs] = useState<NotificationLog[]>([]);
+  // Log pagination. `logTotal` is the row count in the database, not the size of
+  // the page in hand — the old UI showed the latter and so silently capped at 50.
+  const [logPage, setLogPage] = useState(0);
+  const [logTotal, setLogTotal] = useState(0);
   const [isLoadingNotif, setIsLoadingNotif] = useState(false);
   const [isSavingNotif, setIsSavingNotif] = useState(false);
   const [notifSaveSuccess, setNotifSaveSuccess] = useState(false);
@@ -175,12 +184,16 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     }
   };
 
-  const fetchNotificationLogs = async () => {
+  const fetchNotificationLogs = async (page = logPage) => {
     try {
-      const res = await fetch("/api/v1/notifications/logs?limit=50");
+      const res = await fetch(
+        `/api/v1/notifications/logs?limit=${LOG_PAGE_SIZE}&offset=${page * LOG_PAGE_SIZE}`
+      );
       if (res.ok) {
         const d = await res.json();
-        if (Array.isArray(d)) setNotificationLogs(d);
+        setNotificationLogs(Array.isArray(d.logs) ? d.logs : []);
+        setLogTotal(typeof d.total === "number" ? d.total : 0);
+        setLogPage(page);
       }
     } catch (e) {
       console.error(e);
@@ -246,6 +259,8 @@ export const AdminModal: React.FC<AdminModalProps> = ({
       const res = await fetch("/api/v1/notifications/logs", { method: "DELETE" });
       if (res.ok) {
         setNotificationLogs([]);
+        setLogTotal(0);
+        setLogPage(0);
       }
     } catch (e) {
       console.error(e);
@@ -2457,7 +2472,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                       3. 告警推送记录与审计日志 (Recent Logs)
                     </h4>
                     <span className="px-2 py-0.5 rounded-full text-10 font-semibold bg-slate-100 text-slate-600 dark:bg-zinc-800 dark:text-zinc-400 border border-slate-200/60 dark:border-zinc-700/60">
-                      {notificationLogs.length} 条记录
+                      共 {logTotal} 条记录
                     </span>
                   </div>
 
@@ -2466,7 +2481,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                       variant="ghost"
                       size="sm"
                       type="button"
-                      onPress={fetchNotificationLogs}
+                      onPress={() => fetchNotificationLogs(logPage)}
                       className="text-slate-600 hover:text-slate-900 dark:text-zinc-300 font-sans gap-1"
                     >
                       <RefreshCw className="h-3 w-3" />
@@ -2575,13 +2590,56 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                       {notificationLogs.length === 0 && (
                         <tr>
                           <td colSpan={5} className="py-10 text-center text-slate-400 font-sans">
-                            暂无告警推送记录。当节点状态发生变化或点击测试通知时，将在此记录审计日志。
+                            {logPage > 0
+                              ? "这一页没有记录了，可能刚被清空或已翻过末页。"
+                              : "暂无告警推送记录。当节点状态发生变化或点击测试通知时，将在此记录审计日志。"}
                           </td>
                         </tr>
                       )}
                     </tbody>
                   </table>
                 </div>
+
+                {/* Pager. Hidden while everything fits on one page. */}
+                {logTotal > LOG_PAGE_SIZE && (
+                  <div
+                    className={cn(
+                      "mt-3 flex items-center justify-between gap-3 border-t pt-3 font-sans text-11",
+                      isBlueprint ? "border-slate-100 text-slate-500" : "border-zinc-800/60 text-zinc-400"
+                    )}
+                  >
+                    <span>
+                      第 {logPage * LOG_PAGE_SIZE + 1}–
+                      {Math.min((logPage + 1) * LOG_PAGE_SIZE, logTotal)} 条 · 共{" "}
+                      {Math.ceil(logTotal / LOG_PAGE_SIZE)} 页
+                    </span>
+
+                    <div className="flex items-center gap-1.5">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        type="button"
+                        isDisabled={logPage === 0}
+                        onPress={() => fetchNotificationLogs(logPage - 1)}
+                        className="gap-1 font-sans"
+                      >
+                        <ChevronLeft className="h-3 w-3" />
+                        <span>上一页</span>
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        type="button"
+                        isDisabled={(logPage + 1) * LOG_PAGE_SIZE >= logTotal}
+                        onPress={() => fetchNotificationLogs(logPage + 1)}
+                        className="gap-1 font-sans"
+                      >
+                        <span>下一页</span>
+                        <ChevronRight className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}

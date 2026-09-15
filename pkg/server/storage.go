@@ -944,17 +944,36 @@ func (s *Storage) AddNotificationLog(item *model.NotificationLog) error {
 	return nil
 }
 
-// GetNotificationLogs retrieves the most recent alert logs.
-func (s *Storage) GetNotificationLogs(limit int) ([]*model.NotificationLog, error) {
+// CountNotificationLogs returns how many alert logs are stored. Paired with
+// GetNotificationLogs so the UI can show a real total rather than just the size
+// of the page it happens to be holding.
+func (s *Storage) CountNotificationLogs() (int, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var count int
+	err := s.db.QueryRow(`SELECT COUNT(*) FROM notification_logs`).Scan(&count)
+	return count, err
+}
+
+// GetNotificationLogs retrieves one page of alert logs, newest first.
+//
+// The ordering pairs timestamp with id: timestamps are second-granular, so a
+// burst of alerts written in the same second would otherwise have no stable
+// order between them, and rows could repeat or vanish across pages.
+func (s *Storage) GetNotificationLogs(limit, offset int) ([]*model.NotificationLog, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
+	if offset < 0 {
+		offset = 0
+	}
 
 	rows, err := s.db.Query(`SELECT id, timestamp, channel, type, title, content, status, COALESCE(error_msg, '')
-		FROM notification_logs ORDER BY timestamp DESC LIMIT ?`, limit)
+		FROM notification_logs ORDER BY timestamp DESC, id DESC LIMIT ? OFFSET ?`, limit, offset)
 	if err != nil {
 		return nil, err
 	}
