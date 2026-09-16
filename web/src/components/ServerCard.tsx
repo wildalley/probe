@@ -26,6 +26,29 @@ interface ServerCardProps {
   theme?: "blueprint" | "dark";
 }
 
+type TickTone = "good" | "fair" | "moderate" | "poor" | "warn" | "lost" | "muted";
+
+interface Tick {
+  tone: TickTone;
+  label: string;
+  valueStr: string;
+  gradeStr: string;
+}
+
+// Tooltip value color. Both bars read from the same map so a "--" reading never
+// renders in the alarm color.
+const tickTextColor = (tone: TickTone) => {
+  switch (tone) {
+    case "muted": return "text-zinc-400";
+    case "fair": return "text-teal-300";
+    case "moderate":
+    case "warn": return "text-amber-300";
+    case "poor":
+    case "lost": return "text-rose-400";
+    default: return "text-emerald-400";
+  }
+};
+
 const getCycleLabel = (cycle?: string) => {
   switch (cycle) {
     case "quarter": return "季";
@@ -102,96 +125,100 @@ export function ServerCard({ node, onSelect, theme = "dark" }: ServerCardProps) 
     ? node.tags
     : ["电信CN2", "1Gbps", "CU4837"];
 
-  // Average Latency and Packet Loss
+  // One tick per probe target — the agent reports a single current value per
+  // target, so there is no time series here to draw.
   const pings = node.pings && node.pings.length > 0 ? node.pings : [];
-  const avgLatency = pings.length > 0
-    ? pings.reduce((sum, p) => sum + p.latency_ms, 0) / pings.length
-    : (node.is_online ? 49 : 0);
-  const avgLoss = pings.length > 0
-    ? pings.reduce((sum, p) => sum + p.packet_loss, 0) / pings.length
-    : (node.is_online ? 0 : 100);
 
-  // 14 Latency Ticks with metadata
-  const latencyTicks = useMemo(() => {
-    const totalTicks = 14;
-    return Array.from({ length: totalTicks }, (_, i) => {
-      if (!node.is_online) {
+  // The agent only writes `latency_ms` on a successful probe, so a target that
+  // has never answered sits at 0 forever. Averaging those in drags latency down
+  // and pushes loss up; they get their own tick instead.
+  const reachable = useMemo(() => pings.filter((p) => p.latency_ms > 0), [pings]);
+
+  const avgLatency = reachable.length > 0
+    ? reachable.reduce((sum, p) => sum + p.latency_ms, 0) / reachable.length
+    : null;
+  const avgLoss = reachable.length > 0
+    ? reachable.reduce((sum, p) => sum + p.packet_loss, 0) / reachable.length
+    : null;
+
+  const latencyTicks = useMemo<Tick[]>(() => {
+    if (!node.is_online) {
+      return pings.map((p) => ({
+        tone: "muted",
+        label: p.label,
+        valueStr: "--",
+        gradeStr: "节点失联",
+      }));
+    }
+    return pings.map((p) => {
+      if (p.latency_ms <= 0) {
         return {
-          status: "offline" as const,
-          label: "离线",
+          tone: "muted",
+          label: p.label,
           valueStr: "--",
-          gradeStr: "节点失联",
+          gradeStr: "无响应",
         };
       }
-      const pingIdx = i % (pings.length || 1);
-      const pingItem = pings[pingIdx];
-      const targetName = pingItem?.label || "综合网络";
-      const lat = pingItem ? pingItem.latency_ms : avgLatency;
-      let status: "good" | "fair" | "moderate" | "poor" = "good";
+      let tone: TickTone = "good";
       let grade = "极速 (优秀)";
-      if (lat < 60) {
-        status = "good";
-        grade = "极速 (优秀)";
-      } else if (lat < 130) {
-        status = "fair";
-        grade = "平稳 (良好)";
-      } else if (lat < 230) {
-        status = "moderate";
-        grade = "稍慢 (跨洋)";
-      } else {
-        status = "poor";
+      if (p.latency_ms >= 230) {
+        tone = "poor";
         grade = "高延迟 (告警)";
+      } else if (p.latency_ms >= 130) {
+        tone = "moderate";
+        grade = "稍慢 (跨洋)";
+      } else if (p.latency_ms >= 60) {
+        tone = "fair";
+        grade = "平稳 (良好)";
       }
       return {
-        status,
-        label: targetName,
-        valueStr: `${lat.toFixed(1)} ms`,
+        tone,
+        label: p.label,
+        valueStr: `${p.latency_ms.toFixed(1)} ms`,
         gradeStr: grade,
       };
     });
-  }, [node.is_online, pings, avgLatency]);
+  }, [node.is_online, pings]);
 
-  // 14 Loss Ticks with metadata
-  const lossTicks = useMemo(() => {
-    const totalTicks = 14;
-    const lossCount = Math.min(totalTicks, Math.ceil((avgLoss / 100) * totalTicks));
-    return Array.from({ length: totalTicks }, (_, i) => {
-      if (!node.is_online) {
+  const lossTicks = useMemo<Tick[]>(() => {
+    if (!node.is_online) {
+      return pings.map((p) => ({
+        tone: "muted",
+        label: p.label,
+        valueStr: "--",
+        gradeStr: "节点失联",
+      }));
+    }
+    return pings.map((p) => {
+      if (p.latency_ms <= 0) {
         return {
-          status: "offline" as const,
-          label: "离线",
+          tone: "muted",
+          label: p.label,
           valueStr: "--",
-          gradeStr: "节点失联",
+          gradeStr: "无响应",
         };
       }
-      const pingIdx = i % (pings.length || 1);
-      const pingItem = pings[pingIdx];
-      const targetName = pingItem?.label || "综合丢包";
-      const isLossTick = avgLoss > 0 && i >= totalTicks - lossCount;
-      let status: "good" | "warn" | "lost" = "good";
+      let tone: TickTone = "good";
       let grade = "零丢包 · 线路通畅";
-      const val = `${(pingItem ? pingItem.packet_loss : avgLoss).toFixed(1)}%`;
-      if (isLossTick) {
-        if (avgLoss > 10) {
-          status = "lost";
-          grade = "严重丢包";
-        } else {
-          status = "warn";
-          grade = "偶发轻度丢包";
-        }
+      if (p.packet_loss > 10) {
+        tone = "lost";
+        grade = "严重丢包";
+      } else if (p.packet_loss > 0) {
+        tone = "warn";
+        grade = "偶发轻度丢包";
       }
       return {
-        status,
-        label: targetName,
-        valueStr: val,
+        tone,
+        label: p.label,
+        valueStr: `${p.packet_loss.toFixed(1)}%`,
         gradeStr: grade,
       };
     });
-  }, [node.is_online, pings, avgLoss]);
+  }, [node.is_online, pings]);
 
   const [hoveredTick, setHoveredTick] = useState<{
     type: "latency" | "loss";
-    tick: { label: string; valueStr: string; gradeStr: string };
+    tick: Tick;
     xPercent: number;
   } | null>(null);
 
@@ -497,7 +524,9 @@ export function ServerCard({ node, onSelect, theme = "dark" }: ServerCardProps) 
                   : "bg-zinc-900/95 text-zinc-100 border-zinc-700 shadow-black/80"
               }`}>
                 <span className="text-zinc-400 text-10">{hoveredTick.tick.label}</span>
-                <span className="font-mono font-bold text-emerald-400">{hoveredTick.tick.valueStr}</span>
+                <span className={cn("font-mono font-bold", tickTextColor(hoveredTick.tick.tone))}>
+                  {hoveredTick.tick.valueStr}
+                </span>
                 <span className="text-10 text-zinc-300 font-normal">({hoveredTick.tick.gradeStr})</span>
               </div>
               <div className="w-0 h-0 border-x-4 border-x-transparent border-t-4 border-t-slate-900 dark:border-t-zinc-900 mx-auto" />
@@ -507,16 +536,19 @@ export function ServerCard({ node, onSelect, theme = "dark" }: ServerCardProps) 
           <div className="flex items-center justify-between mb-1.5">
             <span className={isBlueprint ? "text-slate-600 font-medium" : "text-zinc-400"}>延迟</span>
             <span className={`font-bold ${isBlueprint ? "text-slate-900" : "text-zinc-100"}`}>
-              {node.is_online ? `${avgLatency.toFixed(0)} ms` : "--"}
+              {node.is_online && avgLatency !== null ? `${avgLatency.toFixed(0)} ms` : "--"}
             </span>
           </div>
           <div className="flex items-center gap-1 py-1">
+            {latencyTicks.length === 0 && (
+              <div className={cn("flex-1 h-3 rounded-[2px]", isBlueprint ? "bg-slate-200" : "bg-zinc-800")} />
+            )}
             {latencyTicks.map((tick, idx) => {
               let bg = "bg-emerald-500 hover:bg-emerald-400";
-              if (tick.status === "fair") bg = "bg-teal-400 hover:bg-teal-300";
-              else if (tick.status === "moderate") bg = "bg-amber-400 hover:bg-amber-300";
-              else if (tick.status === "poor") bg = "bg-rose-500 hover:bg-rose-400";
-              else if (tick.status === "offline") bg = isBlueprint ? "bg-slate-200" : "bg-zinc-800";
+              if (tick.tone === "fair") bg = "bg-teal-400 hover:bg-teal-300";
+              else if (tick.tone === "moderate") bg = "bg-amber-400 hover:bg-amber-300";
+              else if (tick.tone === "poor") bg = "bg-rose-500 hover:bg-rose-400";
+              else if (tick.tone === "muted") bg = isBlueprint ? "bg-slate-200" : "bg-zinc-800";
               return (
                 <div
                   key={idx}
@@ -550,7 +582,7 @@ export function ServerCard({ node, onSelect, theme = "dark" }: ServerCardProps) 
                   : "bg-zinc-900/95 text-zinc-100 border-zinc-700 shadow-black/80"
               }`}>
                 <span className="text-zinc-400 text-10">{hoveredTick.tick.label}</span>
-                <span className={`font-mono font-bold ${hoveredTick.tick.valueStr !== "0.0%" ? "text-rose-400" : "text-emerald-400"}`}>
+                <span className={cn("font-mono font-bold", tickTextColor(hoveredTick.tick.tone))}>
                   {hoveredTick.tick.valueStr}
                 </span>
                 <span className="text-10 text-zinc-300 font-normal">({hoveredTick.tick.gradeStr})</span>
@@ -562,19 +594,22 @@ export function ServerCard({ node, onSelect, theme = "dark" }: ServerCardProps) 
           <div className="flex items-center justify-between mb-1.5">
             <span className={isBlueprint ? "text-slate-600 font-medium" : "text-zinc-400"}>丢包</span>
             <span className={`font-bold ${
-              avgLoss > 0
+              avgLoss !== null && avgLoss > 0
                 ? "text-rose-500 dark:text-rose-400"
                 : isBlueprint ? "text-slate-900" : "text-zinc-100"
             }`}>
-              {node.is_online ? `${avgLoss.toFixed(1)}%` : "--"}
+              {node.is_online && avgLoss !== null ? `${avgLoss.toFixed(1)}%` : "--"}
             </span>
           </div>
           <div className="flex items-center gap-1 py-1">
+            {lossTicks.length === 0 && (
+              <div className={cn("flex-1 h-3 rounded-[2px]", isBlueprint ? "bg-slate-200" : "bg-zinc-800")} />
+            )}
             {lossTicks.map((tick, idx) => {
               let bg = "bg-emerald-500 hover:bg-emerald-400";
-              if (tick.status === "warn") bg = "bg-amber-400 hover:bg-amber-300";
-              else if (tick.status === "lost") bg = "bg-rose-500 hover:bg-rose-400";
-              else if (tick.status === "offline") bg = isBlueprint ? "bg-slate-200" : "bg-zinc-800";
+              if (tick.tone === "warn") bg = "bg-amber-400 hover:bg-amber-300";
+              else if (tick.tone === "lost") bg = "bg-rose-500 hover:bg-rose-400";
+              else if (tick.tone === "muted") bg = isBlueprint ? "bg-slate-200" : "bg-zinc-800";
               return (
                 <div
                   key={idx}

@@ -13,12 +13,9 @@ import {
   Check,
   Copy,
   Zap,
-  Globe,
-  Terminal,
   Calendar,
   CreditCard,
   Coins,
-  Shield,
   AlertCircle,
   ExternalLink,
   ChevronDown,
@@ -39,18 +36,16 @@ import {
 import {
   NodeState,
   PingTargetConfig,
-  NodeSettings,
   SystemSettings,
   TokenItem,
   NotificationSettings,
   NotificationLog,
 } from "../types";
 import { Button, Chip, Input, ListBox, Select, Switch, Tabs } from "@heroui/react";
-import { getRegionFlag } from "../utils/flags";
 import { cn } from "../lib/utils";
-import { TagInput } from "./TagInput";
-import { DatePicker } from "./DatePicker";
-import { BandwidthConfig } from "./BandwidthConfig";
+import { HostTable } from "./admin/hosts/HostTable";
+import { HostEditDialog } from "./admin/hosts/HostEditDialog";
+import { HostDeployDialog } from "./admin/hosts/HostDeployDialog";
 
 type TabKey = "hosts" | "network" | "billing" | "tokens" | "notifications";
 
@@ -64,25 +59,6 @@ interface AdminModalProps {
   theme?: "blueprint" | "dark";
   onRefreshNodes?: () => void;
 }
-
-const CURRENCY_OPTIONS = [
-  { key: "$", label: "$ (USD - 美元)" },
-  { key: "¥", label: "¥ (CNY - 人民币)" },
-  { key: "€", label: "€ (EUR - 欧元)" },
-  { key: "HK$", label: "HK$ (HKD - 港币)" },
-  { key: "£", label: "£ (GBP - 英镑)" },
-  { key: "JP¥", label: "JP¥ (JPY - 日元)" },
-];
-
-const BILLING_CYCLE_OPTIONS = [
-  { key: "month", label: "按月 (Month)" },
-  { key: "quarter", label: "按季 (Quarter)" },
-  { key: "half_year", label: "半年 (Half Year)" },
-  { key: "year", label: "按年 (Year)" },
-  { key: "two_year", label: "两年 (2 Years)" },
-  { key: "three_year", label: "三年 (3 Years)" },
-  { key: "one_time", label: "一次性 (One-time)" },
-];
 
 const WEBHOOK_FORMAT_OPTIONS = [
   { key: "generic", label: "通用 JSON (POST)" },
@@ -295,59 +271,31 @@ export const AdminModal: React.FC<AdminModalProps> = ({
   const [isRefreshingRates, setIsRefreshingRates] = useState(false);
   const [rateSaveSuccess, setRateSaveSuccess] = useState(false);
 
-  // --- Host Edit State ---
-  const [editingNode, setEditingNode] = useState<NodeSettings | null>(null);
-  const [hostSaveSuccess, setHostSaveSuccess] = useState(false);
-  const [isResolvingGeo, setIsResolvingGeo] = useState(false);
-  const [autoGeoNotice, setAutoGeoNotice] = useState<string | null>(null);
+  // --- Host Dialog State ---
+  // Which host row the config dialog is open for; the dialog owns the draft.
+  const [editingHost, setEditingHost] = useState<NodeState | null>(null);
+  const [isDeployDialogOpen, setIsDeployDialogOpen] = useState(false);
+  const [hostQuery, setHostQuery] = useState("");
 
-  const handleAutoResolveNodeGeo = async () => {
-    if (!editingNode) return;
-    const targetNode = nodes.find((n) => n.node_id === editingNode.node_id);
-    const ip = editingNode.public_ip || targetNode?.system?.public_ip || "";
-    if (!ip || ip === "127.0.0.1" || ip === "::1") {
-      alert("该节点未上报真实公网 IP（当前为局域网/回环地址），无法在线查询全球运营商");
-      return;
-    }
+  const onlineHostCount = nodes.filter((n) => n.is_online).length;
 
-    try {
-      setIsResolvingGeo(true);
-      setAutoGeoNotice(null);
-      const res = await fetch(`/api/v1/geoip/lookup?ip=${encodeURIComponent(ip)}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data && data.country_code) {
-          const currentTags = editingNode.tags || [];
-          const newTags = data.line_tag && !currentTags.includes(data.line_tag)
-            ? [...currentTags, data.line_tag]
-            : currentTags;
-
-          setEditingNode({
-            ...editingNode,
-            region: data.country_code !== "GLOBAL" ? data.country_code : editingNode.region,
-            provider: data.provider || editingNode.provider,
-            tags: newTags,
-          });
-          setAutoGeoNotice(`已根据公网 IP 自动识别：${data.country || data.country_code} · ${data.provider} (${data.line_tag})`);
-          setTimeout(() => setAutoGeoNotice(null), 6000);
-        }
-      }
-    } catch (e: any) {
-      alert(`识别失败: ${e.message}`);
-    } finally {
-      setIsResolvingGeo(false);
-    }
-  };
+  // Filter across the fields an operator would recognise a box by.
+  const hostKeyword = hostQuery.trim().toLowerCase();
+  const filteredHosts = hostKeyword
+    ? nodes.filter((n) =>
+        [n.name, n.node_id, n.region, n.system?.public_ip]
+          .some((field) => (field || "").toLowerCase().includes(hostKeyword))
+      )
+    : nodes;
 
   // --- Tokens State ---
   const [tokens, setTokens] = useState<TokenItem[]>([]);
   const [newTokenLabel, setNewTokenLabel] = useState("");
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
 
-  // Quick deploy script state
+  // Active agent token. Shared with the deploy dialog, which embeds it into the
+  // install command, so regenerating there keeps this tab in agreement.
   const [deployToken, setDeployToken] = useState("sk_default_secret_probe_token");
-  const [deployName, setDeployName] = useState("node-01");
-  const [showManualOverride, setShowManualOverride] = useState(false);
   const [copiedCmd, setCopiedCmd] = useState<string | null>(null);
 
   // Tab bar is data-driven so the five entries can't drift apart visually.
@@ -579,46 +527,6 @@ export const AdminModal: React.FC<AdminModalProps> = ({
   };
 
   // --- Host Settings Handlers ---
-  const handleEditNodeClick = (node: NodeState) => {
-    const liveTraffic = (node.network.bytes_sent || 0) + (node.network.bytes_recv || 0);
-    setEditingNode({
-      node_id: node.node_id,
-      name: node.name,
-      region: node.region,
-      tags: node.tags || [],
-      provider: node.billing?.provider || "",
-      public_ip: node.system.public_ip || "",
-      price: node.billing?.price || node.billing?.price_per_month || 9.9,
-      currency: node.billing?.currency || "$",
-      billing_cycle: node.billing?.billing_cycle || "month",
-      expiry_date: node.billing?.expiry_date || "",
-      bandwidth_quota: node.billing?.bandwidth_quota || 2 * 1024 * 1024 * 1024 * 1024,
-      bandwidth_used: node.billing?.bandwidth_used || liveTraffic,
-      auto_renewal: node.billing?.auto_renewal || false,
-    });
-  };
-
-  const handleSaveNodeSettings = async () => {
-    if (!editingNode) return;
-    try {
-      const res = await fetch(`/api/v1/nodes/${encodeURIComponent(editingNode.node_id)}/settings`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(editingNode),
-      });
-      if (res.ok) {
-        setHostSaveSuccess(true);
-        setTimeout(() => {
-          setHostSaveSuccess(false);
-          setEditingNode(null);
-        }, 1500);
-        if (onRefreshNodes) onRefreshNodes();
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
   const handleDeleteNode = async (nodeID: string) => {
     if (!confirm(`确定要永久删除节点 "${nodeID}" 吗？其历史指标数据也将被移除。`)) return;
     try {
@@ -646,20 +554,23 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     }
   };
 
-  const handleRegenerateDeployToken = async () => {
+  /** Mints a fresh agent token for the deploy dialog. Returns it so the caller
+      can surface a failure instead of silently keeping the stale one. */
+  const handleRegenerateDeployToken = async (): Promise<string | null> => {
     try {
       const res = await fetch("/api/v1/tokens", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ label: `Auto Token ${new Date().toLocaleTimeString()}` }),
       });
-      if (res.ok) {
-        const created = await res.json();
-        setDeployToken(created.token);
-        setTokens((prev) => [created, ...prev]);
-      }
+      if (!res.ok) return null;
+      const created = await res.json();
+      setDeployToken(created.token);
+      setTokens((prev) => [created, ...prev]);
+      return created.token;
     } catch (e) {
       console.error(e);
+      return null;
     }
   };
 
@@ -685,12 +596,6 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     totalMonthlySpendCNY += monthlyCost * rate;
     totalRemainingValueCNY += n.billing?.remaining_value || 0;
   });
-
-  const serverHost = window.location.host || "127.0.0.1:8080";
-  const wsProto = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const wsUrl = `${wsProto}//${serverHost}`;
-  const httpUrl = `${window.location.protocol}//${serverHost}`;
-  const oneClickCmd = `curl -sSL ${httpUrl}/install.sh | sudo bash -s -- --server "${wsUrl}" --token "${deployToken}" --name "${deployName}"`;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-md animate-fade-in font-sans">
@@ -783,558 +688,52 @@ export const AdminModal: React.FC<AdminModalProps> = ({
         {/* Tab Contents. Keyed on activeTab so switching panes fades in and
             resets the scroll position instead of keeping the previous offset. */}
         <div key={activeTab} className="flex-1 overflow-y-auto p-6 space-y-6 animate-fade-in">
-          {/* TAB 1: HOSTS */}
+          {/* TAB 1: HOSTS — roster only; add and edit live in dialogs. */}
           {activeTab === "hosts" && (
-            <div className="space-y-6">
-              {/* Quick Deploy Card */}
-              <div
-                className={`rounded-xl border p-5 transition-all shadow-xs ${
-                  isBlueprint
-                    ? "bg-white border-slate-200/90"
-                    : "bg-zinc-900/80 border-zinc-800"
-                }`}
-              >
-                <div
-                  className={`flex flex-wrap items-center justify-between gap-2 border-b pb-3 mb-4 font-sans ${
-                    isBlueprint ? "border-slate-200/80" : "border-zinc-800"
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5">
-                    <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${
-                      isBlueprint
-                        ? "bg-emerald-50 text-emerald-600 border border-emerald-200/70"
-                        : "bg-emerald-500/15 border border-emerald-500/30 text-emerald-400"
-                    } shrink-0`}>
-                      <Terminal className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className={`text-sm font-bold tracking-tight ${isBlueprint ? "text-slate-800" : "text-zinc-100"}`}>
-                          快速添加主机 / 一键部署命令
-                        </h3>
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-10 font-semibold bg-emerald-50 text-emerald-600 border border-emerald-200/70 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800/60">
-                          极速上线
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                  <span className={`text-xs ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}>
-                    自动识别地区 · 内嵌通信令牌 · 自动注册 Systemd 守护进程
-                  </span>
+            <div className="space-y-5">
+              <div className="flex flex-wrap items-end justify-between gap-3">
+                <div>
+                  <h3 className={cn("text-base font-bold", isBlueprint ? "text-slate-900" : "text-zinc-100")}>
+                    主机管理 (Hosts)
+                  </h3>
+                  <p className={cn("text-xs mt-0.5", isBlueprint ? "text-slate-500" : "text-zinc-400")}>
+                    共 {nodes.length} 台 · 在线 {onlineHostCount} 台 · 离线 {nodes.length - onlineHostCount} 台
+                  </p>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs font-sans mb-4">
-                  <div>
-                    <label className={`block mb-1.5 font-medium ${isBlueprint ? "text-slate-700" : "text-zinc-300"}`}>
-                      节点名称 (Name)
-                    </label>
-                    <Input
-                      type="text"
-                      value={deployName}
-                      onChange={(e) => setDeployName(e.target.value)}
-                      placeholder="node-01"
-                      className="w-full font-mono text-xs"
-                    />
-                  </div>
-                  <div className="flex flex-col justify-end">
-                    <div className={`p-2 rounded-lg border flex items-center gap-2 text-xs font-sans min-h-[38px] ${
-                      isBlueprint ? "bg-slate-50/70 border-slate-200/80 text-slate-700" : "bg-zinc-950/80 border-zinc-800 text-zinc-300"
-                    }`}>
-                      <Globe className="h-4 w-4 text-sky-500 shrink-0" />
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <span className="font-medium">地区与线路:</span>
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-11 font-medium bg-sky-50 text-sky-700 border border-sky-200/70 dark:bg-sky-950/40 dark:text-sky-400 dark:border-sky-800/60">
-                          ● 全自动识别
-                        </span>
-                        <span className="text-11 text-slate-500 dark:text-zinc-500">公网 IP 智能匹配</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Token Auto Badge */}
-                <div
-                  className={`flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3.5 py-2.5 text-xs font-sans mb-3.5 transition-colors ${
-                    isBlueprint ? "bg-slate-50/60 border-slate-200/80 shadow-xs" : "bg-zinc-950/80 border-zinc-800/80"
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <Shield className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
-                    <span className={isBlueprint ? "text-slate-700 font-medium" : "text-zinc-300"}>通信 Token:</span>
-                    <code className="text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 text-xs font-mono">
-                      {deployToken.slice(0, 14)}...{deployToken.slice(-6)}
-                    </code>
-                    <span className={`text-11 hidden sm:inline ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}>
-                      (已自动嵌入下方安装命令)
-                    </span>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onPress={handleRegenerateDeployToken}
-                    className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 font-medium gap-1"
-                    aria-label="重新生成并更换一个新 Token"
-                  >
-                    <RefreshCw className="h-3 w-3" />
-                    <span>更换 Token</span>
-                  </Button>
-                </div>
-
-                {/* Command Shell Block */}
-                <div className="relative group">
-                  <pre
-                    className="p-4 rounded-xl border border-slate-800 bg-slate-950 text-emerald-400 font-mono text-xs overflow-x-auto whitespace-pre-wrap select-all leading-relaxed shadow-inner"
-                  >
-                    {oneClickCmd}
-                  </pre>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Input
+                    type="search"
+                    value={hostQuery}
+                    onChange={(e) => setHostQuery(e.target.value)}
+                    placeholder="搜索名称 / ID / 地区 / IP"
+                    aria-label="搜索主机"
+                    className="w-full sm:w-64 text-xs"
+                  />
                   <Button
                     variant="primary"
                     size="sm"
-                    onPress={() => copyToClipboard(oneClickCmd, "deployCmd")}
-                    className="absolute right-3 top-3 font-sans font-medium shadow-md gap-1.5"
+                    onPress={() => setIsDeployDialogOpen(true)}
+                    className="font-medium gap-1.5"
                   >
-                    {copiedCmd === "deployCmd" ? <Check className="h-3.5 w-3.5 text-white" /> : <Copy className="h-3.5 w-3.5" />}
-                    <span>{copiedCmd === "deployCmd" ? "已复制" : "复制命令"}</span>
+                    <Plus className="h-4 w-4" />
+                    <span>添加主机</span>
                   </Button>
                 </div>
               </div>
 
-              {/* Node Editing Form (If active) */}
-              {editingNode && (
-                <div
-                  className={`rounded-2xl border p-5 space-y-4 animate-fade-in shadow-xl ${
-                    isBlueprint ? "bg-white border-indigo-300 shadow-lg shadow-indigo-500/5" : "bg-zinc-900 border-indigo-500/60 shadow-black"
-                  }`}
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-3 font-sans">
-                    <div className="flex items-center gap-2 font-bold text-base text-indigo-600 dark:text-indigo-400">
-                      <Edit2 className="h-4 w-4" />
-                      <span>编辑主机配置: {editingNode.name || editingNode.node_id}</span>
-                    </div>
+              <HostTable
+                nodes={filteredHosts}
+                theme={theme}
+                onEdit={setEditingHost}
+                onDelete={handleDeleteNode}
+              />
 
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onPress={() => {
-                          setEditingNode(null);
-                          setAutoGeoNotice(null);
-                        }}
-                        className="font-sans text-xs"
-                      >
-                        取消
-                      </Button>
-                    </div>
-                  </div>
-
-                  {autoGeoNotice && (
-                    <div className="alert alert-success py-2.5 px-3.5 text-xs font-sans flex items-center gap-2">
-                      <CheckCircle2 className="h-4 w-4 shrink-0" />
-                      <span>{autoGeoNotice}</span>
-                    </div>
-                  )}
-
-                  {/* Auto-identified Region & Provider Badge Card */}
-                  <div
-                    className={`rounded-xl border p-3 flex flex-wrap items-center justify-between gap-3 ${
-                      isBlueprint
-                        ? "bg-indigo-50/50 border-indigo-200 text-slate-800"
-                        : "bg-indigo-950/20 border-indigo-900/60 text-zinc-200"
-                    }`}
-                  >
-                    <div className="flex flex-wrap items-center gap-3 font-sans text-xs">
-                      <div className="flex items-center gap-1.5 font-bold">
-                        <Globe className="h-4 w-4 text-sky-500 shrink-0" />
-                        <span className={isBlueprint ? "text-slate-700" : "text-zinc-300"}>归属地区:</span>
-                        <Chip variant="soft" color="accent" size="sm" className="gap-1 font-bold">
-                          <span className="text-sm leading-none">{getRegionFlag(editingNode.region || "")}</span>
-                          <span className="leading-none">{editingNode.region || "自动识别中"}</span>
-                        </Chip>
-                      </div>
-
-                      <div className="flex items-center gap-1.5 font-bold">
-                        <span className={isBlueprint ? "text-slate-700" : "text-zinc-300"}>服务商/线路:</span>
-                        <Chip color="success" variant="soft" size="sm" className="font-bold">
-                          {editingNode.provider || "智能测定中..."}
-                        </Chip>
-                      </div>
-
-                      {editingNode.public_ip && (
-                        <span className={`text-11 font-mono ${isBlueprint ? "text-slate-500" : "text-zinc-500"}`}>
-                          (出口 IP: {editingNode.public_ip})
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        type="button"
-                        onPress={handleAutoResolveNodeGeo}
-                        isDisabled={isResolvingGeo}
-                        className="gap-1 font-sans font-medium"
-                        aria-label="根据该节点公网 IP 自动重新解析国家地区与网络线路"
-                      >
-                        <Zap className={`h-3 w-3 ${isResolvingGeo ? "animate-spin" : ""}`} />
-                        <span>{isResolvingGeo ? "识别中..." : "重新识别"}</span>
-                      </Button>
-
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        type="button"
-                        onPress={() => setShowManualOverride(!showManualOverride)}
-                        className="text-10 text-slate-500 dark:text-zinc-400 font-sans"
-                      >
-                        {showManualOverride ? "收起手动覆盖" : "手动微调 ▾"}
-                      </Button>
-                    </div>
-                  </div>
-
-                  {/* Optional Manual Override Inputs (Collapsed by default) */}
-                  {showManualOverride && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 p-3 rounded-xl border border-dashed border-slate-200 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-950/40 text-xs font-sans animate-fade-in">
-                      <div>
-                        <label className={`block mb-1 font-medium ${isBlueprint ? "text-slate-700" : "text-zinc-300"}`}>
-                          强制指定地区 (覆盖自动识别)
-                        </label>
-                        <Input
-                          type="text"
-                          value={editingNode.region || ""}
-                          onChange={(e) => setEditingNode({ ...editingNode, region: e.target.value })}
-                          placeholder="如 HK, US, JP, SG 等"
-                          className="w-full font-sans text-xs"
-                        />
-                      </div>
-                      <div>
-                        <label className={`block mb-1 font-medium ${isBlueprint ? "text-slate-700" : "text-zinc-300"}`}>
-                          强制指定服务商/线路 (覆盖自动识别)
-                        </label>
-                        <Input
-                          type="text"
-                          value={editingNode.provider || ""}
-                          onChange={(e) => setEditingNode({ ...editingNode, provider: e.target.value })}
-                          placeholder="如 BandwagonHost CN2 GIA, Oracle"
-                          className="w-full font-sans text-xs"
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3.5 text-xs font-sans">
-                    <div className="sm:col-span-2 md:col-span-1">
-                      <label className={`block mb-1 font-medium ${isBlueprint ? "text-slate-700" : "text-zinc-300"}`}>
-                        主机展示名称 (Name)
-                      </label>
-                      <Input
-                        type="text"
-                        value={editingNode.name || ""}
-                        onChange={(e) => setEditingNode({ ...editingNode, name: e.target.value })}
-                        className="w-full font-sans text-xs"
-                      />
-                    </div>
-                    <div>
-                      <label className={`block mb-1 font-medium ${isBlueprint ? "text-slate-700" : "text-zinc-300"}`}>
-                        计费单价 (Price)
-                      </label>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        value={editingNode.price}
-                        onChange={(e) => setEditingNode({ ...editingNode, price: parseFloat(e.target.value) || 0 })}
-                        className="w-full font-mono text-xs font-bold"
-                      />
-                    </div>
-                    <div>
-                      <label className={`block mb-1 font-medium ${isBlueprint ? "text-slate-700" : "text-zinc-300"}`}>
-                        货币单位 (Currency)
-                      </label>
-                      <Select
-                        selectedKey={editingNode.currency}
-                        onSelectionChange={(key) => setEditingNode({ ...editingNode, currency: String(key) })}
-                        aria-label="货币单位"
-                        fullWidth
-                      >
-                        <Select.Trigger className="font-mono text-xs font-bold">
-                          <Select.Value />
-                          <Select.Indicator />
-                        </Select.Trigger>
-                        <Select.Popover>
-                          <ListBox>
-                            {CURRENCY_OPTIONS.map((o) => (
-                              <ListBox.Item key={o.key} id={o.key} textValue={o.label}>
-                                {o.label}
-                              </ListBox.Item>
-                            ))}
-                          </ListBox>
-                        </Select.Popover>
-                      </Select>
-                    </div>
-                    <div>
-                      <label className={`block mb-1 font-medium ${isBlueprint ? "text-slate-700" : "text-zinc-300"}`}>
-                        计费周期 (Billing Cycle)
-                      </label>
-                      <Select
-                        selectedKey={editingNode.billing_cycle}
-                        onSelectionChange={(key) => setEditingNode({ ...editingNode, billing_cycle: String(key) })}
-                        aria-label="计费周期"
-                        fullWidth
-                      >
-                        <Select.Trigger className="font-sans text-xs font-semibold">
-                          <Select.Value />
-                          <Select.Indicator />
-                        </Select.Trigger>
-                        <Select.Popover>
-                          <ListBox>
-                            {BILLING_CYCLE_OPTIONS.map((o) => (
-                              <ListBox.Item key={o.key} id={o.key} textValue={o.label}>
-                                {o.label}
-                              </ListBox.Item>
-                            ))}
-                          </ListBox>
-                        </Select.Popover>
-                      </Select>
-                    </div>
-                  </div>
-
-                  {/* DatePicker Component */}
-                  <div>
-                    <label className={`block mb-1 text-xs font-sans font-medium ${isBlueprint ? "text-slate-700" : "text-zinc-300"}`}>
-                      服务到期时间 (Expiry Date)
-                    </label>
-                    <DatePicker
-                      value={editingNode.expiry_date || ""}
-                      onChange={(dateVal) => setEditingNode({ ...editingNode, expiry_date: dateVal })}
-                      theme={theme}
-                    />
-                  </div>
-
-                  {/* BandwidthConfig Component (Unit selection & Auto-conversion) */}
-                  <div>
-                    <label className={`block mb-1 text-xs font-sans font-medium ${isBlueprint ? "text-slate-700" : "text-zinc-300"}`}>
-                      流量配额与使用量设置 (Bandwidth Settings)
-                    </label>
-                    <BandwidthConfig
-                      quotaBytes={editingNode.bandwidth_quota}
-                      usedBytes={editingNode.bandwidth_used || 0}
-                      liveTotalBytes={
-                        (() => {
-                          const nd = nodes.find((n) => n.node_id === editingNode.node_id);
-                          return nd ? (nd.network.bytes_sent || 0) + (nd.network.bytes_recv || 0) : 0;
-                        })()
-                      }
-                      onChange={(newQuota, newUsed) =>
-                        setEditingNode({ ...editingNode, bandwidth_quota: newQuota, bandwidth_used: newUsed })
-                      }
-                      theme={theme}
-                    />
-                  </div>
-
-                  {/* TagInput Component */}
-                  <div>
-                    <label className={`block mb-1 text-xs font-sans font-medium ${isBlueprint ? "text-slate-700" : "text-zinc-300"}`}>
-                      线路与特性标签 (Tags)
-                    </label>
-                    <TagInput
-                      tags={editingNode.tags || []}
-                      onChange={(newTags) => setEditingNode({ ...editingNode, tags: newTags })}
-                      theme={theme}
-                    />
-                  </div>
-
-                  {/* Actions & Auto Renewal */}
-                  <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-dashed border-slate-200 dark:border-zinc-800">
-                    <Switch
-                      isSelected={editingNode.auto_renewal}
-                      onChange={(v) => setEditingNode({ ...editingNode, auto_renewal: v })}
-                      size="sm"
-                      className="text-xs font-sans font-medium"
-                    >
-                      <Switch.Content className="gap-2">
-                        <Switch.Control>
-                          <Switch.Thumb />
-                        </Switch.Control>
-                        <span className={isBlueprint ? "text-slate-800" : "text-zinc-200"}>
-                          开启到期自动续费 (Auto Renewal)
-                        </span>
-                      </Switch.Content>
-                    </Switch>
-
-                    <div className="flex items-center gap-3">
-                      {hostSaveSuccess && (
-                        <Chip color="success" variant="soft" size="sm" className="flex items-center gap-1 text-xs font-sans font-medium">
-                          <Check className="h-3.5 w-3.5" /> 配置保存成功！
-                        </Chip>
-                      )}
-                      <Button
-                        variant="primary"
-                        size="sm"
-                        onPress={handleSaveNodeSettings}
-                        className="font-sans font-medium"
-                      >
-                        保存主机设置
-                      </Button>
-                    </div>
-                  </div>
-                </div>
+              {nodes.length > 0 && filteredHosts.length === 0 && (
+                <p className={cn("text-center text-xs py-2", isBlueprint ? "text-slate-400" : "text-zinc-500")}>
+                  没有匹配「{hostQuery}」的主机
+                </p>
               )}
-
-
-              {/* Registered Hosts List */}
-              <div
-                className={`rounded-xl border overflow-hidden ${
-                  isBlueprint ? "bg-white border-slate-200/90 shadow-xs" : "bg-zinc-900/60 border-zinc-800"
-                }`}
-              >
-                <div
-                  className={`px-5 py-3 border-b text-xs font-sans font-semibold flex items-center justify-between ${
-                    isBlueprint ? "bg-slate-50/80 border-slate-200/80 text-slate-700" : "bg-zinc-900 border-zinc-800 text-zinc-300"
-                  }`}
-                >
-                  <span className="flex items-center gap-2">
-                    <Server className="h-4 w-4 text-indigo-500" />
-                    已注册主机列表 ({nodes.length})
-                  </span>
-                  <span className={`text-xs font-normal ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}>
-                    点击操作栏「配置」即可修改计费、标签及流量配额
-                  </span>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs font-sans">
-                    <thead
-                      className={`border-b text-xs font-semibold ${
-                        isBlueprint ? "bg-slate-50/50 text-slate-600 border-slate-200/80" : "bg-zinc-950/80 text-zinc-400 border-zinc-800"
-                      }`}
-                    >
-                      <tr>
-                        <th className="py-3 px-4">状态</th>
-                        <th className="py-3 px-4">主机名 / ID</th>
-                        <th className="py-3 px-4">地区</th>
-                        <th className="py-3 px-4">系统 / IP</th>
-                        <th className="py-3 px-4">定价 / 周期</th>
-                        <th className="py-3 px-4">已用 / 配额</th>
-                        <th className="py-3 px-4">到期时间</th>
-                        <th className="py-3 px-4 text-right pr-6">操作</th>
-                      </tr>
-                    </thead>
-                    <tbody className={`divide-y ${isBlueprint ? "divide-slate-100" : "divide-zinc-800/60"}`}>
-                      {nodes.map((n) => {
-                        const totalQuota = n.billing?.bandwidth_quota || 0;
-                        const totalUsed = n.billing?.bandwidth_used || ((n.network.bytes_sent || 0) + (n.network.bytes_recv || 0));
-                        const percent = totalQuota > 0 ? Math.min(100, Math.round((totalUsed / totalQuota) * 100)) : 0;
-
-                        return (
-                          <tr
-                            key={n.node_id}
-                            className={`transition-colors ${
-                              isBlueprint ? "hover:bg-slate-50/70" : "hover:bg-zinc-800/30"
-                            }`}
-                          >
-                            <td className="py-3.5 px-4 whitespace-nowrap">
-                              <span
-                                className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-11 font-medium border ${
-                                  n.is_online
-                                    ? isBlueprint
-                                      ? "bg-emerald-50 text-emerald-700 border-emerald-200/80"
-                                      : "bg-emerald-950/40 text-emerald-400 border-emerald-800/60"
-                                    : isBlueprint
-                                    ? "bg-rose-50 text-rose-700 border-rose-200/80"
-                                    : "bg-rose-950/40 text-rose-400 border-rose-800/60"
-                                }`}
-                              >
-                                <span
-                                  className={`h-1.5 w-1.5 rounded-full ${
-                                    n.is_online ? "bg-emerald-500" : "bg-rose-500"
-                                  }`}
-                                />
-                                {n.is_online ? "在线" : "离线"}
-                              </span>
-                            </td>
-                            <td className="py-3.5 px-4 whitespace-nowrap">
-                              <div className={`font-semibold ${isBlueprint ? "text-slate-900" : "text-zinc-100"}`}>
-                                {n.name}
-                              </div>
-                              <div className={`text-11 font-mono ${isBlueprint ? "text-slate-400" : "text-zinc-500"}`}>
-                                {n.node_id}
-                              </div>
-                            </td>
-                            <td className="py-3.5 px-4 whitespace-nowrap">
-                              <span className="flex items-center gap-1.5 font-medium">
-                                <span className="text-base leading-none">{getRegionFlag(n.region)}</span>
-                                <span className={cn("leading-none", isBlueprint ? "text-slate-800" : "text-zinc-200")}>{n.region}</span>
-                              </span>
-                            </td>
-                            <td className="py-3.5 px-4 whitespace-nowrap">
-                              <div className={isBlueprint ? "text-slate-800 font-medium" : "text-zinc-200"}>
-                                {n.system.os || "Linux"}
-                              </div>
-                              <div className={`text-11 font-mono ${isBlueprint ? "text-slate-400" : "text-zinc-500"}`}>
-                                {n.system.public_ip || "127.0.0.1"}
-                              </div>
-                            </td>
-                            <td className="py-3.5 px-4 whitespace-nowrap font-mono">
-                              <div className="font-semibold text-indigo-600 dark:text-indigo-400">
-                                {n.billing?.currency || "$"}{n.billing?.price || n.billing?.price_per_month || 9.9}
-                                <span className={`text-11 font-normal font-sans ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}>
-                                  {" "}/ {n.billing?.billing_cycle || "month"}
-                                </span>
-                              </div>
-                            </td>
-                            <td className="py-3.5 px-4 whitespace-nowrap font-mono">
-                              <div className={`text-xs font-semibold ${isBlueprint ? "text-slate-800" : "text-zinc-200"}`}>
-                                {totalQuota > 0 ? `${percent}%` : "无限制"}
-                              </div>
-                              <div className={`text-10 ${isBlueprint ? "text-slate-400" : "text-zinc-500"}`}>
-                                {n.billing?.bandwidth_quota ? `${(totalQuota / (1024 * 1024 * 1024 * 1024)).toFixed(1)} TB` : "无限"}
-                              </div>
-                            </td>
-                            <td className="py-3.5 px-4 whitespace-nowrap">
-                              <div className={`font-medium ${isBlueprint ? "text-slate-800" : "text-zinc-200"}`}>
-                                {n.billing?.remaining_days != null ? `${n.billing.remaining_days} 天` : "--"}
-                              </div>
-                              <div className={`text-10 font-mono ${isBlueprint ? "text-slate-400" : "text-zinc-500"}`}>
-                                {n.billing?.expiry_date || "未设到期"}
-                              </div>
-                            </td>
-                            <td className="py-3.5 px-4 whitespace-nowrap text-right pr-6">
-                              <div className="flex items-center justify-end gap-1">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onPress={() => handleEditNodeClick(n)}
-                                  className="text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 dark:text-zinc-400 dark:hover:text-indigo-400 dark:hover:bg-indigo-950/40 font-sans gap-1"
-                                  aria-label="配置主机"
-                                >
-                                  <Sliders className="h-3 w-3" />
-                                  <span>配置</span>
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onPress={() => handleDeleteNode(n.node_id)}
-                                  className="text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:text-rose-400 dark:hover:bg-rose-950/40 font-sans gap-1"
-                                  aria-label="删除主机"
-                                >
-                                  <Trash2 className="h-3 w-3" />
-                                  <span>删除</span>
-                                </Button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                      {nodes.length === 0 && (
-                        <tr>
-                          <td colSpan={8} className="py-10 text-center text-slate-400 font-sans">
-                            暂无主机，请使用上方命令快速部署 Agent 探针
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
             </div>
           )}
 
@@ -2914,6 +2313,28 @@ export const AdminModal: React.FC<AdminModalProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* DIALOG: Add host (one-click deploy command) */}
+      {isDeployDialogOpen && (
+        <HostDeployDialog
+          deployToken={deployToken}
+          theme={theme}
+          onClose={() => setIsDeployDialogOpen(false)}
+          onRegenerateToken={handleRegenerateDeployToken}
+        />
+      )}
+
+      {/* DIALOG: Configure an existing host. Keyed on the node so switching rows
+          rebuilds the draft instead of carrying the previous host's values. */}
+      {editingHost && (
+        <HostEditDialog
+          key={editingHost.node_id}
+          node={editingHost}
+          theme={theme}
+          onClose={() => setEditingHost(null)}
+          onSaved={onRefreshNodes}
+        />
       )}
 
     </div>

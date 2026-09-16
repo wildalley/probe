@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { RefreshCw, Infinity as InfinityIcon } from "lucide-react";
-import { Checkbox, Input, ListBox, Select } from "@heroui/react";
+import { Input, ListBox, Select } from "@heroui/react";
 import { formatBytes } from "../utils/format";
 import { cn } from "../lib/utils";
 
@@ -106,23 +106,38 @@ export const BandwidthConfig: React.FC<BandwidthConfigProps> = ({
             <span className={`font-semibold ${isBlueprint ? "text-slate-800" : "text-zinc-200"}`}>
               流量总配额 (Quota)
             </span>
-            <Checkbox
-              isSelected={isUnlimited}
-              onChange={(checked) => handleQuotaChange(quotaVal, quotaUnit, checked)}
+            <button
+              type="button"
+              onClick={() => handleQuotaChange(quotaVal > 0 ? quotaVal : 2, quotaUnit, !isUnlimited)}
+              className={cn(
+                "flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-11 font-semibold transition-all cursor-pointer select-none active:scale-95 border",
+                isUnlimited
+                  ? isBlueprint
+                    ? "bg-indigo-50 text-indigo-600 border-indigo-200 shadow-xs hover:bg-indigo-100"
+                    : "bg-indigo-500/20 text-indigo-300 border-indigo-500/40 hover:bg-indigo-500/30"
+                  : isBlueprint
+                  ? "bg-slate-100/90 text-slate-600 border-slate-200 hover:bg-slate-200/80 hover:text-slate-800"
+                  : "bg-zinc-900 text-zinc-400 border-zinc-700/60 hover:bg-zinc-800 hover:text-zinc-200"
+              )}
+              title={isUnlimited ? "点击关闭无限制并设置具体配额" : "点击开启无限制流量"}
             >
+              <InfinityIcon className={cn("h-3.5 w-3.5", isUnlimited ? "text-indigo-500" : isBlueprint ? "text-slate-400" : "text-zinc-500")} />
+              <span>无限制</span>
               <span
                 className={cn(
-                  "text-11",
+                  "px-1 py-0.2 rounded text-9 uppercase font-bold",
                   isUnlimited
-                    ? "text-indigo-500 font-bold"
+                    ? isBlueprint
+                      ? "bg-indigo-100 text-indigo-700"
+                      : "bg-indigo-500/30 text-indigo-200"
                     : isBlueprint
-                    ? "text-slate-500"
-                    : "text-zinc-400"
+                    ? "bg-slate-200 text-slate-500"
+                    : "bg-zinc-800 text-zinc-500"
                 )}
               >
-                无限制
+                {isUnlimited ? "ON" : "OFF"}
               </span>
-            </Checkbox>
+            </button>
           </div>
 
           {!isUnlimited ? (
@@ -142,14 +157,33 @@ export const BandwidthConfig: React.FC<BandwidthConfigProps> = ({
                 onSelectionChange={(key) => handleUnitSwitchQuota(key as Unit)}
                 aria-label="流量总配额单位"
               >
-                <Select.Trigger className="font-mono font-bold">
+                <Select.Trigger className={cn(
+                  "font-mono font-bold text-xs h-9 px-2.5 rounded-xl border transition-all cursor-pointer",
+                  isBlueprint
+                    ? "bg-white border-slate-200 hover:border-slate-300 text-slate-800 shadow-xs"
+                    : "bg-zinc-900 border-zinc-800 hover:border-zinc-700 text-zinc-100"
+                )}>
                   <Select.Value />
                   <Select.Indicator />
                 </Select.Trigger>
-                <Select.Popover>
+                <Select.Popover className={cn(
+                  "p-1 rounded-xl border shadow-xl z-[70] min-w-[72px] animate-fade-in",
+                  isBlueprint
+                    ? "bg-white border-slate-200 text-slate-800 shadow-slate-200/80"
+                    : "bg-zinc-900 border-zinc-700 text-zinc-100 shadow-black/80"
+                )}>
                   <ListBox>
                     {(["TB", "GB", "MB"] as const).map((u) => (
-                      <ListBox.Item key={u} id={u}>
+                      <ListBox.Item
+                        key={u}
+                        id={u}
+                        className={cn(
+                          "px-2.5 py-1.5 text-xs font-mono font-medium rounded-lg cursor-pointer transition-colors",
+                          isBlueprint
+                            ? "hover:bg-slate-100 text-slate-800 data-[selected=true]:bg-indigo-50 data-[selected=true]:text-indigo-600 data-[selected=true]:font-bold"
+                            : "hover:bg-zinc-800 text-zinc-200 data-[selected=true]:bg-indigo-500/20 data-[selected=true]:text-indigo-300 data-[selected=true]:font-bold"
+                        )}
+                      >
                         {u}
                       </ListBox.Item>
                     ))}
@@ -158,11 +192,35 @@ export const BandwidthConfig: React.FC<BandwidthConfigProps> = ({
               </Select>
             </div>
           ) : (
-            <div className={`py-1.5 px-3 rounded-lg border text-center font-bold flex items-center justify-center gap-1.5 ${
-              isBlueprint ? "bg-slate-50 border-slate-200 text-slate-600" : "bg-zinc-900 border-zinc-800 text-zinc-400"
+            <div className={`py-2 px-3 rounded-xl border flex items-center justify-between gap-2 ${
+              isBlueprint ? "bg-indigo-50/40 border-indigo-100 text-slate-700" : "bg-indigo-950/20 border-indigo-900/40 text-zinc-300"
             }`}>
-              <InfinityIcon className="h-4 w-4 text-indigo-500" />
-              <span>无限流量 (不限制用量)</span>
+              <div className="flex items-center gap-2">
+                <div className={`p-1.5 rounded-lg shrink-0 ${
+                  isBlueprint ? "bg-indigo-100 text-indigo-600" : "bg-indigo-500/20 text-indigo-400"
+                }`}>
+                  <InfinityIcon className="h-4 w-4" />
+                </div>
+                <div>
+                  <div className={`font-semibold text-xs ${isBlueprint ? "text-slate-900" : "text-zinc-100"}`}>
+                    无限流量模式
+                  </div>
+                  <div className={`text-10 ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}>
+                    不限制服务器月度流量总额
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleQuotaChange(quotaVal > 0 ? quotaVal : 2, quotaUnit, false)}
+                className={`px-2.5 py-1 rounded-lg text-11 font-semibold border transition-all cursor-pointer shrink-0 active:scale-95 ${
+                  isBlueprint
+                    ? "bg-white border-slate-200 text-slate-700 hover:bg-slate-50 shadow-xs"
+                    : "bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700"
+                }`}
+              >
+                自定义配额
+              </button>
             </div>
           )}
         </div>
@@ -206,14 +264,33 @@ export const BandwidthConfig: React.FC<BandwidthConfigProps> = ({
               onSelectionChange={(key) => handleUnitSwitchUsed(key as Unit)}
               aria-label="已用流量单位"
             >
-              <Select.Trigger className="font-mono font-bold">
+              <Select.Trigger className={cn(
+                "font-mono font-bold text-xs h-9 px-2.5 rounded-xl border transition-all cursor-pointer",
+                isBlueprint
+                  ? "bg-white border-slate-200 hover:border-slate-300 text-slate-800 shadow-xs"
+                  : "bg-zinc-900 border-zinc-800 hover:border-zinc-700 text-zinc-100"
+              )}>
                 <Select.Value />
                 <Select.Indicator />
               </Select.Trigger>
-              <Select.Popover>
+              <Select.Popover className={cn(
+                "p-1 rounded-xl border shadow-xl z-[70] min-w-[72px] animate-fade-in",
+                isBlueprint
+                  ? "bg-white border-slate-200 text-slate-800 shadow-slate-200/80"
+                  : "bg-zinc-900 border-zinc-700 text-zinc-100 shadow-black/80"
+              )}>
                 <ListBox>
                   {(["GB", "TB", "MB"] as const).map((u) => (
-                    <ListBox.Item key={u} id={u}>
+                    <ListBox.Item
+                      key={u}
+                      id={u}
+                      className={cn(
+                        "px-2.5 py-1.5 text-xs font-mono font-medium rounded-lg cursor-pointer transition-colors",
+                        isBlueprint
+                          ? "hover:bg-slate-100 text-slate-800 data-[selected=true]:bg-indigo-50 data-[selected=true]:text-indigo-600 data-[selected=true]:font-bold"
+                          : "hover:bg-zinc-800 text-zinc-200 data-[selected=true]:bg-indigo-500/20 data-[selected=true]:text-indigo-300 data-[selected=true]:font-bold"
+                      )}
+                    >
                       {u}
                     </ListBox.Item>
                   ))}

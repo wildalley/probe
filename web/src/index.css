@@ -8,7 +8,52 @@
    pieces are imported individually and Tailwind stays imported once, above. */
 @import "@heroui/styles/base";
 @import "@heroui/styles/base/scrollbar.css" layer(base);
-@import "@heroui/styles/components/index.css" layer(components);
+
+/* Only the components this app actually renders, instead of the barrel
+   `components/index.css` that pulls in all 83 of them. That barrel documents
+   its own import order as significant for specificity, so this list keeps its
+   relative order and only drops entries. Adding a HeroUI component to the app
+   means adding its stylesheet here — and its slots' too, listed alongside. */
+/* Shared primitives — must come first so component rules can override them. */
+@import "@heroui/styles/components/close-button.css" layer(components);
+@import "@heroui/styles/components/description.css" layer(components);
+@import "@heroui/styles/components/error-message.css" layer(components);
+@import "@heroui/styles/components/field-error.css" layer(components);
+@import "@heroui/styles/components/label.css" layer(components);
+/* Tabs (+ scroll-shadow, rendered by its tab list) */
+@import "@heroui/styles/components/tabs.css" layer(components);
+/* Button */
+@import "@heroui/styles/components/button.css" layer(components);
+@import "@heroui/styles/components/button-group.css" layer(components);
+/* ListBox + Select options */
+@import "@heroui/styles/components/list-box-item.css" layer(components);
+@import "@heroui/styles/components/list-box-section.css" layer(components);
+@import "@heroui/styles/components/list-box.css" layer(components);
+/* Switch */
+@import "@heroui/styles/components/switch.css" layer(components);
+@import "@heroui/styles/components/switch-group.css" layer(components);
+/* Chip */
+@import "@heroui/styles/components/chip.css" layer(components);
+/* Input */
+@import "@heroui/styles/components/input.css" layer(components);
+@import "@heroui/styles/components/input-group.css" layer(components);
+@import "@heroui/styles/components/textfield.css" layer(components);
+/* Calendar + DatePicker */
+@import "@heroui/styles/components/calendar.css" layer(components);
+@import "@heroui/styles/components/calendar-year-picker.css" layer(components);
+@import "@heroui/styles/components/date-field.css" layer(components);
+@import "@heroui/styles/components/date-input-group.css" layer(components);
+@import "@heroui/styles/components/date-picker.css" layer(components);
+/* Overlay plumbing shared by Select.Popover and DatePicker.Popover */
+@import "@heroui/styles/components/separator.css" layer(components);
+@import "@heroui/styles/components/surface.css" layer(components);
+@import "@heroui/styles/components/popover.css" layer(components);
+/* Select (combo-box carries shared field styling it builds on) */
+@import "@heroui/styles/components/combo-box.css" layer(components);
+@import "@heroui/styles/components/select.css" layer(components);
+@import "@heroui/styles/components/typography.css" layer(components);
+@import "@heroui/styles/components/scroll-shadow.css" layer(components);
+
 @import "@heroui/styles/themes/default";
 @import "@heroui/styles/utilities";
 @import "@heroui/styles/variants";
@@ -106,6 +151,215 @@
     color: #f4f4f5;
     overflow-x: hidden;
   }
+
+  html.blueprint body,
+  html[data-theme="light"] body {
+    background-color: #f8fafc;
+    color: #0f172a;
+  }
+}
+
+/* ==========================================================================
+   HeroUI Overlays, Popovers, Dropdowns & Calendar High Contrast Theme Styles
+   ========================================================================== */
+
+/* Popover & Floating Panels (Select, DatePicker, Dropdown) */
+.popover,
+[data-slot="popover"],
+[data-slot="date-picker-popover"],
+.date-picker__popover,
+.select__popover {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border: 1px solid #cbd5e1 !important;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05) !important;
+}
+
+.dark .popover,
+.dark [data-slot="popover"],
+.dark [data-slot="date-picker-popover"],
+.dark .date-picker__popover,
+.dark .select__popover,
+[data-theme="dark"] .popover,
+[data-theme="dark"] [data-slot="popover"],
+[data-theme="dark"] [data-slot="date-picker-popover"],
+[data-theme="dark"] .date-picker__popover,
+[data-theme="dark"] .select__popover {
+  background-color: #18181b !important;
+  color: #f4f4f5 !important;
+  border: 1px solid #27272a !important;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6) !important;
+}
+
+/* ListBox & Dropdown Items */
+.list-box-item,
+[data-slot="list-box-item"] {
+  color: #1e293b !important;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: 0.5rem;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.list-box-item:hover,
+.list-box-item[data-hovered="true"],
+[data-slot="list-box-item"]:hover,
+[data-slot="list-box-item"][data-hovered="true"] {
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
+}
+
+.list-box-item[data-selected="true"],
+.list-box-item[aria-selected="true"],
+[data-slot="list-box-item"][data-selected="true"],
+[data-slot="list-box-item"][aria-selected="true"] {
+  background-color: #e0e7ff !important;
+  color: #4338ca !important;
+  font-weight: 600;
+}
+
+.dark .list-box-item,
+.dark [data-slot="list-box-item"],
+[data-theme="dark"] .list-box-item,
+[data-theme="dark"] [data-slot="list-box-item"] {
+  color: #e4e4e7 !important;
+}
+
+.dark .list-box-item:hover,
+.dark .list-box-item[data-hovered="true"],
+.dark [data-slot="list-box-item"]:hover,
+.dark [data-slot="list-box-item"][data-hovered="true"],
+[data-theme="dark"] .list-box-item:hover,
+[data-theme="dark"] .list-box-item[data-hovered="true"],
+[data-theme="dark"] [data-slot="list-box-item"]:hover,
+[data-theme="dark"] [data-slot="list-box-item"][data-hovered="true"] {
+  background-color: #27272a !important;
+  color: #fafafa !important;
+}
+
+.dark .list-box-item[data-selected="true"],
+.dark .list-box-item[aria-selected="true"],
+.dark [data-slot="list-box-item"][data-selected="true"],
+.dark [data-slot="list-box-item"][aria-selected="true"],
+[data-theme="dark"] .list-box-item[data-selected="true"],
+[data-theme="dark"] .list-box-item[aria-selected="true"],
+[data-theme="dark"] [data-slot="list-box-item"][data-selected="true"],
+[data-theme="dark"] [data-slot="list-box-item"][aria-selected="true"] {
+  background-color: rgba(99, 102, 241, 0.2) !important;
+  color: #a5b4fc !important;
+  font-weight: 600;
+}
+
+.list-box-item__indicator {
+  color: #4338ca !important;
+}
+.dark .list-box-item__indicator,
+[data-theme="dark"] .list-box-item__indicator {
+  color: #a5b4fc !important;
+}
+
+/* Select Trigger Borders */
+.select__trigger,
+[data-slot="select-trigger"] {
+  border: 1px solid #cbd5e1;
+}
+.select__trigger:hover,
+[data-slot="select-trigger"]:hover {
+  border-color: #94a3b8;
+}
+.dark .select__trigger,
+.dark [data-slot="select-trigger"],
+[data-theme="dark"] .select__trigger,
+[data-theme="dark"] [data-slot="select-trigger"] {
+  border: 1px solid #27272a;
+}
+.dark .select__trigger:hover,
+.dark [data-slot="select-trigger"]:hover,
+[data-theme="dark"] .select__trigger:hover,
+[data-theme="dark"] [data-slot="select-trigger"]:hover {
+  border-color: #3f3f46;
+}
+
+/* Calendar Styles */
+.calendar {
+  color: inherit;
+}
+.calendar__heading {
+  color: #0f172a;
+  font-weight: 600;
+}
+.dark .calendar__heading,
+[data-theme="dark"] .calendar__heading {
+  color: #f4f4f5;
+}
+
+.calendar__header-cell {
+  color: #64748b;
+  font-weight: 600;
+  font-size: 11px;
+}
+.dark .calendar__header-cell,
+[data-theme="dark"] .calendar__header-cell {
+  color: #a1a1aa;
+}
+
+.calendar__cell {
+  color: #1e293b;
+  font-weight: 500;
+  border-radius: 9999px;
+  transition: all 0.15s ease;
+}
+.calendar__cell:hover:not([data-selected="true"]) {
+  background-color: #f1f5f9;
+  color: #0f172a;
+}
+.calendar__cell[data-selected="true"] {
+  background-color: #4f46e5 !important;
+  color: #ffffff !important;
+  font-weight: 700;
+  box-shadow: 0 2px 4px rgba(79, 70, 229, 0.3);
+}
+.calendar__cell[data-today="true"]:not([data-selected="true"]) {
+  border: 1px solid #6366f1;
+  color: #4338ca;
+  font-weight: 600;
+}
+
+.dark .calendar__cell {
+  color: #e4e4e7;
+}
+.dark .calendar__cell:hover:not([data-selected="true"]) {
+  background-color: #27272a;
+  color: #fafafa;
+}
+.dark .calendar__cell[data-selected="true"] {
+  background-color: #6366f1 !important;
+  color: #ffffff !important;
+  font-weight: 700;
+  box-shadow: 0 2px 4px rgba(99, 102, 241, 0.4);
+}
+.dark .calendar__cell[data-today="true"]:not([data-selected="true"]) {
+  border: 1px solid #818cf8;
+  color: #a5b4fc;
+  font-weight: 600;
+}
+
+.calendar__nav-button {
+  color: #64748b;
+  border-radius: 0.5rem;
+  padding: 0.25rem;
+  transition: all 0.15s ease;
+}
+.calendar__nav-button:hover {
+  background-color: #f1f5f9;
+  color: #0f172a;
+}
+.dark .calendar__nav-button {
+  color: #a1a1aa;
+}
+.dark .calendar__nav-button:hover {
+  background-color: #27272a;
+  color: #fafafa;
 }
 
 /* Cyber dark background grid pattern */
