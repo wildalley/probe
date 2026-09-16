@@ -165,7 +165,7 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
 
   // Fetch configured ping targets
   useEffect(() => {
-    fetch("/api/v1/ping-targets")
+    fetch(`/api/v1/ping-targets?node_id=${encodeURIComponent(node.node_id)}`)
       .then((res) => res.json())
       .then((data) => {
         if (data.targets && Array.isArray(data.targets)) {
@@ -173,31 +173,40 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
         }
       })
       .catch((err) => console.error("Failed to fetch ping targets:", err));
-  }, []);
+  }, [node.node_id]);
 
   // Dynamic ping targets list merging live node.pings and system configured targets
   const displayPings: PingStat[] = useMemo(() => {
     const liveMap = new Map<string, PingStat>();
     if (node.pings) {
       node.pings.forEach((p) => {
-        liveMap.set(p.label, p);
-        liveMap.set(p.target, p);
+        if (p.id) liveMap.set(`id:${p.id}`, p);
+        liveMap.set(`label:${p.label}`, p);
+        liveMap.set(`target:${p.target}`, p);
       });
     }
 
     if (configuredTargets.length > 0) {
+      const labelCounts = new Map<string, number>();
+      configuredTargets.forEach((ct) => labelCounts.set(ct.label, (labelCounts.get(ct.label) || 0) + 1));
       return configuredTargets.map((ct) => {
-        const live = liveMap.get(ct.label) || liveMap.get(ct.target);
+        const label = (labelCounts.get(ct.label) || 0) > 1
+          ? `${ct.label} (${ct.id ? `#${ct.id}` : ct.target})`
+          : ct.label;
+        const live = (ct.id ? liveMap.get(`id:${ct.id}`) : undefined)
+          || liveMap.get(`target:${ct.target}`)
+          || liveMap.get(`label:${label}`);
         if (live) {
           return {
             ...live,
-            label: ct.label,
+            label,
             color: ct.color || live.color,
           };
         }
         return {
+          id: ct.id,
           target: ct.target,
-          label: ct.label,
+          label,
           color: ct.color || "#3b82f6",
           latency_ms: 0,
           packet_loss: 0,

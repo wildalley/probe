@@ -16,6 +16,7 @@ type NodeReport struct {
 
 // PingStat represents latency, packet loss, and jitter to a monitored target.
 type PingStat struct {
+	ID         int64   `json:"id,omitempty"`
 	Target     string  `json:"target"`      // e.g. "8.8.8.8" or "www.google.com"
 	Label      string  `json:"label"`       // e.g. "Google", "电信", "Youtube", "ChatGPT", "Claude"
 	Color      string  `json:"color"`       // Visual indicator color (hex or tailwind)
@@ -47,11 +48,14 @@ type PingTargetConfig struct {
 	Color     string   `json:"color"`
 	Protocol  string   `json:"protocol"` // "icmp", "tcp", "http"
 	Port      int      `json:"port"`
-	Interval  int      `json:"interval"` // Detection interval in seconds (e.g. 60)
-	Servers   []string `json:"servers"`  // Targeted node IDs (empty slice means all servers)
+	Interval  int      `json:"interval"`   // Detection interval in seconds (e.g. 60)
+	Servers   []string `json:"servers"`    // Targeted node IDs (empty slice means all servers)
 	AutoStart bool     `json:"auto_start"` // Whether newly added nodes auto-monitor this
-	Enabled   bool     `json:"enabled"`
-	CreatedAt int64    `json:"created_at"`
+	// AssignedServers freezes the existing node set when AutoStart is disabled
+	// and Servers is empty. It is internal to the server, not an API field.
+	AssignedServers []string `json:"-"`
+	Enabled         bool     `json:"enabled"`
+	CreatedAt       int64    `json:"created_at"`
 }
 
 // NodeSettings contains user-configured billing details and overrides.
@@ -85,7 +89,7 @@ type SystemInfo struct {
 	Kernel         string  `json:"kernel"`
 	Uptime         uint64  `json:"uptime"`
 	CPUModel       string  `json:"cpu_model"`
-	CPUMark        string  `json:"cpu_mark"` // e.g. "中端服务器级"
+	CPUMark        string  `json:"cpu_mark"`       // e.g. "中端服务器级"
 	Virtualization string  `json:"virtualization"` // e.g. "kvm", "docker"
 	PublicIP       string  `json:"public_ip"`
 	CPUPercent     float64 `json:"cpu_percent"`
@@ -138,21 +142,21 @@ type NodeState struct {
 
 // HistoryPoint represents downsampled telemetry points stored in SQLite for the 6 charts.
 type HistoryPoint struct {
-	NodeID         string  `json:"node_id"`
-	Timestamp      int64   `json:"timestamp"`
-	CPUPercent     float64 `json:"cpu_percent"`
-	Load1          float64 `json:"load_1"`
-	MemUsed        uint64  `json:"mem_used"`
-	MemTotal       uint64  `json:"mem_total"`
-	SwapUsed       uint64  `json:"swap_used"`
-	SwapTotal      uint64  `json:"swap_total"`
-	DiskUsed       uint64  `json:"disk_used"`
-	DiskTotal      uint64  `json:"disk_total"`
-	RateDownload   float64 `json:"rate_download"`
-	RateUpload     float64 `json:"rate_upload"`
-	TCPCount       int     `json:"tcp_count"`
-	UDPCount       int     `json:"udp_count"`
-	ProcessCount   int     `json:"process_count"`
+	NodeID       string  `json:"node_id"`
+	Timestamp    int64   `json:"timestamp"`
+	CPUPercent   float64 `json:"cpu_percent"`
+	Load1        float64 `json:"load_1"`
+	MemUsed      uint64  `json:"mem_used"`
+	MemTotal     uint64  `json:"mem_total"`
+	SwapUsed     uint64  `json:"swap_used"`
+	SwapTotal    uint64  `json:"swap_total"`
+	DiskUsed     uint64  `json:"disk_used"`
+	DiskTotal    uint64  `json:"disk_total"`
+	RateDownload float64 `json:"rate_download"`
+	RateUpload   float64 `json:"rate_upload"`
+	TCPCount     int     `json:"tcp_count"`
+	UDPCount     int     `json:"udp_count"`
+	ProcessCount int     `json:"process_count"`
 }
 
 // PingHistoryPoint represents downsampled ping latency & loss.
@@ -184,6 +188,7 @@ type WSEvent struct {
 	Type      string      `json:"type"`
 	Timestamp int64       `json:"timestamp"`
 	Data      interface{} `json:"data"`
+	Sequence  uint64      `json:"-"`
 }
 
 // NotificationSettings defines channel credentials and alerting rules.
@@ -238,4 +243,3 @@ type NotificationLog struct {
 	Status    string `json:"status"` // "success", "failed"
 	ErrorMsg  string `json:"error_msg,omitempty"`
 }
-

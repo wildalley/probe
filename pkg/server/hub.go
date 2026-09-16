@@ -3,21 +3,26 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"math"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"probe/pkg/model"
+	"probe/pkg/netguard"
 
 	"github.com/gorilla/websocket"
 )
 
 var (
-	geoIPCache sync.Map // map[string]*GeoIPDetails
+	geoIPCache    sync.Map // map[string]*GeoIPDetails
+	ErrNodeActive = errors.New("stop the agent before deleting this node")
 )
 
 // GeoIPDetails contains resolved geographic location, ISP, ASN, provider, and line tag.
@@ -36,7 +41,11 @@ type GeoIPDetails struct {
 // ResolveNodeGeoAndProvider queries multi-source IP geolocation & ASN APIs with caching.
 func ResolveNodeGeoAndProvider(ip string) *GeoIPDetails {
 	ip = strings.TrimSpace(ip)
-	if ip == "" || ip == "127.0.0.1" || ip == "::1" || strings.HasPrefix(ip, "192.168.") || strings.HasPrefix(ip, "10.") || strings.HasPrefix(ip, "172.") {
+	parsedIP := net.ParseIP(ip)
+	if parsedIP == nil {
+		return nil
+	}
+	if netguard.IsBlockedIP(parsedIP) {
 		return &GeoIPDetails{
 			IP:          ip,
 			CountryCode: "LOCAL",
@@ -56,7 +65,7 @@ func ResolveNodeGeoAndProvider(ip string) *GeoIPDetails {
 	// `ip` reaches here from an agent report or the lookup endpoint, and is
 	// interpolated into the request path below, so the dial goes through the
 	// outbound guard like every other operator-influenced request.
-	client := newGuardedHTTPClient(4 * time.Second)
+	client := netguard.NewGuardedHTTPClient(4 * time.Second)
 	var details GeoIPDetails
 	details.IP = ip
 
@@ -238,10 +247,13 @@ type Hub struct {
 	ratesMu       sync.RWMutex
 	exchangeRates map[string]float64
 
-	agentMu    sync.RWMutex
-	agentConns map[string]*wsWriteQueue
+	agentMu      sync.RWMutex
+	agentConns   map[string]*wsWriteQueue
+	targetSyncMu sync.Mutex
 
 	broadcastChan  chan *model.WSEvent
+	broadcastMu    sync.Mutex
+	broadcastSeq   atomic.Uint64
 	offlineTimeout int64 // in seconds, e.g. 6s
 
 	notifierMu sync.RWMutex
@@ -337,49 +349,71 @@ func (h *Hub) ReloadSettings() {
 // reveal their node ID in the payload, so re-registering the same queue is a
 // no-op — otherwise each report would trigger another config query and push.
 func (h *Hub) RegisterAgent(nodeID string, q *wsWriteQueue) {
+	h.targetSyncMu.Lock()
+	defer h.targetSyncMu.Unlock()
 	h.agentMu.Lock()
+	if q.IsClosed() {
+		h.agentMu.Unlock()
+		return
+	}
 	if existing, ok := h.agentConns[nodeID]; ok && existing == q {
 		h.agentMu.Unlock()
 		return
 	}
+	if existing := h.agentConns[nodeID]; existing != nil {
+		existing.Close()
+	}
 	h.agentConns[nodeID] = q
 	h.agentMu.Unlock()
 
-	if payload, ok := h.pingTargetsPayload(); ok {
-		q.Send(payload)
+	targets, err := h.storage.GetPingTargets()
+	if err == nil {
+		payload, ok := pingTargetsPayload(nodeID, targets)
+		if !ok {
+			return
+		}
+		if !q.Send(payload) {
+			q.Close()
+		}
 	}
 }
 
 // UnregisterAgent removes an agent connection.
-func (h *Hub) UnregisterAgent(nodeID string) {
+func (h *Hub) UnregisterAgent(nodeID string, q *wsWriteQueue) {
 	h.agentMu.Lock()
-	delete(h.agentConns, nodeID)
+	if h.agentConns[nodeID] == q {
+		delete(h.agentConns, nodeID)
+	}
 	h.agentMu.Unlock()
 }
 
 // BroadcastPingTargetsSync pushes active targets to all connected agents.
 func (h *Hub) BroadcastPingTargetsSync() {
-	payload, ok := h.pingTargetsPayload()
-	if !ok {
+	h.targetSyncMu.Lock()
+	defer h.targetSyncMu.Unlock()
+	targets, err := h.storage.GetPingTargets()
+	if err != nil {
 		return
 	}
 
 	h.agentMu.RLock()
 	defer h.agentMu.RUnlock()
-	for _, q := range h.agentConns {
-		q.Send(payload)
+	for nodeID, q := range h.agentConns {
+		payload, ok := pingTargetsPayload(nodeID, targets)
+		if !ok {
+			continue
+		}
+		if !q.Send(payload) {
+			q.Close()
+		}
 	}
 }
 
-// pingTargetsPayload builds the config_sync frame listing every enabled target.
-func (h *Hub) pingTargetsPayload() ([]byte, bool) {
-	targets, err := h.storage.GetPingTargets()
-	if err != nil {
-		return nil, false
-	}
+// pingTargetsPayload builds the config_sync frame for one agent.
+func pingTargetsPayload(nodeID string, targets []model.PingTargetConfig) ([]byte, bool) {
 	active := make([]model.PingTargetConfig, 0, len(targets))
 	for _, t := range targets {
-		if t.Enabled {
+		if t.Enabled && targetAppliesToNode(t, nodeID) && netguard.ValidatePingTarget(t.Protocol, t.Target, t.Port) == nil {
 			active = append(active, t)
 		}
 	}
@@ -394,6 +428,22 @@ func (h *Hub) pingTargetsPayload() ([]byte, bool) {
 		return nil, false
 	}
 	return payload, true
+}
+
+func targetAppliesToNode(t model.PingTargetConfig, nodeID string) bool {
+	if len(t.Servers) > 0 {
+		return containsNodeID(t.Servers, nodeID)
+	}
+	return t.AutoStart || containsNodeID(t.AssignedServers, nodeID)
+}
+
+func containsNodeID(ids []string, nodeID string) bool {
+	for _, id := range ids {
+		if id == nodeID {
+			return true
+		}
+	}
+	return false
 }
 
 // IngestReport processes an incoming metric payload from an Agent.
@@ -418,7 +468,7 @@ func (h *Hub) IngestReport(report *model.NodeReport) {
 
 	ip := strings.TrimSpace(report.System.PublicIP)
 	var geoDetails *GeoIPDetails
-	if ip != "" && ip != "127.0.0.1" && ip != "::1" {
+	if net.ParseIP(ip) != nil && ip != "127.0.0.1" && ip != "::1" {
 		if val, ok := geoIPCache.Load(ip); ok {
 			geoDetails, _ = val.(*GeoIPDetails)
 		}
@@ -443,13 +493,14 @@ func (h *Hub) IngestReport(report *model.NodeReport) {
 				tags = []string{geoDetails.LineTag, "1Gbps", geoDetails.CountryCode}
 			}
 		}
-	} else if ip != "" && ip != "127.0.0.1" && ip != "::1" {
+	} else if net.ParseIP(ip) != nil && ip != "127.0.0.1" && ip != "::1" {
 		// Launch background async resolution and push update when resolved
 		go func(nodeID, targetIP string) {
 			details := ResolveNodeGeoAndProvider(targetIP)
 			if details != nil && details.CountryCode != "" && details.CountryCode != "GLOBAL" {
 				h.mu.Lock()
-				if st, found := h.nodeStates[nodeID]; found {
+				if current, found := h.nodeStates[nodeID]; found && current.System.PublicIP == targetIP {
+					st := cloneNodeState(current)
 					h.settingsMu.RLock()
 					customSettings := h.nodeSettings[nodeID]
 					h.settingsMu.RUnlock()
@@ -471,6 +522,7 @@ func (h *Hub) IngestReport(report *model.NodeReport) {
 						updated = true
 					}
 					if updated {
+						h.nodeStates[nodeID] = st
 						_ = h.storage.UpsertNode(&model.NodeMetadata{
 							NodeID:   st.NodeID,
 							Name:     st.Name,
@@ -483,7 +535,7 @@ func (h *Hub) IngestReport(report *model.NodeReport) {
 						h.sendBroadcast(&model.WSEvent{
 							Type:      "node_update",
 							Timestamp: time.Now().Unix(),
-							Data:      st,
+							Data:      cloneNodeState(st),
 						})
 					}
 				}
@@ -603,7 +655,7 @@ func (h *Hub) IngestReport(report *model.NodeReport) {
 	h.sendBroadcast(&model.WSEvent{
 		Type:      "node_update",
 		Timestamp: now,
-		Data:      state,
+		Data:      cloneNodeState(state),
 	})
 }
 
@@ -719,13 +771,15 @@ func (h *Hub) checkOfflineNodes() {
 	}
 
 	h.mu.Lock()
-	for _, state := range h.nodeStates {
-		if state.IsOnline && (now-state.LastSeen > timeout) {
+	for nodeID, current := range h.nodeStates {
+		if current.IsOnline && (now-current.LastSeen > timeout) {
+			state := cloneNodeState(current)
 			state.IsOnline = false
 			state.RateDown = 0
 			state.RateUp = 0
 			state.Network.RateDownload = 0
 			state.Network.RateUpload = 0
+			h.nodeStates[nodeID] = state
 			transitionedOffline = append(transitionedOffline, state)
 		}
 	}
@@ -744,7 +798,7 @@ func (h *Hub) checkOfflineNodes() {
 		h.sendBroadcast(&model.WSEvent{
 			Type:      "node_offline",
 			Timestamp: now,
-			Data:      state,
+			Data:      cloneNodeState(state),
 		})
 
 		if notif != nil {
@@ -754,10 +808,20 @@ func (h *Hub) checkOfflineNodes() {
 }
 
 func (h *Hub) sendBroadcast(event *model.WSEvent) {
+	h.broadcastMu.Lock()
+	defer h.broadcastMu.Unlock()
+	event.Sequence = h.broadcastSeq.Add(1)
 	select {
 	case h.broadcastChan <- event:
 	default:
-		// Queue full, drop event to keep server non-blocking
+		// The dashboard may have missed a node_delete or other one-time event.
+		// Reconnect every client so it receives an authoritative snapshot.
+		h.clientsMu.Lock()
+		for q := range h.clients {
+			q.Close()
+			delete(h.clients, q)
+		}
+		h.clientsMu.Unlock()
 	}
 }
 
@@ -767,17 +831,14 @@ func (h *Hub) sendBroadcast(event *model.WSEvent) {
 func (h *Hub) RegisterClient(conn *websocket.Conn) *wsWriteQueue {
 	q := newWSWriteQueue(conn)
 
-	h.clientsMu.Lock()
-	h.clients[q] = struct{}{}
-	h.clientsMu.Unlock()
-
-	// Immediately send snapshot of all nodes
+	// Read the state before admitting this queue to broadcasts. Events already
+	// pending in the hub channel have a sequence at or below minSequence and
+	// must not be delivered after this snapshot.
 	h.mu.RLock()
 	snapshot := make([]*model.NodeState, 0, len(h.nodeStates))
 	for _, s := range h.nodeStates {
 		snapshot = append(snapshot, cloneNodeState(s))
 	}
-	h.mu.RUnlock()
 
 	event := &model.WSEvent{
 		Type:      "nodes_snapshot",
@@ -785,9 +846,21 @@ func (h *Hub) RegisterClient(conn *websocket.Conn) *wsWriteQueue {
 		Data:      snapshot,
 	}
 
-	if payload, err := json.Marshal(event); err == nil {
-		q.Send(payload)
+	payload, err := json.Marshal(event)
+	if err != nil {
+		h.mu.RUnlock()
+		q.Close()
+		return q
 	}
+	h.clientsMu.Lock()
+	q.minSequence = h.broadcastSeq.Load()
+	if q.Send(payload) {
+		h.clients[q] = struct{}{}
+	} else {
+		q.Close()
+	}
+	h.clientsMu.Unlock()
+	h.mu.RUnlock()
 	return q
 }
 
@@ -805,12 +878,15 @@ func (h *Hub) broadcastToClients(event *model.WSEvent) {
 		return
 	}
 
-	// Send never blocks, so holding the read lock here cannot be stalled by a
-	// slow peer: its frame is dropped and the queue reports back instead.
+	// A client whose queue is full has missed a state transition. Close its
+	// socket so the dashboard reconnects and receives a fresh snapshot.
 	h.clientsMu.RLock()
 	var toRemove []*wsWriteQueue
 	for q := range h.clients {
-		if !q.Send(payload) && q.IsClosed() {
+		if event.Sequence <= q.minSequence {
+			continue
+		}
+		if !q.Send(payload) {
 			toRemove = append(toRemove, q)
 		}
 	}
@@ -828,11 +904,9 @@ func (h *Hub) broadcastToClients(event *model.WSEvent) {
 
 // cloneNodeState returns a copy that callers may read without holding h.mu.
 //
-// Handing out the stored pointer raced with IngestReport, which mutates these
-// structs in place: an HTTP handler could be serializing a node while its next
-// report was being applied. The struct copy covers the scalar and embedded
-// value fields; Tags and Pings are slices and need their backing arrays copied
-// too.
+// Handing out the stored pointer lets later state transitions race with JSON
+// serialization. The struct copy covers scalar and embedded value fields;
+// Tags and Pings need their backing arrays copied too.
 func cloneNodeState(s *model.NodeState) *model.NodeState {
 	if s == nil {
 		return nil
@@ -874,7 +948,17 @@ func (h *Hub) GetNodeState(nodeID string) (*model.NodeState, bool) {
 
 // DeleteNode removes node from memory and storage.
 func (h *Hub) DeleteNode(nodeID string) error {
+	h.agentMu.RLock()
+	_, connected := h.agentConns[nodeID]
+	h.agentMu.RUnlock()
+	if connected {
+		return ErrNodeActive
+	}
 	h.mu.Lock()
+	if state := h.nodeStates[nodeID]; state != nil && state.IsOnline {
+		h.mu.Unlock()
+		return ErrNodeActive
+	}
 	delete(h.nodeStates, nodeID)
 	h.mu.Unlock()
 

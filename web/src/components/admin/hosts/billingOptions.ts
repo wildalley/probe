@@ -21,3 +21,16 @@ export const BILLING_CYCLE_OPTIONS = [
   { key: "three_year", label: "三年 (3 Years)" },
   { key: "one_time", label: "一次性 (One-time)" },
 ];
+
+export const getCycleLabel = (cycle?: string) => {
+  switch (cycle) {
+    case "quarter": return "季";
+    case "half_year": return "半年";
+    case "year": return "年";
+    case "two_year": return "2年";
+    case "three_year": return "3年";
+    case "one_time": return "一次性";
+    default: return "月";
+  }
+};
+

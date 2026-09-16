@@ -107,6 +107,7 @@ func (s *Storage) initSchema() error {
 		interval INTEGER DEFAULT 60,
 		servers TEXT DEFAULT '',
 		auto_start INTEGER DEFAULT 1,
+		assigned_servers TEXT DEFAULT '',
 		enabled INTEGER DEFAULT 1,
 		sort_order INTEGER DEFAULT 0,
 		created_at INTEGER NOT NULL
@@ -174,6 +175,9 @@ func (s *Storage) initSchema() error {
 
 	// Dynamic column migrations if table previously had fewer columns
 	s.migrateTableColumns()
+	if err := s.initializeTargetAssignments(); err != nil {
+		return fmt.Errorf("failed to initialize ping target assignments: %w", err)
+	}
 
 	// Insert default token if none exists. This is generated per-install rather
 	// than hardcoded: a fixed literal shipped in the source is a known secret,
@@ -248,11 +252,45 @@ func (s *Storage) migrateTableColumns() {
 		"ALTER TABLE ping_targets ADD COLUMN interval INTEGER DEFAULT 60",
 		"ALTER TABLE ping_targets ADD COLUMN servers TEXT DEFAULT ''",
 		"ALTER TABLE ping_targets ADD COLUMN auto_start INTEGER DEFAULT 1",
+		"ALTER TABLE ping_targets ADD COLUMN assigned_servers TEXT DEFAULT ''",
 		"ALTER TABLE node_settings ADD COLUMN bandwidth_used INTEGER DEFAULT 0",
 	}
 	for _, sqlStmt := range cols {
 		_, _ = s.db.Exec(sqlStmt)
 	}
+}
+
+// initializeTargetAssignments freezes the current node set for legacy targets
+// that disabled auto-start before assignments were persisted.
+func (s *Storage) initializeTargetAssignments() error {
+	nodeIDs, err := s.existingNodeIDs()
+	if err != nil {
+		return err
+	}
+	assigned, err := json.Marshal(nodeIDs)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.Exec(`UPDATE ping_targets SET assigned_servers = ?
+		WHERE auto_start = 0 AND (servers = '' OR servers = '[]') AND assigned_servers = ''`, string(assigned))
+	return err
+}
+
+func (s *Storage) existingNodeIDs() ([]string, error) {
+	rows, err := s.db.Query("SELECT node_id FROM nodes")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }
 
 // ValidateToken checks if a token is valid.
@@ -518,7 +556,7 @@ func (s *Storage) GetPingTargets() ([]model.PingTargetConfig, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	rows, err := s.db.Query(`SELECT id, label, target, color, protocol, port, interval, servers, auto_start, enabled, created_at FROM ping_targets ORDER BY sort_order ASC, id ASC`)
+	rows, err := s.db.Query(`SELECT id, label, target, color, protocol, port, interval, servers, auto_start, assigned_servers, enabled, created_at FROM ping_targets ORDER BY sort_order ASC, id ASC`)
 	if err != nil {
 		return nil, err
 	}
@@ -528,8 +566,8 @@ func (s *Storage) GetPingTargets() ([]model.PingTargetConfig, error) {
 	for rows.Next() {
 		var t model.PingTargetConfig
 		var enabledInt, autoStartInt int
-		var serversJSON string
-		if err := rows.Scan(&t.ID, &t.Label, &t.Target, &t.Color, &t.Protocol, &t.Port, &t.Interval, &serversJSON, &autoStartInt, &enabledInt, &t.CreatedAt); err != nil {
+		var serversJSON, assignedJSON string
+		if err := rows.Scan(&t.ID, &t.Label, &t.Target, &t.Color, &t.Protocol, &t.Port, &t.Interval, &serversJSON, &autoStartInt, &assignedJSON, &enabledInt, &t.CreatedAt); err != nil {
 			continue
 		}
 		if t.Interval <= 0 {
@@ -542,6 +580,9 @@ func (s *Storage) GetPingTargets() ([]model.PingTargetConfig, error) {
 		}
 		if t.Servers == nil {
 			t.Servers = []string{}
+		}
+		if assignedJSON != "" {
+			_ = json.Unmarshal([]byte(assignedJSON), &t.AssignedServers)
 		}
 		targets = append(targets, t)
 	}
@@ -568,10 +609,20 @@ func (s *Storage) AddPingTarget(t *model.PingTargetConfig) error {
 		t.Servers = []string{}
 	}
 	serversJSON, _ := json.Marshal(t.Servers)
+	var assigned []string
+	if !t.AutoStart && len(t.Servers) == 0 {
+		var err error
+		assigned, err = s.existingNodeIDs()
+		if err != nil {
+			return err
+		}
+	}
+	t.AssignedServers = assigned
+	assignedJSON, _ := json.Marshal(assigned)
 	now := time.Now().Unix()
-	res, err := s.db.Exec(`INSERT INTO ping_targets (label, target, color, protocol, port, interval, servers, auto_start, enabled, sort_order, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM ping_targets), ?)`,
-		t.Label, t.Target, t.Color, t.Protocol, t.Port, t.Interval, string(serversJSON), autoStartInt, enabledInt, now)
+	res, err := s.db.Exec(`INSERT INTO ping_targets (label, target, color, protocol, port, interval, servers, auto_start, assigned_servers, enabled, sort_order, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM ping_targets), ?)`,
+		t.Label, t.Target, t.Color, t.Protocol, t.Port, t.Interval, string(serversJSON), autoStartInt, string(assignedJSON), enabledInt, now)
 	if err != nil {
 		return err
 	}
@@ -603,8 +654,29 @@ func (s *Storage) UpdatePingTarget(t *model.PingTargetConfig) error {
 		t.Servers = []string{}
 	}
 	serversJSON, _ := json.Marshal(t.Servers)
-	_, err := s.db.Exec(`UPDATE ping_targets SET label = ?, target = ?, color = ?, protocol = ?, port = ?, interval = ?, servers = ?, auto_start = ?, enabled = ? WHERE id = ?`,
-		t.Label, t.Target, t.Color, t.Protocol, t.Port, t.Interval, string(serversJSON), autoStartInt, enabledInt, t.ID)
+	var assigned []string
+	if !t.AutoStart && len(t.Servers) == 0 {
+		var oldAutoStart int
+		var oldServers, oldAssigned string
+		err := s.db.QueryRow("SELECT auto_start, servers, assigned_servers FROM ping_targets WHERE id = ?", t.ID).Scan(&oldAutoStart, &oldServers, &oldAssigned)
+		if err != nil {
+			return err
+		}
+		if oldAutoStart == 0 && (oldServers == "" || oldServers == "[]") && oldAssigned != "" {
+			if err := json.Unmarshal([]byte(oldAssigned), &assigned); err != nil {
+				return err
+			}
+		} else {
+			assigned, err = s.existingNodeIDs()
+			if err != nil {
+				return err
+			}
+		}
+	}
+	t.AssignedServers = assigned
+	assignedJSON, _ := json.Marshal(assigned)
+	_, err := s.db.Exec(`UPDATE ping_targets SET label = ?, target = ?, color = ?, protocol = ?, port = ?, interval = ?, servers = ?, auto_start = ?, assigned_servers = ?, enabled = ? WHERE id = ?`,
+		t.Label, t.Target, t.Color, t.Protocol, t.Port, t.Interval, string(serversJSON), autoStartInt, string(assignedJSON), enabledInt, t.ID)
 	return err
 }
 
@@ -791,6 +863,27 @@ func (s *Storage) UpdateAdminPassword(username, passwordHash string) error {
 	_, err := s.db.Exec(`UPDATE admin_users SET password_hash = ?, must_change_password = 0, updated_at = ?
 		WHERE username = ?`, passwordHash, time.Now().Unix(), username)
 	return err
+}
+
+// ChangeAdminPasswordAndRevokeSessions commits the new hash and session
+// invalidation together so a failed session delete cannot leave old sessions
+// valid after a password change.
+func (s *Storage) ChangeAdminPasswordAndRevokeSessions(username, passwordHash string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`UPDATE admin_users SET password_hash = ?, must_change_password = 0, updated_at = ?
+		WHERE username = ?`, passwordHash, time.Now().Unix(), username); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM sessions WHERE username = ?`, username); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // CreateSession persists a hashed session token.

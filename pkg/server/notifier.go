@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"probe/pkg/model"
+	"probe/pkg/netguard"
 )
 
 // Notifier handles multi-channel alerts and scheduled traffic reports.
@@ -34,7 +35,7 @@ func NewNotifier(storage *Storage, hub *Hub) *Notifier {
 		hub:     hub,
 		// Webhook and Discord URLs are operator input, so every outbound call
 		// here dials through the guard that refuses internal address ranges.
-		httpClient:     newGuardedHTTPClient(12 * time.Second),
+		httpClient:     netguard.NewGuardedHTTPClient(12 * time.Second),
 		trafficAlerted: make(map[string]int64),
 		offlineTrack:   make(map[string]int64),
 	}
@@ -391,7 +392,7 @@ func (n *Notifier) sendTelegram(botToken, chatID, title, content string) error {
 
 // sendDiscord sends message to Discord Webhook.
 func (n *Notifier) sendDiscord(webhookURL, title, content string) error {
-	if err := validateOutboundURL(webhookURL); err != nil {
+	if err := netguard.ValidateOutboundURL(webhookURL); err != nil {
 		return err
 	}
 	payload := map[string]interface{}{
@@ -432,7 +433,7 @@ func (n *Notifier) sendWebhook(config model.WebhookConfig, title, content string
 	// The URL is operator-supplied, so reject non-http(s) schemes and literal
 	// internal addresses before building the request. Hostnames are caught later
 	// by the dialer guard, which sees the resolved address.
-	if err := validateOutboundURL(url); err != nil {
+	if err := netguard.ValidateOutboundURL(url); err != nil {
 		return err
 	}
 	format := strings.ToLower(strings.TrimSpace(config.Format))

@@ -230,7 +230,7 @@ PROBE_TRUSTED_PROXIES="127.0.0.1,10.0.0.0/8"
 | `PROBE_ADMIN_PASSWORD` | — | 随机生成 | 首次创建管理员时使用的密码；建议生产环境显式设置 |
 | `PROBE_ALLOWED_ORIGINS` | — | 服务自身来源 | 额外允许携带会话 Cookie 的跨域来源，多个来源用逗号分隔 |
 | `PROBE_TRUSTED_PROXIES` | — | 不信任任何代理 | 反向代理的地址或网段，多个用逗号分隔。只有列入的来源才允许通过 `X-Forwarded-For` 覆盖客户端 IP |
-| `PROBE_ALLOW_PRIVATE_TARGETS` | — | `false` | 置为 `1` 后允许延迟探测目标与 Webhook 指向内网地址，仅在自建内网接收端时开启 |
+| `PROBE_ALLOW_PRIVATE_TARGETS` | — | `false` | 置为 `1` 后允许延迟探测目标与 Webhook 指向内网地址；内网探测还需在对应 Agent 上设置 |
 | `PROBE_SERVER_ADDR` | `-addr` | `:8080` | 监听地址与端口 |
 | `PROBE_DB_PATH` | `-db` | `probe.db` | SQLite 数据文件路径 |
 | `PROBE_PUBLIC_VIEW` | `-public` | `false` | 置为 `true` 等同于加 `-public`，开放匿名只读看板 |
@@ -245,6 +245,9 @@ Agent 端可用环境变量（同样可用对应参数覆盖）：
 | `PROBE_NAME` | `--name` | 主机名 | 看板显示名称 |
 | `PROBE_REGION` | `--region` | `auto` | 归属地区，`auto` 表示按公网 IP 自动识别 |
 | `PROBE_INTERVAL` | `--interval` | `1` | 采集上报间隔秒数 |
+| `PROBE_ALLOW_PRIVATE_TARGETS` | — | `false` | 置为 `1` 后允许该 Agent 探测内网地址和非白名单端口 |
+
+监测目标可指定执行探测的节点。未指定节点且关闭“默认自动开启监测”时，服务端记录当时已接入的节点；后续新节点不会自动获得该目标。删除节点前需先停止对应 Agent，在线或仍连接的节点会返回 `409`。
 
 > 会话记录持久化在 SQLite 中，默认有效期 7 天（`-session-hours` 可调），重启服务端不会强制登出。生产环境建议通过 HTTPS 访问，以启用 Cookie 的 `Secure` 属性。
 
@@ -344,7 +347,7 @@ probe/
 5. **Token 鉴权机制**：服务端与被控端之间采用安全 Token 握手机制，未授权的连接直接被拒绝，支持后台多 Token 动态分发与废止。Agent Token 属于凭据，仅登录后可见。
 6. **跨站防护**：浏览器实时数据流会校验 `Origin`，阻止恶意页面借用 Cookie 建立 WebSocket；CORS 仅回显同源或 `PROBE_ALLOWED_ORIGINS` 显式声明的来源。
 7. **可信代理边界**：服务端默认不信任代理转发头。仅当请求来自 `PROBE_TRUSTED_PROXIES` 声明的地址或网段时，才使用 `X-Forwarded-For` 识别客户端 IP，避免伪造来源绕过登录限流。
-8. **出站请求防护**：延迟测试、GeoIP 查询及 Webhook 请求默认拒绝回环、私网、链路本地、云元数据等内部地址；延迟测试端口限制为 `53`、`80`、`123`、`443`、`853`、`8080` 和 `8443`。确需访问内网目标时可设置 `PROBE_ALLOW_PRIVATE_TARGETS=1`，这会同时放开私网地址和端口限制，应仅在可信网络中使用。
+8. **出站请求防护**：延迟测试和周期性探测目标在保存时、Agent 同步时及实际连接时均默认拒绝回环、私网、链路本地、云元数据等内部地址；TCP 与 HTTP 探测端口均限制为 `53`、`80`、`123`、`443`、`853`、`8080` 和 `8443`，HTTP 重定向也受此限制。GeoIP 查询及 Webhook 请求同样拒绝内部地址。确需探测内网目标时，需在服务端和目标 Agent 上分别设置 `PROBE_ALLOW_PRIVATE_TARGETS=1`，这会放开私网地址和探测端口限制。
 9. **只读信息采集**：Agent 端仅采集只读的系统硬件、负载与流量指标，不具备任何远程命令执行（RCE）通道，保障受控主机绝对安全。
 10. **敏感信息脱敏**：前端提供 IP 脱敏隐藏开关（如 `154.82.***.***`），方便截图分享与多用户公开展示。
 
@@ -355,3 +358,7 @@ probe/
 ## 📄 开源许可证
 
 本项目基于 [MIT License](LICENSE) 协议开源。
+
+## 2026-09-16 20:59:22 任务记录
+重试 1 轮后 API 仍不可用
+进程 PID 1430573，会话已中断或 API 长期不可用，自动暂存当前进度。

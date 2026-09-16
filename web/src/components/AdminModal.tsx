@@ -533,6 +533,8 @@ export const AdminModal: React.FC<AdminModalProps> = ({
       const res = await fetch(`/api/v1/nodes/${encodeURIComponent(nodeID)}`, { method: "DELETE" });
       if (res.ok) {
         if (onRefreshNodes) onRefreshNodes();
+      } else if (res.status === 409) {
+        window.alert("请先停止该节点上的 Agent，待节点离线后再删除。");
       }
     } catch (e) {
       console.error(e);
@@ -905,7 +907,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                               <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-11 font-medium border ${
                                 isBlueprint ? "bg-slate-100 text-slate-600 border-slate-200/80" : "bg-zinc-800/80 text-zinc-400 border-zinc-700/60"
                               }`}>
-                                全部服务器
+                                {t.auto_start === false ? "已接入服务器" : "全部服务器"}
                               </span>
                             )}
                           </td>
@@ -2185,7 +2187,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                   </Button>
                   <span className={`text-xs font-sans font-medium ${isBlueprint ? "text-slate-700" : "text-zinc-300"}`}>
                     {targetFormServers.length === 0
-                      ? "所有服务器 (默认全部)"
+                      ? (targetFormAutoStart ? "所有服务器 (含新接入)" : "当前已接入服务器")
                       : `已选 ${targetFormServers.length} 台服务器`}
                   </span>
                 </div>
@@ -2215,7 +2217,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                       ) : (
                         <Square className="h-4 w-4 text-slate-400 shrink-0" />
                       )}
-                      <span>全部服务器 (所有探针节点同步执行监测)</span>
+                      <span>{targetFormAutoStart ? "全部服务器 (含新接入节点)" : "当前已接入服务器"}</span>
                     </button>
                     {nodes.map((node) => {
                       const isChecked = targetFormServers.includes(node.node_id);

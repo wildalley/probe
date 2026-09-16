@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io/fs"
 	"log"
 	"math"
@@ -15,6 +16,7 @@ import (
 	"time"
 
 	"probe/pkg/model"
+	"probe/pkg/netguard"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -281,9 +283,15 @@ func (s *Server) handleAgentWS(c *gin.Context) {
 
 	log.Printf("[AgentWS] Agent connected: %s (IP: %s)", headerNodeID, c.ClientIP())
 
+	registeredIDs := make(map[string]struct{})
+	defer func() {
+		for nodeID := range registeredIDs {
+			s.hub.UnregisterAgent(nodeID, agentQueue)
+		}
+	}()
 	if headerNodeID != "" {
 		s.hub.RegisterAgent(headerNodeID, agentQueue)
-		defer s.hub.UnregisterAgent(headerNodeID)
+		registeredIDs[headerNodeID] = struct{}{}
 	}
 
 	conn.SetReadLimit(65536)
@@ -333,6 +341,7 @@ func (s *Server) handleAgentWS(c *gin.Context) {
 
 			if report.NodeID != "" {
 				s.hub.RegisterAgent(report.NodeID, agentQueue)
+				registeredIDs[report.NodeID] = struct{}{}
 			}
 
 			s.hub.IngestReport(&report)
@@ -344,8 +353,9 @@ func (s *Server) handleAgentWS(c *gin.Context) {
 func (s *Server) handleClientWS(c *gin.Context) {
 	// In private mode the live telemetry stream requires a session. Reject before
 	// upgrading so the client sees a plain 401 instead of a dropped socket.
+	sessionToken := extractSessionToken(c)
 	if s.privateMode {
-		if _, ok := s.currentUser(c); !ok {
+		if _, ok := s.auth.Validate(sessionToken); !ok {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 				"error": "authentication required",
 				"code":  "unauthenticated",
@@ -363,6 +373,25 @@ func (s *Server) handleClientWS(c *gin.Context) {
 
 	clientQueue := s.hub.RegisterClient(conn)
 	defer s.hub.UnregisterClient(clientQueue)
+	if s.privateMode {
+		done := make(chan struct{})
+		defer close(done)
+		go func() {
+			ticker := time.NewTicker(5 * time.Second)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-done:
+					return
+				case <-ticker.C:
+					if _, ok := s.auth.Validate(sessionToken); !ok {
+						clientQueue.Close()
+						return
+					}
+				}
+			}
+		}()
+	}
 
 	// Keep alive & wait for close
 	for {
@@ -549,6 +578,10 @@ func generateInitialPingPoints(nodeID string, start, end int64, state *model.Nod
 func (s *Server) handleDeleteNode(c *gin.Context) {
 	nodeID := c.Param("id")
 	if err := s.hub.DeleteNode(nodeID); err != nil {
+		if errors.Is(err, ErrNodeActive) {
+			c.JSON(http.StatusConflict, gin.H{"error": "stop the agent before deleting this node", "code": "node_active"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -690,12 +723,21 @@ func (s *Server) handleDownloadAgent(c *gin.Context) {
 	c.JSON(http.StatusNotFound, gin.H{"error": "probe-agent binary not found on server"})
 }
 
-// handleGetPingTargets returns all configured ping targets.
+// handleGetPingTargets returns all targets, or those assigned to one node.
 func (s *Server) handleGetPingTargets(c *gin.Context) {
 	targets, err := s.storage.GetPingTargets()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
+	}
+	if nodeID := c.Query("node_id"); nodeID != "" {
+		filtered := make([]model.PingTargetConfig, 0, len(targets))
+		for _, target := range targets {
+			if targetAppliesToNode(target, nodeID) {
+				filtered = append(filtered, target)
+			}
+		}
+		targets = filtered
 	}
 	c.JSON(http.StatusOK, gin.H{"targets": targets})
 }
@@ -716,6 +758,13 @@ func (s *Server) handleAddPingTarget(c *gin.Context) {
 	}
 	if target.Protocol == "" {
 		target.Protocol = "tcp"
+	}
+	// Saving is the only checkpoint for the recurring probes: every agent dials
+	// this target on its own timer, so an internal address accepted here becomes
+	// a fleet-wide scanner rather than a single request.
+	if err := netguard.ValidatePingTarget(target.Protocol, target.Target, target.Port); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
 	}
 
 	if err := s.storage.AddPingTarget(&target); err != nil {
@@ -742,6 +791,13 @@ func (s *Server) handleUpdatePingTarget(c *gin.Context) {
 		return
 	}
 	target.ID = id
+	if target.Protocol == "" {
+		target.Protocol = "tcp"
+	}
+	if err := netguard.ValidatePingTarget(target.Protocol, target.Target, target.Port); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
 	if err := s.storage.UpdatePingTarget(&target); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -783,14 +839,14 @@ func (s *Server) handleTestPingTarget(c *gin.Context) {
 	}
 
 	// This endpoint reports reachability and timing for an operator-supplied
-	// address, so it is only as safe as the address is. validateProbeTarget keeps
+	// address, so it is only as safe as the address is. ValidateProbeTarget keeps
 	// it off internal ranges and non-probe ports; the dialer re-checks the
 	// resolved IP so a hostname cannot rebind onto one.
 	fallbackPort := req.Port
 	if fallbackPort <= 0 {
 		fallbackPort = 443
 	}
-	addr, err := validateProbeTarget(req.Target, fallbackPort)
+	addr, err := netguard.ValidateProbeTarget(req.Target, fallbackPort)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -798,7 +854,7 @@ func (s *Server) handleTestPingTarget(c *gin.Context) {
 
 	start := time.Now()
 	timeout := 2500 * time.Millisecond
-	conn, err := dialGuarded(c.Request.Context(), addr, timeout)
+	conn, err := netguard.DialGuarded(c.Request.Context(), addr, timeout)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -984,7 +1040,7 @@ func (s *Server) handleSaveExchangeRates(c *gin.Context) {
 
 // handleRefreshExchangeRates pulls live rates from open.er-api.com.
 func (s *Server) handleRefreshExchangeRates(c *gin.Context) {
-	client := newGuardedHTTPClient(5 * time.Second)
+	client := netguard.NewGuardedHTTPClient(5 * time.Second)
 	resp, err := client.Get("https://open.er-api.com/v6/latest/CNY")
 
 	newRates := map[string]float64{

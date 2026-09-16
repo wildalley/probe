@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"probe/pkg/model"
+	"probe/pkg/netguard"
 
 	"github.com/gorilla/websocket"
 )
@@ -151,30 +152,28 @@ func (c *Client) connectAndServe(ctx context.Context) error {
 					} `json:"data"`
 				}
 				if err := json.Unmarshal(msg, &event); err == nil && event.Type == "config_sync" {
-					if len(event.Data.PingTargets) > 0 {
-						var targets []TargetConfig
-						for _, pt := range event.Data.PingTargets {
-							addr := pt.Target
-							if !strings.Contains(addr, ":") {
-								port := 443
-								if pt.Port > 0 {
-									port = pt.Port
-								} else if strings.Contains(pt.Target, "8.8.8.8") || strings.Contains(pt.Target, "223.5.5.5") || strings.Contains(pt.Target, "1.1.1.1") {
-									port = 53
-								}
-								addr = fmt.Sprintf("%s:%d", addr, port)
-							}
-							targets = append(targets, TargetConfig{
-								Label:    pt.Label,
-								Address:  addr,
-								Color:    pt.Color,
-								Protocol: pt.Protocol,
-								Interval: pt.Interval,
-							})
+					var targets []TargetConfig
+					for _, pt := range event.Data.PingTargets {
+						if err := netguard.ValidatePingTarget(pt.Protocol, pt.Target, pt.Port); err != nil {
+							log.Printf("[Agent] Skipping ping target %s: %v", pt.Label, err)
+							continue
 						}
-						c.collector.UpdatePingTargets(targets)
-						log.Printf("[Agent] Synchronized %d ping targets from server", len(targets))
+						addr := pt.Target
+						if !strings.EqualFold(strings.TrimSpace(pt.Protocol), "http") {
+							resolved, _ := netguard.ValidateProbeTarget(pt.Target, pt.Port)
+							addr = resolved
+						}
+						targets = append(targets, TargetConfig{
+							ID:       pt.ID,
+							Label:    pt.Label,
+							Address:  addr,
+							Color:    pt.Color,
+							Protocol: pt.Protocol,
+							Interval: pt.Interval,
+						})
 					}
+					c.collector.UpdatePingTargets(targets)
+					log.Printf("[Agent] Synchronized %d ping targets from server", len(targets))
 				}
 			}
 		}

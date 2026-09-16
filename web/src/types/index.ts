@@ -1,4 +1,5 @@
 export interface PingStat {
+  id?: number;
   target: string;
   label: string;
   color: string;
@@ -212,4 +213,3 @@ export interface NotificationLog {
   status: "success" | "failed";
   error_msg?: string;
 }
-

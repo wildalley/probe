@@ -120,11 +120,8 @@ export function App() {
           const wsEvent: WSEvent = JSON.parse(event.data);
           if (wsEvent.type === "nodes_snapshot") {
             const list: NodeState[] = wsEvent.data || [];
-            setNodes((prev) => {
-              const next = new Map(prev);
-              list.forEach((n) => next.set(n.node_id, n));
-              return next;
-            });
+            setNodes(new Map(list.map((n) => [n.node_id, n])));
+            setSelectedNode((current) => list.find((n) => n.node_id === current?.node_id) || null);
           } else if (wsEvent.type === "node_update") {
             const node: NodeState = wsEvent.data;
             setNodes((prev) => {

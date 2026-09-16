@@ -25,8 +25,9 @@ const (
 // through this queue rather than touching the socket directly. Reads stay on
 // the caller's goroutine — one reader plus one writer is supported.
 type wsWriteQueue struct {
-	conn *websocket.Conn
-	send chan []byte
+	conn        *websocket.Conn
+	send        chan []byte
+	minSequence uint64 // events at or below this preceded the initial snapshot
 
 	closeOnce sync.Once
 	closed    chan struct{}
@@ -95,5 +96,10 @@ func (q *wsWriteQueue) IsClosed() bool {
 // Close stops the writer goroutine and closes the socket. Safe to call more
 // than once, from any goroutine.
 func (q *wsWriteQueue) Close() {
-	q.closeOnce.Do(func() { close(q.closed) })
+	q.closeOnce.Do(func() {
+		close(q.closed)
+		if q.conn != nil {
+			_ = q.conn.Close()
+		}
+	})
 }

@@ -38,8 +38,9 @@ var dummyHash = []byte("$2a$12$C6UzMDM.H6dfI/f/IKcEe.aQnRDQ1kMRSSNYNCPLnFsuNZFTa
 
 // AuthManager owns admin credentials, session lifecycle, and brute-force throttling.
 type AuthManager struct {
-	storage    *Storage
-	sessionTTL time.Duration
+	storage      *Storage
+	sessionTTL   time.Duration
+	credentialMu sync.RWMutex // orders login against password rotation
 
 	mu    sync.RWMutex
 	cache map[string]*sessionEntry // sha256(token) -> session
@@ -124,6 +125,8 @@ func (am *AuthManager) Login(username, password, ip, userAgent string) (token st
 	if am.isLockedOut(ip) {
 		return "", false, errTooManyAttempts
 	}
+	am.credentialMu.RLock()
+	defer am.credentialMu.RUnlock()
 
 	user, lookupErr := am.storage.GetAdminUser(username)
 	if lookupErr != nil {
@@ -192,18 +195,29 @@ func (am *AuthManager) Validate(token string) (string, bool) {
 		return entry.Username, true
 	}
 
+	// Keep the database lookup and cache insertion atomic with revocation.
+	// Otherwise a concurrent logout can delete the row between these steps and
+	// the lookup can resurrect the session in the cache until expiry.
+	am.mu.Lock()
+	defer am.mu.Unlock()
+	if entry, ok := am.cache[hashed]; ok {
+		if entry.ExpiresAt > now {
+			return entry.Username, true
+		}
+		delete(am.cache, hashed)
+		_ = am.storage.DeleteSession(hashed)
+		return "", false
+	}
 	username, expiresAt, err := am.storage.GetSession(hashed)
 	if err != nil || username == "" {
 		return "", false
 	}
 	if expiresAt <= now {
-		am.revokeHashed(hashed)
+		_ = am.storage.DeleteSession(hashed)
 		return "", false
 	}
 
-	am.mu.Lock()
 	am.cache[hashed] = &sessionEntry{Username: username, ExpiresAt: expiresAt}
-	am.mu.Unlock()
 
 	return username, true
 }
@@ -218,21 +232,25 @@ func (am *AuthManager) Revoke(token string) {
 
 func (am *AuthManager) revokeHashed(hashed string) {
 	am.mu.Lock()
+	defer am.mu.Unlock()
 	delete(am.cache, hashed)
-	am.mu.Unlock()
-	_ = am.storage.DeleteSession(hashed)
+	if err := am.storage.DeleteSession(hashed); err != nil {
+		log.Printf("[Auth] Failed to delete session: %v", err)
+	}
 }
 
 // RevokeAllForUser invalidates every session of a user, used after a password change.
 func (am *AuthManager) RevokeAllForUser(username string) {
 	am.mu.Lock()
+	defer am.mu.Unlock()
 	for hashed, entry := range am.cache {
 		if entry.Username == username {
 			delete(am.cache, hashed)
 		}
 	}
-	am.mu.Unlock()
-	_ = am.storage.DeleteSessionsForUser(username)
+	if err := am.storage.DeleteSessionsForUser(username); err != nil {
+		log.Printf("[Auth] Failed to revoke sessions for %q: %v", username, err)
+	}
 }
 
 // ChangePassword verifies the current password and stores a new bcrypt hash.
@@ -240,6 +258,8 @@ func (am *AuthManager) ChangePassword(username, currentPassword, newPassword str
 	if len(newPassword) < 8 {
 		return errWeakPassword
 	}
+	am.credentialMu.Lock()
+	defer am.credentialMu.Unlock()
 
 	user, err := am.storage.GetAdminUser(username)
 	if err != nil {
@@ -256,7 +276,17 @@ func (am *AuthManager) ChangePassword(username, currentPassword, newPassword str
 	if err != nil {
 		return err
 	}
-	return am.storage.UpdateAdminPassword(username, string(hash))
+	if err := am.storage.ChangeAdminPasswordAndRevokeSessions(username, string(hash)); err != nil {
+		return err
+	}
+	am.mu.Lock()
+	for hashed, entry := range am.cache {
+		if entry.Username == username {
+			delete(am.cache, hashed)
+		}
+	}
+	am.mu.Unlock()
+	return nil
 }
 
 // MustChangePassword reports whether the account still uses its generated password.
@@ -560,9 +590,8 @@ func (s *Server) handleChangePassword(c *gin.Context) {
 		return
 	}
 
-	// Invalidate every existing session, then issue a fresh one for this client.
-	s.auth.RevokeAllForUser(username)
-
+	// ChangePassword atomically invalidated every prior session. Issue a fresh
+	// one for this client.
 	token, err := s.auth.createSession(username, c.ClientIP(), c.GetHeader("User-Agent"))
 	if err != nil {
 		clearSessionCookie(c)

@@ -3,7 +3,9 @@ import { Server, Sliders, Trash2 } from "lucide-react";
 import { Button } from "@heroui/react";
 import { NodeState } from "../../../types";
 import { getRegionFlag } from "../../../utils/flags";
+import { formatBytes } from "../../../utils/format";
 import { cn } from "../../../lib/utils";
+import { getCycleLabel } from "./billingOptions";
 
 interface HostTableProps {
   nodes: NodeState[];
@@ -146,7 +148,7 @@ export const HostTable: React.FC<HostTableProps> = ({
                         )}
                       >
                         {" "}
-                        / {n.billing?.billing_cycle || "month"}
+                        / {getCycleLabel(n.billing?.billing_cycle)}
                       </span>
                     </div>
                   </td>
@@ -160,7 +162,7 @@ export const HostTable: React.FC<HostTableProps> = ({
                       {totalQuota > 0 ? `${percent}%` : "无限制"}
                     </div>
                     <div className={cn("text-10", isBlueprint ? "text-slate-400" : "text-zinc-500")}>
-                      {totalQuota > 0 ? `${(totalQuota / TB).toFixed(1)} TB` : "无限"}
+                      {totalQuota > 0 ? formatBytes(totalQuota) : "无限"}
                     </div>
                   </td>
                   <td className="py-3.5 px-4 whitespace-nowrap">

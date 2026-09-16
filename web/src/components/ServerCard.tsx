@@ -117,13 +117,11 @@ export function ServerCard({ node, onSelect, theme = "dark" }: ServerCardProps) 
 
   // Pricing label
   const priceText = node.billing
-    ? `${node.billing.currency || "$"}${node.billing.price != null && node.billing.price > 0 ? node.billing.price : (node.billing.price_per_month || 9.9)} / ${getCycleLabel(node.billing.billing_cycle)}`
-    : "$9.9 / 月";
+    ? `${node.billing.currency || "$"}${node.billing.price != null && node.billing.price > 0 ? node.billing.price : (node.billing.price_per_month || 0)} / ${getCycleLabel(node.billing.billing_cycle)}`
+    : null;
 
-  // Dynamic status tags
-  const displayTags = node.tags && node.tags.length > 0
-    ? node.tags
-    : ["电信CN2", "1Gbps", "CU4837"];
+  // Dynamic status tags (only real tags configured on the host)
+  const displayTags = node.tags && node.tags.length > 0 ? node.tags : [];
 
   // One tick per probe target — the agent reports a single current value per
   // target, so there is no time series here to draw.

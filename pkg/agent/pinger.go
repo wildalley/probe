@@ -2,18 +2,21 @@ package agent
 
 import (
 	"context"
+	"fmt"
+	"log"
 	"math"
-	"net"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
 
 	"probe/pkg/model"
+	"probe/pkg/netguard"
 )
 
 // TargetConfig defines a ping monitoring target.
 type TargetConfig struct {
+	ID       int64
 	Label    string
 	Address  string // host:port or url
 	Color    string
@@ -35,7 +38,21 @@ var DefaultTargets = []TargetConfig{
 type Pinger struct {
 	mu      sync.RWMutex
 	targets []TargetConfig
-	stats   map[string]*targetState
+	stats   map[targetKey]*targetState
+}
+
+type targetKey struct {
+	id       int64
+	label    string
+	address  string
+	protocol string
+}
+
+func keyForTarget(t TargetConfig) targetKey {
+	if t.ID > 0 {
+		return targetKey{id: t.ID}
+	}
+	return targetKey{label: t.Label, address: t.Address, protocol: strings.ToLower(t.Protocol)}
 }
 
 // lossWindow is how many recent probes the packet loss rate is computed over.
@@ -69,10 +86,10 @@ func NewPinger(targets []TargetConfig) *Pinger {
 	}
 	p := &Pinger{
 		targets: targets,
-		stats:   make(map[string]*targetState),
+		stats:   make(map[targetKey]*targetState),
 	}
 	for _, t := range targets {
-		p.stats[t.Label] = &targetState{
+		p.stats[keyForTarget(t)] = &targetState{
 			label:    t.Label,
 			address:  t.Address,
 			color:    t.Color,
@@ -85,27 +102,39 @@ func NewPinger(targets []TargetConfig) *Pinger {
 
 // UpdateTargets safely replaces current monitored targets.
 func (p *Pinger) UpdateTargets(targets []TargetConfig) {
-	if len(targets) == 0 {
-		return
-	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	p.targets = targets
+	p.targets = append([]TargetConfig(nil), targets...)
+	active := make(map[targetKey]struct{}, len(targets))
 	for _, t := range targets {
-		if st, exists := p.stats[t.Label]; !exists {
-			p.stats[t.Label] = &targetState{
+		key := keyForTarget(t)
+		active[key] = struct{}{}
+		if st, exists := p.stats[key]; !exists {
+			p.stats[key] = &targetState{
 				label:    t.Label,
 				address:  t.Address,
 				color:    t.Color,
 				protocol: t.Protocol,
 				interval: t.Interval,
 			}
+		} else if st.address != t.Address || !strings.EqualFold(st.protocol, t.Protocol) {
+			// A label can be reused for a different destination. Its old loss
+			// window and latency cannot describe the new destination.
+			p.stats[key] = &targetState{
+				label: t.Label, address: t.Address, color: t.Color,
+				protocol: t.Protocol, interval: t.Interval,
+			}
 		} else {
 			st.address = t.Address
 			st.color = t.Color
 			st.protocol = t.Protocol
 			st.interval = t.Interval
+		}
+	}
+	for key := range p.stats {
+		if _, ok := active[key]; !ok {
+			delete(p.stats, key)
 		}
 	}
 }
@@ -134,7 +163,7 @@ func (p *Pinger) probeDueTargets(force bool) {
 	var dueTargets []TargetConfig
 
 	for _, target := range p.targets {
-		st, exists := p.stats[target.Label]
+		st, exists := p.stats[keyForTarget(target)]
 		if !exists {
 			continue
 		}
@@ -163,42 +192,55 @@ func (p *Pinger) probeOne(t TargetConfig) {
 	success := false
 	latency := 0.0
 
-	protocol := strings.ToLower(t.Protocol)
+	// Targets arrive from the server, but the server takes them from operator
+	// input, so they are vetted again here. The agent is the process that holds
+	// the credentials and the LAN position; a target that slipped past the
+	// dashboard should not become a probe from inside every node's network.
+	protocol := strings.ToLower(strings.TrimSpace(t.Protocol))
 	if protocol == "http" {
-		client := &http.Client{Timeout: timeout}
-		url := t.Address
-		if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
+		url := strings.TrimSpace(t.Address)
+		validationErr := netguard.ValidatePingTarget("http", url, 0)
+		if !strings.HasPrefix(strings.ToLower(url), "http://") && !strings.HasPrefix(strings.ToLower(url), "https://") {
 			url = "https://" + url
 		}
-		req, err := http.NewRequest("HEAD", url, nil)
-		if err == nil {
-			req.Header.Set("User-Agent", "CyberProbe/2.0")
-			resp, err2 := client.Do(req)
-			if err2 == nil {
-				_ = resp.Body.Close()
-				success = true
-				latency = float64(time.Since(start).Microseconds()) / 1000.0
+		if validationErr != nil {
+			log.Printf("[Pinger] refusing target %s: %v", t.Label, validationErr)
+		} else {
+			client := netguard.NewGuardedProbeHTTPClient(timeout)
+			req, err := http.NewRequest("HEAD", url, nil)
+			if err == nil {
+				req.Header.Set("User-Agent", "CyberProbe/2.0")
+				resp, err2 := client.Do(req)
+				if err2 == nil {
+					_ = resp.Body.Close()
+					success = true
+					latency = float64(time.Since(start).Microseconds()) / 1000.0
+				}
 			}
 		}
 	} else {
-		// TCP or ICMP fallback dial
-		addr := t.Address
-		if !strings.Contains(addr, ":") {
-			addr = net.JoinHostPort(addr, "443")
-		}
-		conn, err := net.DialTimeout("tcp", addr, timeout)
-		if err == nil {
-			_ = conn.Close()
-			latency = float64(time.Since(start).Microseconds()) / 1000.0
-			success = true
+		// TCP or ICMP fallback dial. ValidateProbeTarget also normalises a bare
+		// host or IPv6 literal into a dialable host:port.
+		addr, err := netguard.ValidateProbeTarget(t.Address, 443)
+		if err != nil {
+			log.Printf("[Pinger] refusing target %s: %v", t.Label, err)
+		} else {
+			ctx, cancel := context.WithTimeout(context.Background(), timeout)
+			conn, err := netguard.DialGuarded(ctx, addr, timeout)
+			cancel()
+			if err == nil {
+				_ = conn.Close()
+				latency = float64(time.Since(start).Microseconds()) / 1000.0
+				success = true
+			}
 		}
 	}
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	st, exists := p.stats[t.Label]
-	if !exists {
+	st, exists := p.stats[keyForTarget(t)]
+	if !exists || st.address != t.Address || !strings.EqualFold(st.protocol, t.Protocol) {
 		return
 	}
 	st.probing = false
@@ -234,8 +276,12 @@ func (p *Pinger) GetStats() []model.PingStat {
 	defer p.mu.RUnlock()
 
 	res := make([]model.PingStat, 0, len(p.targets))
+	labelCounts := make(map[string]int, len(p.targets))
 	for _, t := range p.targets {
-		st, exists := p.stats[t.Label]
+		labelCounts[t.Label]++
+	}
+	for _, t := range p.targets {
+		st, exists := p.stats[keyForTarget(t)]
 		if !exists {
 			continue
 		}
@@ -245,9 +291,18 @@ func (p *Pinger) GetStats() []model.PingStat {
 			lossRate = math.Round((float64(st.lostInWindow)/float64(st.lostFilled)*100)*100) / 100
 		}
 
+		label := t.Label
+		if labelCounts[label] > 1 {
+			if t.ID > 0 {
+				label = fmt.Sprintf("%s (#%d)", label, t.ID)
+			} else {
+				label = fmt.Sprintf("%s (%s)", label, t.Address)
+			}
+		}
 		res = append(res, model.PingStat{
+			ID:         t.ID,
 			Target:     t.Address,
-			Label:      t.Label,
+			Label:      label,
 			Color:      t.Color,
 			LatencyMs:  st.latencyMs,
 			PacketLoss: lossRate,
