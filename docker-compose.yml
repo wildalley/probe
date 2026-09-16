@@ -3,6 +3,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        # Stamped into both the server and the agent it hands out, so the two
+        # always agree. Export PROBE_VERSION=1.2.3 before `docker compose build`
+        # on a release; the default marks an unstamped local build.
+        VERSION: "${PROBE_VERSION:-dev}"
     image: cyber-probe-server:latest
     container_name: probe-server
     restart: unless-stopped

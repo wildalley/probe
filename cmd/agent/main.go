@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -10,8 +11,9 @@ import (
 	"syscall"
 	"time"
 
-	"probe/pkg/agent"
 	"gopkg.in/yaml.v3"
+	"probe/pkg/agent"
+	"probe/pkg/version"
 )
 
 func main() {
@@ -24,6 +26,7 @@ func main() {
 		intervalSec int
 		configPath  string
 		insecure    bool
+		showVersion bool
 	)
 
 	hostname, _ := os.Hostname()
@@ -39,7 +42,15 @@ func main() {
 	flag.IntVar(&intervalSec, "interval", getEnvInt("PROBE_INTERVAL", 1), "Metrics report interval in seconds")
 	flag.StringVar(&configPath, "config", "", "Path to YAML configuration file (optional)")
 	flag.BoolVar(&insecure, "insecure", false, "Allow insecure TLS certificates")
+	flag.BoolVar(&showVersion, "version", false, "Print the agent version and exit")
 	flag.Parse()
+
+	// Printed before anything else so an installer can ask a freshly placed
+	// binary what it actually is.
+	if showVersion {
+		fmt.Printf("probe-agent %s\n", version.Version)
+		return
+	}
 
 	cfg := agent.AgentConfig{
 		ServerURL:      serverURL,
@@ -69,6 +80,7 @@ func main() {
 	log.Printf("  Region  : %s", cfg.Region)
 	log.Printf("  Server  : %s", cfg.ServerURL)
 	log.Printf("  Interval: %v", cfg.ReportInterval)
+	log.Printf("  Version : %s", version.Version)
 	log.Printf("==================================================")
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

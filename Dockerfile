@@ -35,16 +35,31 @@ COPY pkg/ ./pkg/
 RUN rm -rf cmd/server/dist
 COPY --from=web /build/cmd/server/dist ./cmd/server/dist
 
+# Release version stamped into both binaries. Pass it with
+# --build-arg VERSION=1.2.3 (docker-compose.yml forwards PROBE_VERSION).
+#
+# It has to be supplied by the host: .dockerignore excludes .git, so
+# `git describe` cannot run in here. Both binaries receive the same value, which
+# is what makes the version the dashboard expects identical to the version it
+# hands out over /download/probe-agent.
+#
+# Declared here rather than beside the other build setup on purpose — an ARG
+# invalidates the cache from its own line onward, and cutting a release must not
+# re-copy the sources.
+ARG VERSION=dev
+
 # CGO stays off: modernc.org/sqlite is pure Go, so the result is a static binary
 # that runs on a distroless/alpine base with no libc dependency.
-RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" \
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath \
+      -ldflags="-s -w -X probe/pkg/version.Version=${VERSION}" \
       -o /out/probe-server ./cmd/server
 
 # The agent is built too, because the server hands it out over
 # GET /download/probe-agent for one-line deploys. It is built for this image's
 # architecture, so an amd64 image serves an amd64 agent — cross-arch targets
 # should download from a matching image or build their own.
-RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" \
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath \
+      -ldflags="-s -w -X probe/pkg/version.Version=${VERSION}" \
       -o /out/probe-agent ./cmd/agent
 
 

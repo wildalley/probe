@@ -85,8 +85,12 @@ type SystemSettings struct {
 
 // SystemInfo contains system-level telemetry and hardware inventory.
 type SystemInfo struct {
-	OS             string  `json:"os"`
-	Kernel         string  `json:"kernel"`
+	OS     string `json:"os"`
+	Kernel string `json:"kernel"`
+	// AgentVersion is the build version of the agent that produced this report.
+	// Empty means either the agent predates the field or the build carried no
+	// stamp, and the dashboard reads that absence as "unknown, probably old".
+	AgentVersion   string  `json:"agent_version,omitempty"`
 	Uptime         uint64  `json:"uptime"`
 	CPUModel       string  `json:"cpu_model"`
 	CPUMark        string  `json:"cpu_mark"`       // e.g. "中端服务器级"
@@ -171,16 +175,19 @@ type PingHistoryPoint struct {
 
 // NodeMetadata represents registered node information in the database.
 type NodeMetadata struct {
-	NodeID    string `json:"node_id"`
-	Name      string `json:"name"`
-	Token     string `json:"token"`
-	Region    string `json:"region"`
-	Tags      string `json:"tags"` // JSON string
-	OS        string `json:"os"`
-	Kernel    string `json:"kernel"`
-	CreatedAt int64  `json:"created_at"`
-	LastSeen  int64  `json:"last_seen"`
-	IsOnline  bool   `json:"is_online"`
+	NodeID string `json:"node_id"`
+	Name   string `json:"name"`
+	Token  string `json:"token"`
+	Region string `json:"region"`
+	Tags   string `json:"tags"` // JSON string
+	OS     string `json:"os"`
+	Kernel string `json:"kernel"`
+	// AgentVersion persists with the node so a restarted server can still show
+	// which build a host was last running, before that host reconnects.
+	AgentVersion string `json:"agent_version"`
+	CreatedAt    int64  `json:"created_at"`
+	LastSeen     int64  `json:"last_seen"`
+	IsOnline     bool   `json:"is_online"`
 }
 
 // WSEvent is the message wrapper broadcast over WebSocket.

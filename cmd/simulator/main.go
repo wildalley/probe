@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"probe/pkg/model"
+	"probe/pkg/version"
 
 	"github.com/gorilla/websocket"
 )
@@ -290,6 +291,7 @@ func runMockNode(ctx context.Context, serverURL, token string, node mockNodeConf
 					System: model.SystemInfo{
 						OS:             node.os,
 						Kernel:         node.kernel,
+						AgentVersion:   version.Version,
 						Uptime:         uptime,
 						CPUModel:       node.cpuModel,
 						CPUMark:        node.cpuMark,

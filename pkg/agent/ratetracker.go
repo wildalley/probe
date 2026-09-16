@@ -38,13 +38,13 @@ func IsPhysicalInterface(name string) bool {
 
 // RateTracker implements the differential rate calculation and counter rollover handling.
 type RateTracker struct {
-	mu            sync.Mutex
-	lastSent      uint64
-	lastRecv      uint64
-	lastTime      time.Time
-	hasBaseline   bool
-	rateDownload  float64
-	rateUpload    float64
+	mu           sync.Mutex
+	lastSent     uint64
+	lastRecv     uint64
+	lastTime     time.Time
+	hasBaseline  bool
+	rateDownload float64
+	rateUpload   float64
 }
 
 // NewRateTracker creates a new differential network rate tracker.

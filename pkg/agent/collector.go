@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"probe/pkg/model"
+	"probe/pkg/version"
 
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/disk"
@@ -278,6 +279,7 @@ func (c *Collector) Collect() (*model.NodeReport, error) {
 		System: model.SystemInfo{
 			OS:             osStr,
 			Kernel:         kernelStr,
+			AgentVersion:   version.Version,
 			PublicIP:       currentIP,
 			Uptime:         uptime,
 			CPUModel:       c.cpuModel,

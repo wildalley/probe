@@ -300,8 +300,9 @@ func NewHub(storage *Storage, downsampler *Downsampler) *Hub {
 				IsOnline: false,
 				LastSeen: n.LastSeen,
 				System: model.SystemInfo{
-					OS:     n.OS,
-					Kernel: n.Kernel,
+					OS:           n.OS,
+					Kernel:       n.Kernel,
+					AgentVersion: n.AgentVersion,
 				},
 			}
 		}
@@ -524,13 +525,14 @@ func (h *Hub) IngestReport(report *model.NodeReport) {
 					if updated {
 						h.nodeStates[nodeID] = st
 						_ = h.storage.UpsertNode(&model.NodeMetadata{
-							NodeID:   st.NodeID,
-							Name:     st.Name,
-							Region:   st.Region,
-							OS:       st.System.OS,
-							Kernel:   st.System.Kernel,
-							IsOnline: true,
-							LastSeen: st.LastSeen,
+							NodeID:       st.NodeID,
+							Name:         st.Name,
+							Region:       st.Region,
+							OS:           st.System.OS,
+							Kernel:       st.System.Kernel,
+							AgentVersion: st.System.AgentVersion,
+							IsOnline:     true,
+							LastSeen:     st.LastSeen,
 						})
 						h.sendBroadcast(&model.WSEvent{
 							Type:      "node_update",
@@ -636,16 +638,22 @@ func (h *Hub) IngestReport(report *model.NodeReport) {
 
 	// Update SQLite node metadata asynchronously
 	go func() {
-		_ = h.storage.UpsertNode(&model.NodeMetadata{
-			NodeID:   report.NodeID,
-			Name:     name,
-			Token:    report.Token,
-			Region:   region,
-			OS:       report.System.OS,
-			Kernel:   report.System.Kernel,
-			IsOnline: true,
-			LastSeen: now,
+		err := h.storage.UpsertNode(&model.NodeMetadata{
+			NodeID:       report.NodeID,
+			Name:         name,
+			Token:        report.Token,
+			Region:       region,
+			OS:           report.System.OS,
+			Kernel:       report.System.Kernel,
+			AgentVersion: report.System.AgentVersion,
+			IsOnline:     true,
+			LastSeen:     now,
 		})
+		if err != nil {
+			// The in-memory state already updated, so this node looks healthy
+			// until the next restart silently forgets it. Say so.
+			log.Printf("[Hub] Failed to persist node %s: %v", report.NodeID, err)
+		}
 	}()
 
 	// Ingest into downsampler for historical persistence

@@ -17,6 +17,7 @@ import (
 
 	"probe/pkg/model"
 	"probe/pkg/netguard"
+	"probe/pkg/version"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -247,7 +248,7 @@ func (s *Server) setupRoutes() {
 		s.router.GET("/", func(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{
 				"service": "probe-server",
-				"version": "1.0.0",
+				"version": version.Version,
 				"status":  "running",
 				"note":    "Web frontend is running separately or not embedded.",
 			})
@@ -404,7 +405,16 @@ func (s *Server) handleClientWS(c *gin.Context) {
 
 func (s *Server) handleGetNodes(c *gin.Context) {
 	states := s.hub.GetAllStates()
-	c.JSON(http.StatusOK, gin.H{"nodes": states})
+	c.JSON(http.StatusOK, gin.H{
+		"nodes": states,
+		// The version a freshly installed agent would report. A release stamps
+		// both binaries from one VERSION, so the server's own version is by
+		// construction the version of the agent it hands out over
+		// /download/probe-agent. The dashboard compares each node against this
+		// and flags any that differ — that mismatch is the whole upgrade signal.
+		"latest_agent_version": version.Version,
+		"server_version":       version.Version,
+	})
 }
 
 func (s *Server) handleGetNode(c *gin.Context) {

@@ -53,6 +53,7 @@ func (s *Storage) initSchema() error {
 		tags TEXT,
 		os TEXT,
 		kernel TEXT,
+		agent_version TEXT DEFAULT '',
 		is_online INTEGER DEFAULT 0,
 		last_seen INTEGER DEFAULT 0,
 		created_at INTEGER NOT NULL
@@ -175,6 +176,9 @@ func (s *Storage) initSchema() error {
 
 	// Dynamic column migrations if table previously had fewer columns
 	s.migrateTableColumns()
+	if err := s.requireColumns(); err != nil {
+		return err
+	}
 	if err := s.initializeTargetAssignments(); err != nil {
 		return fmt.Errorf("failed to initialize ping target assignments: %w", err)
 	}
@@ -254,10 +258,64 @@ func (s *Storage) migrateTableColumns() {
 		"ALTER TABLE ping_targets ADD COLUMN auto_start INTEGER DEFAULT 1",
 		"ALTER TABLE ping_targets ADD COLUMN assigned_servers TEXT DEFAULT ''",
 		"ALTER TABLE node_settings ADD COLUMN bandwidth_used INTEGER DEFAULT 0",
+		// First entry against the nodes table. Re-running is harmless because the
+		// error from a duplicate column is swallowed below, which is what makes
+		// this whole slice idempotent.
+		"ALTER TABLE nodes ADD COLUMN agent_version TEXT DEFAULT ''",
 	}
 	for _, sqlStmt := range cols {
 		_, _ = s.db.Exec(sqlStmt)
 	}
+}
+
+// requireColumns asserts that migrateTableColumns actually landed.
+//
+// The ALTER statements above swallow every error so that re-running them is
+// harmless, which means a migration that fails for a real reason — a locked or
+// read-only database, a full disk — leaves no trace. That was survivable while
+// the slice only touched columns the dashboard could do without. It is not
+// survivable for agent_version: GetAllNodes selects it, so a missing column
+// makes every row fail to scan, every node disappear, and the dashboard come up
+// empty with nothing in the log to explain it. Failing startup loudly is the
+// better outcome.
+func (s *Storage) requireColumns() error {
+	required := []string{"agent_version"}
+	for _, col := range required {
+		found, err := s.columnExists("nodes", col)
+		if err != nil {
+			return fmt.Errorf("failed to verify schema: %w", err)
+		}
+		if !found {
+			return fmt.Errorf("schema migration incomplete: nodes.%s is missing", col)
+		}
+	}
+	return nil
+}
+
+func (s *Storage) columnExists(table, column string) (bool, error) {
+	rows, err := s.db.Query(fmt.Sprintf("PRAGMA table_info(%s)", table))
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var (
+			cid        int
+			name       string
+			ctype      string
+			notNull    int
+			defaultVal sql.NullString
+			pk         int
+		)
+		if err := rows.Scan(&cid, &name, &ctype, &notNull, &defaultVal, &pk); err != nil {
+			return false, err
+		}
+		if name == column {
+			return true, nil
+		}
+	}
+	return false, rows.Err()
 }
 
 // initializeTargetAssignments freezes the current node set for legacy targets
@@ -354,19 +412,20 @@ func (s *Storage) UpsertNode(meta *model.NodeMetadata) error {
 	}
 
 	query := `
-	INSERT INTO nodes (node_id, name, token, region, os, kernel, is_online, last_seen, created_at)
-	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	INSERT INTO nodes (node_id, name, token, region, os, kernel, agent_version, is_online, last_seen, created_at)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	ON CONFLICT(node_id) DO UPDATE SET
 		name = CASE WHEN excluded.name != '' THEN excluded.name ELSE nodes.name END,
 		token = CASE WHEN excluded.token != '' THEN excluded.token ELSE nodes.token END,
 		region = CASE WHEN excluded.region != '' THEN excluded.region ELSE nodes.region END,
 		os = CASE WHEN excluded.os != '' THEN excluded.os ELSE nodes.os END,
 		kernel = CASE WHEN excluded.kernel != '' THEN excluded.kernel ELSE nodes.kernel END,
+		agent_version = CASE WHEN excluded.agent_version != '' THEN excluded.agent_version ELSE nodes.agent_version END,
 		is_online = excluded.is_online,
 		last_seen = excluded.last_seen;
 	`
 	_, err := s.db.Exec(query,
-		meta.NodeID, meta.Name, meta.Token, meta.Region, meta.OS, meta.Kernel,
+		meta.NodeID, meta.Name, meta.Token, meta.Region, meta.OS, meta.Kernel, meta.AgentVersion,
 		onlineInt, meta.LastSeen, now,
 	)
 	return err
@@ -377,7 +436,7 @@ func (s *Storage) GetAllNodes() ([]*model.NodeMetadata, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	rows, err := s.db.Query(`SELECT node_id, name, token, region, os, kernel, is_online, last_seen, created_at FROM nodes`)
+	rows, err := s.db.Query(`SELECT node_id, name, token, region, os, kernel, agent_version, is_online, last_seen, created_at FROM nodes`)
 	if err != nil {
 		return nil, err
 	}
@@ -387,7 +446,10 @@ func (s *Storage) GetAllNodes() ([]*model.NodeMetadata, error) {
 	for rows.Next() {
 		var n model.NodeMetadata
 		var isOnline int
-		if err := rows.Scan(&n.NodeID, &n.Name, &n.Token, &n.Region, &n.OS, &n.Kernel, &isOnline, &n.LastSeen, &n.CreatedAt); err != nil {
+		if err := rows.Scan(&n.NodeID, &n.Name, &n.Token, &n.Region, &n.OS, &n.Kernel, &n.AgentVersion, &isOnline, &n.LastSeen, &n.CreatedAt); err != nil {
+			// Never silent: a scan failure drops the node from the fleet with no
+			// other trace, and a column-count mismatch is exactly how that happens.
+			log.Printf("[Storage] Skipping unreadable node row: %v", err)
 			continue
 		}
 		n.IsOnline = (isOnline == 1)

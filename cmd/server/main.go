@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"probe/pkg/server"
+	"probe/pkg/version"
 )
 
 //go:embed all:dist
@@ -29,6 +30,7 @@ func main() {
 		retentionDays int
 		publicView    bool
 		sessionHours  int
+		showVersion   bool
 	)
 
 	flag.StringVar(&listenAddr, "addr", getEnv("PROBE_SERVER_ADDR", ":8080"), "Server HTTP and WebSocket listen address")
@@ -37,7 +39,13 @@ func main() {
 	flag.IntVar(&retentionDays, "retention-days", 7, "Days of historical downsampled telemetry to retain")
 	flag.BoolVar(&publicView, "public", getEnvBool("PROBE_PUBLIC_VIEW", false), "Allow anonymous read-only viewing of telemetry (default: login required for every view)")
 	flag.IntVar(&sessionHours, "session-hours", 168, "Dashboard session lifetime in hours")
+	flag.BoolVar(&showVersion, "version", false, "Print the server version and exit")
 	flag.Parse()
+
+	if showVersion {
+		fmt.Printf("probe-server %s\n", version.Version)
+		return
+	}
 
 	// Ensure DB directory exists
 	dbDir := filepath.Dir(dbPath)
@@ -47,6 +55,7 @@ func main() {
 
 	log.Printf("==================================================")
 	log.Printf("  Cyber Probe Server Hub (In-Memory Broadcast)")
+	log.Printf("  Version          : %s", version.Version)
 	log.Printf("  Listen Address   : %s", listenAddr)
 	log.Printf("  SQLite Database  : %s", dbPath)
 	log.Printf("  Downsample Flush : %ds", flushSec)
