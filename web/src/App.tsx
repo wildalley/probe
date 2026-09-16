@@ -43,6 +43,9 @@ export function App() {
   const auth = useAuth();
 
   const [nodes, setNodes] = useState<Map<string, NodeState>>(new Map());
+  // 服务端此刻会下发的 probe-agent 版本，用作「这台机器是不是旧的」的基准。
+  // undefined 表示还没取到（或服务端没返回），此时看板不做任何版本判断。
+  const [latestAgentVersion, setLatestAgentVersion] = useState<string | undefined>(undefined);
   const [wsConnected, setWsConnected] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedRegion, setSelectedRegion] = useState("ALL");
@@ -89,6 +92,12 @@ export function App() {
             data.nodes.forEach((n: NodeState) => next.set(n.node_id, n));
             return next;
           });
+        }
+        // 与节点列表同一个响应，因此不额外发请求。只有这个 REST 接口能给出
+        // 基准版本：WS 快照里每个节点自带版本，但「最新版是什么」是全局信息。
+        // 老服务端不返回该字段，此时保持 undefined，看板不下任何版本结论。
+        if (typeof data.latest_agent_version === "string") {
+          setLatestAgentVersion(data.latest_agent_version);
         }
       })
       .catch(() => {});
@@ -344,6 +353,7 @@ export function App() {
           onSelectNode={setSelectedNode}
           theme={theme}
           onToggleTheme={toggleTheme}
+          latestAgentVersion={latestAgentVersion}
         />
       ) : (
         <>
@@ -386,6 +396,7 @@ export function App() {
                         node={node}
                         onSelect={setSelectedNode}
                         theme={theme}
+                        latestAgentVersion={latestAgentVersion}
                       />
                     </BlurFade>
                   ))}
@@ -395,6 +406,7 @@ export function App() {
                   nodes={filteredNodes}
                   onSelect={setSelectedNode}
                   theme={theme}
+                  latestAgentVersion={latestAgentVersion}
                 />
               )
             ) : (

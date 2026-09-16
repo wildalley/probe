@@ -15,7 +15,9 @@ import { NodeState } from "../types";
 import { formatBytes, formatRate } from "../utils/format";
 import { getRegionFlag } from "../utils/flags";
 import { getTagStyle } from "../utils/tagColors";
+import { agentVersionOf } from "../utils/agentVersion";
 import { OsIcon } from "./OsIcon";
+import { AgentVersionMark } from "./AgentVersionMark";
 import { cn } from "../lib/utils";
 import { NumberTicker } from "./ui/NumberTicker";
 import { BorderBeam } from "./ui/BorderBeam";
@@ -24,6 +26,8 @@ interface ServerCardProps {
   node: NodeState;
   onSelect: (node: NodeState) => void;
   theme?: "blueprint" | "dark";
+  /** 服务端会下发的 Agent 版本，用作比较基准；缺省则不做版本判断。 */
+  latestAgentVersion?: string;
 }
 
 type TickTone = "good" | "fair" | "moderate" | "poor" | "warn" | "lost" | "muted";
@@ -61,7 +65,7 @@ const getCycleLabel = (cycle?: string) => {
   }
 };
 
-export function ServerCard({ node, onSelect, theme = "dark" }: ServerCardProps) {
+export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion }: ServerCardProps) {
   const divRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [opacity, setOpacity] = useState(0);
@@ -86,6 +90,10 @@ export function ServerCard({ node, onSelect, theme = "dark" }: ServerCardProps) 
   };
 
   const isBlueprint = theme === "blueprint";
+
+  // undefined（旧 Agent 不发这个字段）与空串（未打版本戳的构建）都归为「未知」，
+  // 绝不回落到任何版本号占位串。
+  const agentVersion = agentVersionOf(node.system);
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!divRef.current) return;
@@ -362,6 +370,13 @@ export function ServerCard({ node, onSelect, theme = "dark" }: ServerCardProps) 
         >
           {priceText}
         </span>
+
+        {/* 与基准一致时这个组件返回 null，所以健康机群的卡片宽度不变。 */}
+        <AgentVersionMark
+          version={agentVersion}
+          latestVersion={latestAgentVersion}
+          isBlueprint={isBlueprint}
+        />
       </div>
 
       {/* 3. 2x2 Core Metrics Matrix (CPU, RAM, Disk, Traffic) */}

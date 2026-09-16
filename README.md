@@ -20,6 +20,7 @@
 - **单向出站长连接**：Agent 主动通过 WebSocket/WSS 向上连入 Hub，**无需开放受控机入站端口**，轻松穿透 NAT、家庭宽带与内网环境。
 - **自动环境探测**：自动识别公网 IPv4 / IPv6、地理归属国家/地区、系统内核、虚拟化架构（KVM/Xen/LXC 等）。
 - **流量与网速算法**：物理网卡与虚拟网卡智能过滤，自研差分即时速率算法，自动规避重启计数器归零与溢出异常。
+- **构建期版本标识**：两个二进制都在链接期注入发布版本（`make build-all PROBE_VERSION=1.2.3`），Agent 每次上报都随身携带自身版本。看板据此标出与当前下发版本不一致的节点，因此「哪几台机器跑的是旧 Agent」一眼可见，不必逐台登录确认。
 
 ### 2. 纯内存调度与时序分层持久化 (Server Hub)
 - **纯内存高频广播**：Goroutine 高并发处理 Agent 连接池与 Web 客户端 1Hz 实时数据流推送。
@@ -152,6 +153,18 @@ make build-all
 - `bin/probe-server`：包含 API 网关、WSS Hub、SQLite 存储与 Web 前端界面的单二进制程序（约 25MB）。
 - `bin/probe-agent`：纯静态交叉编译的被控端 Agent 二进制程序（约 6.8MB）。
 
+两个二进制都会在链接期注入发布版本，默认取 `git describe --tags --always --dirty`，因此不带参数构建出来的版本号也能对应到确切的提交。正式发布时显式指定：
+
+```bash
+make build-all PROBE_VERSION=1.2.3
+./bin/probe-server --version   # probe-server 1.2.3
+./bin/probe-agent  --version   # probe-agent 1.2.3
+```
+
+Docker 构建走同一条通道：`PROBE_VERSION=1.2.3 docker compose build`（`docker-compose.yml` 把它转发给镜像的 `VERSION` 构建参数）。`.dockerignore` 排除了 `.git`，镜像内跑不了 `git describe`，所以这个值必须由宿主机传入。
+
+> 服务端与 Agent 从同一个 `PROBE_VERSION` 取值，因此**服务端下发的 Agent 版本与它自己报告的版本必然一致**——这正是看板用来判断「哪台机器是旧的」的基准。
+
 ---
 
 ### 3. 启动服务端 (Probe Server)
@@ -279,8 +292,38 @@ curl -sSL http://<你的服务端IP或域名>:8080/install.sh | sudo bash -s -- 
 systemctl status probe-agent   # 查看探针运行状态
 journalctl -u probe-agent -f   # 查看实时运行日志
 systemctl restart probe-agent  # 重启探针服务
+bash install.sh --upgrade      # 仅更新二进制，保留现有配置与节点标识
 bash install.sh --uninstall    # 一键彻底卸载探针与清理服务
 ```
+
+#### 升级已部署的 Agent
+
+服务端发布新版本后，在目标机器上执行一条命令即可升级：
+
+```bash
+curl -sSL http://<你的服务端IP或域名>:8080/install.sh | sudo bash -s -- --upgrade
+```
+
+`--upgrade` 只做三件事：读现有的 `/etc/probe/agent.yaml` 取出 `server_url`、下载新二进制、重启服务。
+
+- **不需要 Token**：`node_id` 与 Token 都保存在 `agent.yaml` 里，换二进制不会改变它们，看板上不会多出一个节点。
+- **不改配置文件**：脚本不会重写 `agent.yaml`，手工调过的 `insecure_tls`、`report_interval` 等设置原样保留。
+- **原子替换**：新二进制先落到同目录的临时文件并校验是 ELF，再 `rename` 覆盖。Linux 拒绝以 `O_TRUNC` 写入正在运行的二进制（`ETXTBSY`），而 `rename` 不碰运行中的 inode，因此对正在运行的 Agent 升级是安全的——旧进程照常上报，直到紧随其后的 `systemctl restart` 才切到新版本。
+- **失败即回退**：下载失败或校验不通过时，旧二进制原封不动，服务不受影响。
+
+升级完成后脚本会打印 `旧版本 → 新版本`，也可以用 `probe-agent --version` 随时自证这台机器上装的是什么。
+
+#### 版本一致性提示
+
+看板按 **服务端此刻真的会下发的那份 `probe-agent`** 作为基准版本比较每个节点：
+
+| 看板显示 | 含义 |
+| --- | --- |
+| 不显示标记 | 节点版本与基准一致 |
+| **未知（旧版）** | 该 Agent 不上报版本号，说明它早于版本字段本身——最需要升级的那批 |
+| **版本不一致** | 该节点与基准不同。文案刻意不写「可升级」：服务端只能看出两者不同，看不出谁新谁旧（灰度升级中的节点会比基准还新） |
+
+若服务端自身未打版本戳（`dev`）或版本字段缺失，看板不做任何版本判断，不会把整个机群标成不一致。
 
 ---
 
@@ -321,7 +364,8 @@ probe/
 ├── pkg/
 │   ├── agent/                 # 采集逻辑、网卡过滤、差分速率计算、WSS 客户端
 │   ├── model/                 # 协议模型与数据结构
-│   └── server/                # 纯内存 Hub、Downsampler 降采样、SQLite 持久化、会话鉴权、告警推送、REST API
+│   ├── server/                # 纯内存 Hub、Downsampler 降采样、SQLite 持久化、会话鉴权、告警推送、REST API
+│   └── version/               # 构建期注入的发布版本号（两个二进制共用同一符号）
 ├── web/                       # React 19 + Vite + Tailwind CSS 4 + HeroUI + uPlot 前端源码
 │   ├── src/
 │   │   ├── components/        # 仪表盘卡片、图表组件、管理弹窗、详情页、登录与改密界面
@@ -355,6 +399,8 @@ probe/
 10. **敏感信息脱敏**：前端提供 IP 脱敏隐藏开关（如 `154.82.***.***`），方便截图分享与多用户公开展示。
 
 > **部署链路说明**：`/install.sh` 与 `/download/probe-agent` 保持公开，因为它们由目标机器上的 `curl`/`wget` 拉取，不携带浏览器会话。两者均不含机密：Agent Token 由运维人员通过命令行参数传入，而分发 Token 的接口需要登录。
+
+> **版本可见性不改变第 9 条**：服务端只**读取** Agent 上报的版本号用于展示，从不向 Agent 下发任何指令或要求其自我更新；Agent 至今仍只有上报方向。`install.sh --upgrade` 是运维人员在目标机器上亲自发起的操作，与看板无关——看板最多给出一条供人复制、粘贴、按回车的命令。
 
 ---
 

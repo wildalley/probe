@@ -63,6 +63,14 @@ export interface SystemSettings {
 export interface SystemInfo {
   os: string;
   kernel: string;
+  /**
+   * 上报这份数据的 Agent 的构建版本。
+   *
+   * 可选，且缺失是有意义的：早于该字段的 Agent 不会发送它，未打版本戳的构建
+   * 会发送空串。两种情况都必须渲染成「未知（旧版）」，不能填占位串——缺失本身
+   * 就是要看的信号。
+   */
+  agent_version?: string;
   uptime: number;
   cpu_model?: string;
   cpu_mark?: string;

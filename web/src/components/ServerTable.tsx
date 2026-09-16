@@ -4,7 +4,9 @@ import { ArrowDown, ArrowUp, Activity, Clock, Server, Star } from "lucide-react"
 import { NodeState } from "../types";
 import { formatBytes, splitRate, getSemanticColor } from "../utils/format";
 import { getRegionFlag } from "../utils/flags";
+import { agentVersionOf } from "../utils/agentVersion";
 import { OsIcon } from "./OsIcon";
+import { AgentVersionMark } from "./AgentVersionMark";
 import { cn } from "../lib/utils";
 import { NumberTicker } from "./ui/NumberTicker";
 
@@ -12,6 +14,8 @@ interface ServerTableProps {
   nodes: NodeState[];
   onSelect: (node: NodeState) => void;
   theme?: "blueprint" | "dark";
+  /** 服务端会下发的 Agent 版本，用作比较基准；缺省则不做版本判断。 */
+  latestAgentVersion?: string;
 }
 
 const getCycleLabel = (cycle?: string) => {
@@ -62,7 +66,7 @@ const MetricCell: React.FC<{ percent: number; isBlueprint: boolean }> = ({ perce
   );
 };
 
-export const ServerTable: React.FC<ServerTableProps> = ({ nodes, onSelect, theme = "dark" }) => {
+export const ServerTable: React.FC<ServerTableProps> = ({ nodes, onSelect, theme = "dark", latestAgentVersion }) => {
   const isBlueprint = theme === "blueprint";
   const [, setStarTrigger] = useState(0);
 
@@ -193,6 +197,11 @@ export const ServerTable: React.FC<ServerTableProps> = ({ nodes, onSelect, theme
                     >
                       {node.system.os || "Linux"}
                     </span>
+                    <AgentVersionMark
+                      version={agentVersionOf(node.system)}
+                      latestVersion={latestAgentVersion}
+                      isBlueprint={isBlueprint}
+                    />
                   </div>
                 </td>
 

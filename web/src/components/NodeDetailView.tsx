@@ -36,6 +36,7 @@ import { Tabs } from "@heroui/react";
 import { HistoryPoint, NodeState, PingHistoryPoint, PingStat, PingTargetConfig } from "../types";
 import { formatBytes, formatRate } from "../utils/format";
 import { getRegionFlag } from "../utils/flags";
+import { agentVersionOf, agentVersionStatus } from "../utils/agentVersion";
 import { getTagStyle } from "../utils/tagColors";
 import { OsIcon } from "./OsIcon";
 import { TimeSeriesChart, ChartSeries } from "./TimeSeriesChart";
@@ -50,7 +51,16 @@ interface NodeDetailViewProps {
   onSelectNode: (node: NodeState) => void;
   theme?: "blueprint" | "dark";
   onToggleTheme?: () => void;
+  /** 服务端会下发的 Agent 版本，用作比较基准；缺省则不做版本判断。 */
+  latestAgentVersion?: string;
 }
+
+/**
+ * 给人复制的升级命令。看板由服务端自己托管，所以 window.location.origin 就是
+ * 当初下发 install.sh 的那个地址。--upgrade 读取目标机上已有的 agent.yaml，
+ * 既不需要 token 也不会改 node_id。
+ */
+const AGENT_UPGRADE_COMMAND = `curl -sSL ${window.location.origin}/install.sh | sudo bash -s -- --upgrade`;
 
 const getCycleLabel = (cycle?: string) => {
   switch (cycle) {
@@ -71,10 +81,16 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
   onSelectNode,
   theme: propsTheme,
   onToggleTheme,
+  latestAgentVersion,
 }) => {
   const [localTheme, setLocalTheme] = useState<"blueprint" | "dark">("blueprint");
   const theme = propsTheme || localTheme;
   const isBlueprint = theme === "blueprint";
+
+  // 三个状态都不共用文案：旧 Agent 根本不发版本字段，把这个「缺失」渲染成
+  // 任何版本号都会毁掉整条升级信号的唯一来源。
+  const nodeAgentVersion = agentVersionOf(node.system);
+  const versionStatus = agentVersionStatus(nodeAgentVersion, latestAgentVersion);
 
   const toggleTheme = () => {
     if (onToggleTheme) {
@@ -922,6 +938,41 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
               </div>
 
               <div>
+                <div className={`text-10 ${isBlueprint ? "text-slate-500 font-medium" : "text-zinc-400"}`}>Agent 版本</div>
+                {nodeAgentVersion ? (
+                  <div className={`flex items-center gap-1 mt-1 font-semibold ${isBlueprint ? "text-slate-800" : "text-zinc-200"}`}>
+                    <span className="truncate text-xs" title={nodeAgentVersion}>{nodeAgentVersion}</span>
+                    {versionStatus === "outdated" && (
+                      <span
+                        className={`shrink-0 rounded px-1 py-0.5 text-10 font-bold ${
+                          isBlueprint ? "bg-amber-50 text-amber-600" : "bg-amber-500/15 text-amber-400"
+                        }`}
+                        title={`服务端当前下发的版本是 ${latestAgentVersion}`}
+                      >
+                        版本不一致
+                      </span>
+                    )}
+                    <button
+                      onClick={() => copyText(nodeAgentVersion, "agent-version")}
+                      className={`${isBlueprint ? "text-slate-400 hover:text-slate-700 shrink-0" : "text-zinc-500 hover:text-zinc-300 shrink-0"}`}
+                      title="复制 Agent 版本"
+                    >
+                      {copiedField === "agent-version" ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+                    </button>
+                  </div>
+                ) : (
+                  /* 没有版本号不是「加载中」，而是这台机器上的 Agent 早于版本
+                     字段本身。这正是最需要升级的那批，所以直说，不填占位串。 */
+                  <div
+                    className={`mt-1 font-semibold text-xs ${isBlueprint ? "text-amber-600" : "text-amber-400"}`}
+                    title="该 Agent 不上报版本号，说明它早于版本字段本身"
+                  >
+                    未知（旧版）
+                  </div>
+                )}
+              </div>
+
+              <div>
                 <div className={`text-10 ${isBlueprint ? "text-slate-500 font-medium" : "text-zinc-400"}`}>运行时间</div>
                 <div className={`mt-1 font-semibold text-xs ${isBlueprint ? "text-slate-800" : "text-zinc-200"}`}>
                   {node.uptime_str}
@@ -934,6 +985,35 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
                   {node.billing?.provider || "圣何塞 · Zillion Network Inc. · AS54801"}
                 </div>
               </div>
+
+              {/* 只有需要人动手时才占位。--upgrade 读现有的 agent.yaml，因此不
+                  需要当初那条部署命令的 token，也不会改动 node_id。 */}
+              {versionStatus !== "current" && (
+                <div className={`col-span-2 mt-1 rounded-lg border px-2.5 py-2 ${
+                  isBlueprint ? "border-amber-200 bg-amber-50/60" : "border-amber-500/25 bg-amber-500/5"
+                }`}>
+                  <div className={`text-10 font-medium ${isBlueprint ? "text-amber-700" : "text-amber-400"}`}>
+                    {versionStatus === "unknown"
+                      ? "该 Agent 不上报版本号，早于版本字段本身，建议升级。"
+                      : `与当前下发的 ${latestAgentVersion} 不一致，建议升级。`}
+                  </div>
+                  <div className="mt-1 flex items-center gap-1.5">
+                    <code
+                      className={`truncate font-mono text-10 ${isBlueprint ? "text-slate-700" : "text-zinc-300"}`}
+                      title={AGENT_UPGRADE_COMMAND}
+                    >
+                      {AGENT_UPGRADE_COMMAND}
+                    </code>
+                    <button
+                      onClick={() => copyText(AGENT_UPGRADE_COMMAND, "agent-upgrade")}
+                      className={`${isBlueprint ? "text-slate-400 hover:text-slate-700 shrink-0" : "text-zinc-500 hover:text-zinc-300 shrink-0"}`}
+                      title="复制升级命令"
+                    >
+                      {copiedField === "agent-upgrade" ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </BlurFade>
 
