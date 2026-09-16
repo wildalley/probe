@@ -28,6 +28,14 @@ services:
       # only when the dashboard is served from a different host than the API.
       PROBE_ALLOWED_ORIGINS: "${PROBE_ALLOWED_ORIGINS:-}"
 
+      # Only these proxy addresses or CIDRs may supply the client IP used by
+      # login throttling. Empty means forwarding headers are not trusted.
+      PROBE_TRUSTED_PROXIES: "${PROBE_TRUSTED_PROXIES:-}"
+
+      # Keep false on internet-facing deployments. Enable only when probes or
+      # webhook receivers intentionally live on a trusted private network.
+      PROBE_ALLOW_PRIVATE_TARGETS: "${PROBE_ALLOW_PRIVATE_TARGETS:-false}"
+
       # The daily report fires at a local wall-clock time, so this decides when
       # "09:00" actually happens.
       TZ: "${TZ:-Asia/Shanghai}"
