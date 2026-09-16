@@ -45,6 +45,99 @@ check_root() {
     fi
 }
 
+# 等待 probe-agent 进入 active，最多约 10 秒。
+wait_for_service() {
+    local i
+    for i in $(seq 1 20); do
+        if systemctl is-active --quiet probe-agent; then
+            return 0
+        fi
+        sleep 0.5
+    done
+    return 1
+}
+
+# 由 SERVER_URL 推算 HTTP 下载根地址 (ws:// -> http://, wss:// -> https://)
+resolve_http_base() {
+    local http_base="${SERVER_URL}"
+    http_base="${http_base/ws:\/\//http:\/\/}"
+    http_base="${http_base/wss:\/\//https:\/\/}"
+    # 去除 path
+    echo "$http_base" | sed -E 's/(\/(api|ws).*|\/)$//'
+}
+
+# read_config_value KEY —— 从已有 agent.yaml 中读取一个顶层键，兼容带引号与不
+# 带引号两种写法。取不到时返回 1。
+#
+# 注意 `|| true`：grep 无匹配时返回 1，而这是普通赋值语句，在 set -e 下会让整个
+# 脚本无提示地中止。所以每一次 grep 都必须显式兜底。
+read_config_value() {
+    local key="$1" line value
+    [ -f "${CONFIG_PATH}" ] || return 1
+    line="$(grep -E "^[[:space:]]*${key}:" "${CONFIG_PATH}" 2>/dev/null | head -n 1 || true)"
+    [ -n "$line" ] || return 1
+    # 按第一个冒号切分：键分隔符在前，值里的冒号（ws://host:port）不受影响。
+    value="${line#*:}"
+    value="$(printf '%s' "$value" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+    value="${value%\"}"; value="${value#\"}"
+    value="${value%\'}"; value="${value#\'}"
+    [ -n "$value" ] || return 1
+    printf '%s' "$value"
+}
+
+# 打印某个二进制的自身版本。老版本 Agent 没有 --version，会以退出码 2 结束，
+# 因此必须兜底——否则 set -e 会让升级在最后一步误报失败。
+agent_version_of() {
+    local bin="$1" out
+    [ -n "$bin" ] && [ -x "$bin" ] || { printf '未知'; return 0; }
+    out="$("$bin" --version 2>/dev/null || true)"
+    [ -n "$out" ] || { printf '未知（旧版）'; return 0; }
+    printf '%s' "$out"
+}
+
+# 校验下载结果确实是 Linux 可执行文件。
+# curl -f 只拒绝 4xx/5xx；透明代理或门户认证返回 200 + HTML 时，旧脚本会把网页
+# 写进 BIN_PATH 并 chmod +x，随后 systemd 反复 Exec format error 崩溃重启。
+validate_agent_binary() {
+    local path="$1" magic
+    [ -f "$path" ] || { log_error "二进制文件不存在: ${path}"; return 1; }
+    [ -s "$path" ] || { log_error "下载内容为空文件，可能下载中断。"; return 1; }
+    magic="$(head -c 4 "$path" | od -An -tx1 | tr -d ' \n')"
+    if [ "$magic" != "7f454c46" ]; then
+        log_error "下载内容不是有效的 Linux 可执行文件（收到的是网页或错误页？）"
+        return 1
+    fi
+    return 0
+}
+
+# 原子替换 BIN_PATH。
+#
+# 旧脚本直接 `curl -o ${BIN_PATH}`。Linux 拒绝以写方式打开正在执行的文件
+# (ETXTBSY)，而用这个脚本升级时 Agent 必然正在运行——于是下载失败，脚本却报
+# 「请检查网络」。rename(2) 没有这个限制：正在运行的进程继续持有旧 inode，
+# 下一次 restart 才切到新文件。
+#
+# 暂存文件必须与 BIN_PATH 同目录：跨文件系统的 mv 会退化成拷贝+删除，而拷贝会
+# 以 O_TRUNC 打开目标，又踩回 ETXTBSY。
+BIN_TMP=""
+stage_binary_target() {
+    BIN_TMP="$(mktemp "${BIN_PATH}.XXXXXX")"
+    # 幂等清理：成功提交后 BIN_TMP 置空，此处即为空操作。
+    trap '[ -n "${BIN_TMP}" ] && rm -f "${BIN_TMP}"' EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+}
+
+# 校验暂存文件并落位。校验不通过时旧二进制原封不动，服务不受影响。
+commit_staged_binary() {
+    validate_agent_binary "${BIN_TMP}" || return 1
+    # 用 0755 而不是 +x，避免结果受调用者 umask 影响。
+    chmod 0755 "${BIN_TMP}"
+    mv -f "${BIN_TMP}" "${BIN_PATH}"
+    BIN_TMP=""
+    return 0
+}
+
 detect_arch() {
     local arch
     arch="$(uname -m)"
@@ -85,6 +178,7 @@ usage() {
     echo "  -r, --region <REGION>    节点所在地区/机房 (如 HK, US, JP, SG, 默认: AP-CN)"
     echo "  --interval <SEC>         采集汇报间隔秒数 (默认: 1)"
     echo "  --download-url <URL>     自定义二进制下载地址"
+    echo "  --upgrade                仅更新二进制（保留现有配置与节点标识）"
     echo "  --uninstall              彻底卸载 Agent 及系统服务"
     echo "  --status                 查看 Agent 运行状态"
     echo "  --restart                重启 Agent 服务"
@@ -93,6 +187,9 @@ usage() {
     echo ""
     echo -e "${BOLD}一键示例:${NC}"
     echo "  curl -sSL http://1.2.3.4:8080/install.sh | sudo bash -s -- --server ws://1.2.3.4:8080 --token sk_xxx --name \"My VPS\" --region \"HK\""
+    echo ""
+    echo -e "${BOLD}升级示例 (无需 token，节点标识与配置保持不变):${NC}"
+    echo "  curl -sSL http://1.2.3.4:8080/install.sh | sudo bash -s -- --upgrade"
     echo ""
 }
 
@@ -147,6 +244,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --restart)
             ACTION="restart"
+            shift
+            ;;
+        --upgrade)
+            ACTION="upgrade"
             shift
             ;;
         --logs)
@@ -296,40 +397,51 @@ do_install() {
     log_info "正在获取二进制程序 ${BIN_NAME}..."
     mkdir -p "${INSTALL_DIR}"
 
-    # 优先检查本地脚本同级或父级目录是否存在现成的 probe-agent 二进制
+    # 优先检查本地脚本同级或父级目录是否存在现成的 probe-agent 二进制。
+    #
+    # 仅信任 root 所有、且不是符号链接的文件。文档给出的调用方式是
+    # `curl ... | sudo bash`，其工作目录就是运维当时所在的位置；若不过滤属主，
+    # 任何本地普通用户往那儿放一个同名文件就能让它以 root 身份被安装并运行。
+    # （/tmp/probe-agent 曾经也在候选列表里，那是人人可写的目录。）
     local found_local=""
-    for candidate in "./bin/probe-agent" "./probe-agent" "../bin/probe-agent" "/tmp/probe-agent"; do
+    for candidate in "./bin/probe-agent" "./probe-agent" "../bin/probe-agent"; do
         if [ -f "$candidate" ] && [ -x "$candidate" ]; then
+            if [ -L "$candidate" ]; then
+                log_warn "忽略符号链接: ${candidate}"
+                continue
+            fi
+            if [ "$(stat -c %U "$candidate" 2>/dev/null || echo unknown)" != "root" ]; then
+                log_warn "忽略非 root 所有的本地文件: ${candidate}"
+                continue
+            fi
             found_local="$candidate"
             break
         fi
     done
 
+    stage_binary_target
+
     if [ -n "$found_local" ]; then
-        log_info "发现本地可用二进制文件: ${found_local}，直接拷贝安装..."
-        cp -f "$found_local" "${BIN_PATH}"
+        log_info "发现本地可用二进制文件: ${found_local}，正在安装..."
+        cp -f "$found_local" "${BIN_TMP}"
     else
         # 否则尝试从服务端或者指定 URL 下载
         local download_url="${CUSTOM_DOWNLOAD_URL}"
         if [ -z "$download_url" ]; then
-            # 从 SERVER_URL 推算 HTTP 下载地址
-            local http_base="${SERVER_URL}"
-            http_base="${http_base/ws:\/\//http:\/\/}"
-            http_base="${http_base/wss:\/\//https:\/\/}"
-            # 去除 path
-            http_base="$(echo "$http_base" | sed -E 's/(\/(api|ws).*|\/)$//')"
-            download_url="${http_base}/download/probe-agent"
+            download_url="$(resolve_http_base)/download/probe-agent"
         fi
 
         log_info "从服务端下载二进制: ${download_url} ..."
         if command -v curl >/dev/null 2>&1; then
-            curl -fsSL -o "${BIN_PATH}" "${download_url}" || {
-                log_error "curl 下载失败，请检查网络或服务端是否在线。"
+            curl -fsSL -o "${BIN_TMP}" "${download_url}" || {
+                log_error "下载失败: ${download_url}"
+                log_error "请确认服务端地址可达、且 ${SERVER_URL} 正在运行。"
                 exit 1
             }
         elif command -v wget >/dev/null 2>&1; then
-            wget -q -O "${BIN_PATH}" "${download_url}" || {
-                log_error "wget 下载失败，请检查网络或服务端是否在线。"
+            wget -q -O "${BIN_TMP}" "${download_url}" || {
+                log_error "下载失败: ${download_url}"
+                log_error "请确认服务端地址可达、且 ${SERVER_URL} 正在运行。"
                 exit 1
             }
         else
@@ -338,8 +450,13 @@ do_install() {
         fi
     fi
 
-    chmod +x "${BIN_PATH}"
-    log_success "二进制程序已安装至: ${BIN_PATH}"
+    # 校验在替换之前完成：不通过则 BIN_PATH 保持原样，正在运行的服务不受影响。
+    if ! commit_staged_binary; then
+        log_error "二进制文件校验未通过，已保留原有安装。"
+        exit 1
+    fi
+
+    log_success "二进制程序已安装至: ${BIN_PATH} ($(agent_version_of "${BIN_PATH}"))"
 
     # 2. 写入配置文件
     mkdir -p "${CONFIG_DIR}"
@@ -384,8 +501,9 @@ EOF
         systemctl enable probe-agent
         systemctl restart probe-agent
 
-        sleep 1.5
-        if systemctl is-active --quiet probe-agent; then
+        # 轮询而不是固定 sleep 一次：systemd 有时还没来得及把状态翻成 active，
+        # 一次判断就会在升级成功之后打印「服务启动可能遇到异常」。
+        if wait_for_service; then
             log_success "Cyber Probe Agent 服务已成功启动并配置开机自启！"
         else
             log_warn "服务启动可能遇到异常，正在打印最近日志:"
@@ -410,6 +528,99 @@ EOF
     echo ""
 }
 
+# 升级：只换二进制，其余一律不碰。
+#
+# 单独成一个函数而不是复用 do_install，因为 do_install 会做四件升级时不该做的
+# 事：要求 --token（管道执行时无法交互，必然失败）、跑一次地区自动识别并可能改写
+# region、无条件截断重写 agent.yaml（会毁掉 insecure_tls、手工调过的
+# report_interval 等），以及重写 systemd unit（会覆盖运维自定义的资源限制）。
+#
+# node_id 与 token 都保存在 agent.yaml 里，换二进制不会改变它们，因此升级后看板上
+# 仍是同一个节点，历史曲线、计费与目标分配全部延续——不需要删掉重新添加。
+do_upgrade() {
+    check_root
+
+    if [ ! -f "${CONFIG_PATH}" ]; then
+        log_error "未找到配置文件 ${CONFIG_PATH}，这台主机似乎还没有安装过 Agent。"
+        log_info "请改用常规安装: $0 --server <URL> --token <TOKEN>"
+        exit 1
+    fi
+
+    # 配置文件里的 server_url 是升级时唯一需要的东西；命令行参数优先，便于换服务端。
+    if [ -z "${SERVER_URL}" ]; then
+        SERVER_URL="$(read_config_value server_url || true)"
+    fi
+    if [ -z "${SERVER_URL}" ]; then
+        log_error "无法从 ${CONFIG_PATH} 读取 server_url，请用 --server 显式指定。"
+        exit 1
+    fi
+
+    local node_id
+    node_id="$(read_config_value node_id || true)"
+
+    local old_version
+    old_version="$(agent_version_of "${BIN_PATH}")"
+
+    log_info "正在升级 Cyber Probe Agent..."
+    log_info "节点 ID   : ${node_id:-未知}"
+    log_info "服务端    : ${SERVER_URL}"
+    log_info "当前版本  : ${old_version}"
+
+    mkdir -p "${INSTALL_DIR}"
+    stage_binary_target
+
+    local download_url="${CUSTOM_DOWNLOAD_URL}"
+    if [ -z "$download_url" ]; then
+        download_url="$(resolve_http_base)/download/probe-agent"
+    fi
+
+    log_info "正在下载最新二进制: ${download_url} ..."
+    if command -v curl >/dev/null 2>&1; then
+        curl -fsSL -o "${BIN_TMP}" "${download_url}" || {
+            log_error "下载失败: ${download_url}"
+            log_error "原有安装未做任何改动，Agent 仍在正常运行。"
+            exit 1
+        }
+    elif command -v wget >/dev/null 2>&1; then
+        wget -q -O "${BIN_TMP}" "${download_url}" || {
+            log_error "下载失败: ${download_url}"
+            log_error "原有安装未做任何改动，Agent 仍在正常运行。"
+            exit 1
+        }
+    else
+        log_error "系统缺少 curl 或 wget，请先安装其中之一。"
+        exit 1
+    fi
+
+    # 校验在替换之前：不通过则 BIN_PATH 原封不动，运行中的服务不受影响。
+    if ! commit_staged_binary; then
+        log_error "新二进制校验未通过，已保留原有安装。"
+        exit 1
+    fi
+
+    local new_version
+    new_version="$(agent_version_of "${BIN_PATH}")"
+    log_success "二进制已更新: ${old_version} → ${new_version}"
+
+    if [ -z "${node_id}" ]; then
+        log_warn "未能读到 node_id，请确认 ${CONFIG_PATH} 中的节点标识。"
+    fi
+    log_info "配置文件 ${CONFIG_PATH} 未做任何改动。"
+
+    if command -v systemctl >/dev/null 2>&1; then
+        systemctl restart probe-agent
+        if wait_for_service; then
+            log_success "Agent 已使用新版本重新上线，看板上的节点不会变化。"
+        else
+            log_warn "服务未能进入 active 状态，正在打印最近日志:"
+            journalctl -u probe-agent -n 15 --no-pager
+            exit 1
+        fi
+    else
+        log_warn "当前系统未安装 Systemd，请手动重启 Agent 进程以载入新版本。"
+    fi
+}
+
 # 执行对应操作
 case "$ACTION" in
     uninstall)
@@ -423,6 +634,9 @@ case "$ACTION" in
         ;;
     logs)
         do_logs
+        ;;
+    upgrade)
+        do_upgrade
         ;;
     install)
         do_install
