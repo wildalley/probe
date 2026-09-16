@@ -948,6 +948,16 @@ func (h *Hub) GetNodeState(nodeID string) (*model.NodeState, bool) {
 
 // DeleteNode removes node from memory and storage.
 func (h *Hub) DeleteNode(nodeID string) error {
+	// A live agent connection is the authority on whether this node is in use.
+	// Its entry clears as soon as the agent's socket ends: a clean exit
+	// unregisters immediately, and a link that died silently is noticed when the
+	// read deadline expires. A socket that is merely stalled keeps its entry, so
+	// a node that went quiet mid-connection still cannot be deleted out from
+	// under a live agent.
+	//
+	// The online flag is deliberately not consulted. It follows the alert
+	// debounce, which defaults to a minute, so gating on it left a node that had
+	// already shut down cleanly undeletable for that whole window.
 	h.agentMu.RLock()
 	_, connected := h.agentConns[nodeID]
 	h.agentMu.RUnlock()
@@ -955,10 +965,6 @@ func (h *Hub) DeleteNode(nodeID string) error {
 		return ErrNodeActive
 	}
 	h.mu.Lock()
-	if state := h.nodeStates[nodeID]; state != nil && state.IsOnline {
-		h.mu.Unlock()
-		return ErrNodeActive
-	}
 	delete(h.nodeStates, nodeID)
 	h.mu.Unlock()
 

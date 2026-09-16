@@ -179,16 +179,24 @@ func TestDeleteNodeRequiresAgentToStop(t *testing.T) {
 		agentConns:    map[string]*wsWriteQueue{},
 		broadcastChan: make(chan *model.WSEvent, 1),
 	}
-	if err := h.DeleteNode("node-1"); err != ErrNodeActive {
-		t.Fatalf("active node deletion = %v, want ErrNodeActive", err)
+	// The online flag alone does not block deletion. It tracks the alert
+	// debounce, which defaults to a minute, so it stays set long after an agent
+	// has exited cleanly — gating on it made a stopped node undeletable for
+	// that whole window.
+	if err := h.DeleteNode("node-1"); err != nil {
+		t.Fatalf("deleting a stopped-but-online node failed: %v", err)
 	}
-	if _, ok := h.nodeStates["node-1"]; !ok {
-		t.Fatal("active node was removed")
+	if _, ok := h.nodeStates["node-1"]; ok {
+		t.Fatal("stopped node was not removed")
 	}
-	h.nodeStates["node-1"] = &model.NodeState{NodeID: "node-1"}
+
+	h.nodeStates["node-1"] = &model.NodeState{NodeID: "node-1", IsOnline: true}
 	h.agentConns["node-1"] = &wsWriteQueue{}
 	if err := h.DeleteNode("node-1"); err != ErrNodeActive {
 		t.Fatalf("connected node deletion = %v, want ErrNodeActive", err)
+	}
+	if _, ok := h.nodeStates["node-1"]; !ok {
+		t.Fatal("connected node was removed")
 	}
 	delete(h.agentConns, "node-1")
 	if err := h.DeleteNode("node-1"); err != nil {
