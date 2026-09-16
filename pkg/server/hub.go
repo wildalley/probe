@@ -53,7 +53,10 @@ func ResolveNodeGeoAndProvider(ip string) *GeoIPDetails {
 		}
 	}
 
-	client := &http.Client{Timeout: 4 * time.Second}
+	// `ip` reaches here from an agent report or the lookup endpoint, and is
+	// interpolated into the request path below, so the dial goes through the
+	// outbound guard like every other operator-influenced request.
+	client := newGuardedHTTPClient(4 * time.Second)
 	var details GeoIPDetails
 	details.IP = ip
 
@@ -228,7 +231,7 @@ type Hub struct {
 	nodeStates map[string]*model.NodeState
 
 	clientsMu sync.RWMutex
-	clients   map[*websocket.Conn]bool
+	clients   map[*wsWriteQueue]struct{}
 
 	settingsMu    sync.RWMutex
 	nodeSettings  map[string]*model.NodeSettings
@@ -236,7 +239,7 @@ type Hub struct {
 	exchangeRates map[string]float64
 
 	agentMu    sync.RWMutex
-	agentConns map[string]*websocket.Conn
+	agentConns map[string]*wsWriteQueue
 
 	broadcastChan  chan *model.WSEvent
 	offlineTimeout int64 // in seconds, e.g. 6s
@@ -264,10 +267,10 @@ func NewHub(storage *Storage, downsampler *Downsampler) *Hub {
 		storage:        storage,
 		downsampler:    downsampler,
 		nodeStates:     make(map[string]*model.NodeState),
-		clients:        make(map[*websocket.Conn]bool),
+		clients:        make(map[*wsWriteQueue]struct{}),
 		nodeSettings:   make(map[string]*model.NodeSettings),
 		exchangeRates:  map[string]float64{"USD": 7.18, "EUR": 7.82, "HKD": 0.92, "GBP": 9.35, "JPY": 0.048},
-		agentConns:     make(map[string]*websocket.Conn),
+		agentConns:     make(map[string]*wsWriteQueue),
 		broadcastChan:  make(chan *model.WSEvent, 1024),
 		offlineTimeout: 6, // 6 seconds without report -> mark offline
 	}
@@ -330,12 +333,21 @@ func (h *Hub) ReloadSettings() {
 }
 
 // RegisterAgent records a connected agent socket and sends current ping targets.
-func (h *Hub) RegisterAgent(nodeID string, conn *websocket.Conn) {
+// The agent handler calls this again on every report to cover agents that only
+// reveal their node ID in the payload, so re-registering the same queue is a
+// no-op — otherwise each report would trigger another config query and push.
+func (h *Hub) RegisterAgent(nodeID string, q *wsWriteQueue) {
 	h.agentMu.Lock()
-	h.agentConns[nodeID] = conn
+	if existing, ok := h.agentConns[nodeID]; ok && existing == q {
+		h.agentMu.Unlock()
+		return
+	}
+	h.agentConns[nodeID] = q
 	h.agentMu.Unlock()
 
-	h.syncPingTargetsToAgent(conn)
+	if payload, ok := h.pingTargetsPayload(); ok {
+		q.Send(payload)
+	}
 }
 
 // UnregisterAgent removes an agent connection.
@@ -347,40 +359,25 @@ func (h *Hub) UnregisterAgent(nodeID string) {
 
 // BroadcastPingTargetsSync pushes active targets to all connected agents.
 func (h *Hub) BroadcastPingTargetsSync() {
-	targets, err := h.storage.GetPingTargets()
-	if err != nil {
-		return
-	}
-	var active []model.PingTargetConfig
-	for _, t := range targets {
-		if t.Enabled {
-			active = append(active, t)
-		}
-	}
-
-	payload, err := json.Marshal(map[string]interface{}{
-		"type": "config_sync",
-		"data": map[string]interface{}{
-			"ping_targets": active,
-		},
-	})
-	if err != nil {
+	payload, ok := h.pingTargetsPayload()
+	if !ok {
 		return
 	}
 
 	h.agentMu.RLock()
 	defer h.agentMu.RUnlock()
-	for _, conn := range h.agentConns {
-		_ = conn.WriteMessage(websocket.TextMessage, payload)
+	for _, q := range h.agentConns {
+		q.Send(payload)
 	}
 }
 
-func (h *Hub) syncPingTargetsToAgent(conn *websocket.Conn) {
+// pingTargetsPayload builds the config_sync frame listing every enabled target.
+func (h *Hub) pingTargetsPayload() ([]byte, bool) {
 	targets, err := h.storage.GetPingTargets()
 	if err != nil {
-		return
+		return nil, false
 	}
-	var active []model.PingTargetConfig
+	active := make([]model.PingTargetConfig, 0, len(targets))
 	for _, t := range targets {
 		if t.Enabled {
 			active = append(active, t)
@@ -393,9 +390,10 @@ func (h *Hub) syncPingTargetsToAgent(conn *websocket.Conn) {
 			"ping_targets": active,
 		},
 	})
-	if err == nil {
-		_ = conn.WriteMessage(websocket.TextMessage, payload)
+	if err != nil {
+		return nil, false
 	}
+	return payload, true
 }
 
 // IngestReport processes an incoming metric payload from an Agent.
@@ -763,17 +761,21 @@ func (h *Hub) sendBroadcast(event *model.WSEvent) {
 	}
 }
 
-// RegisterClient adds a new Web Dashboard WebSocket client and sends full state snapshot.
-func (h *Hub) RegisterClient(conn *websocket.Conn) {
+// RegisterClient adds a new Web Dashboard WebSocket client and sends full state
+// snapshot. The returned queue owns every write to the socket and must be closed
+// by the caller when the connection ends.
+func (h *Hub) RegisterClient(conn *websocket.Conn) *wsWriteQueue {
+	q := newWSWriteQueue(conn)
+
 	h.clientsMu.Lock()
-	h.clients[conn] = true
+	h.clients[q] = struct{}{}
 	h.clientsMu.Unlock()
 
 	// Immediately send snapshot of all nodes
 	h.mu.RLock()
 	snapshot := make([]*model.NodeState, 0, len(h.nodeStates))
 	for _, s := range h.nodeStates {
-		snapshot = append(snapshot, s)
+		snapshot = append(snapshot, cloneNodeState(s))
 	}
 	h.mu.RUnlock()
 
@@ -783,18 +785,18 @@ func (h *Hub) RegisterClient(conn *websocket.Conn) {
 		Data:      snapshot,
 	}
 
-	payload, err := json.Marshal(event)
-	if err == nil {
-		_ = conn.WriteMessage(websocket.TextMessage, payload)
+	if payload, err := json.Marshal(event); err == nil {
+		q.Send(payload)
 	}
+	return q
 }
 
 // UnregisterClient removes a Web Dashboard client.
-func (h *Hub) UnregisterClient(conn *websocket.Conn) {
+func (h *Hub) UnregisterClient(q *wsWriteQueue) {
 	h.clientsMu.Lock()
-	delete(h.clients, conn)
+	delete(h.clients, q)
 	h.clientsMu.Unlock()
-	_ = conn.Close()
+	q.Close()
 }
 
 func (h *Hub) broadcastToClients(event *model.WSEvent) {
@@ -803,45 +805,71 @@ func (h *Hub) broadcastToClients(event *model.WSEvent) {
 		return
 	}
 
+	// Send never blocks, so holding the read lock here cannot be stalled by a
+	// slow peer: its frame is dropped and the queue reports back instead.
 	h.clientsMu.RLock()
-	var toRemove []*websocket.Conn
-	for conn := range h.clients {
-		_ = conn.SetWriteDeadline(time.Now().Add(3 * time.Second))
-		if err := conn.WriteMessage(websocket.TextMessage, payload); err != nil {
-			toRemove = append(toRemove, conn)
+	var toRemove []*wsWriteQueue
+	for q := range h.clients {
+		if !q.Send(payload) && q.IsClosed() {
+			toRemove = append(toRemove, q)
 		}
 	}
 	h.clientsMu.RUnlock()
 
 	if len(toRemove) > 0 {
 		h.clientsMu.Lock()
-		for _, conn := range toRemove {
-			delete(h.clients, conn)
-			_ = conn.Close()
+		for _, q := range toRemove {
+			delete(h.clients, q)
+			q.Close()
 		}
 		h.clientsMu.Unlock()
 	}
 }
 
-// GetAllStates returns a slice of current node states.
+// cloneNodeState returns a copy that callers may read without holding h.mu.
+//
+// Handing out the stored pointer raced with IngestReport, which mutates these
+// structs in place: an HTTP handler could be serializing a node while its next
+// report was being applied. The struct copy covers the scalar and embedded
+// value fields; Tags and Pings are slices and need their backing arrays copied
+// too.
+func cloneNodeState(s *model.NodeState) *model.NodeState {
+	if s == nil {
+		return nil
+	}
+	c := *s
+	if s.Tags != nil {
+		c.Tags = append([]string(nil), s.Tags...)
+	}
+	if s.Pings != nil {
+		c.Pings = append([]model.PingStat(nil), s.Pings...)
+	}
+	return &c
+}
+
+// GetAllStates returns a snapshot of current node states, safe to read after the
+// lock is released.
 func (h *Hub) GetAllStates() []*model.NodeState {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
 	states := make([]*model.NodeState, 0, len(h.nodeStates))
 	for _, s := range h.nodeStates {
-		states = append(states, s)
+		states = append(states, cloneNodeState(s))
 	}
 	return states
 }
 
-// GetNodeState returns state for a single node.
+// GetNodeState returns a snapshot of one node's state.
 func (h *Hub) GetNodeState(nodeID string) (*model.NodeState, bool) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
 	s, exists := h.nodeStates[nodeID]
-	return s, exists
+	if !exists {
+		return nil, false
+	}
+	return cloneNodeState(s), true
 }
 
 // DeleteNode removes node from memory and storage.

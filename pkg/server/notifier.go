@@ -32,9 +32,9 @@ func NewNotifier(storage *Storage, hub *Hub) *Notifier {
 	n := &Notifier{
 		storage: storage,
 		hub:     hub,
-		httpClient: &http.Client{
-			Timeout: 12 * time.Second,
-		},
+		// Webhook and Discord URLs are operator input, so every outbound call
+		// here dials through the guard that refuses internal address ranges.
+		httpClient:     newGuardedHTTPClient(12 * time.Second),
 		trafficAlerted: make(map[string]int64),
 		offlineTrack:   make(map[string]int64),
 	}
@@ -391,6 +391,9 @@ func (n *Notifier) sendTelegram(botToken, chatID, title, content string) error {
 
 // sendDiscord sends message to Discord Webhook.
 func (n *Notifier) sendDiscord(webhookURL, title, content string) error {
+	if err := validateOutboundURL(webhookURL); err != nil {
+		return err
+	}
 	payload := map[string]interface{}{
 		"embeds": []map[string]interface{}{
 			{
@@ -426,6 +429,12 @@ func (n *Notifier) sendDiscord(webhookURL, title, content string) error {
 // sendWebhook sends payload to generic, Feishu, DingTalk, WeCom, or Bark.
 func (n *Notifier) sendWebhook(config model.WebhookConfig, title, content string) error {
 	url := strings.TrimSpace(config.URL)
+	// The URL is operator-supplied, so reject non-http(s) schemes and literal
+	// internal addresses before building the request. Hostnames are caught later
+	// by the dialer guard, which sees the resolved address.
+	if err := validateOutboundURL(url); err != nil {
+		return err
+	}
 	format := strings.ToLower(strings.TrimSpace(config.Format))
 	if format == "" {
 		format = "generic"
@@ -554,4 +563,3 @@ func formatBytes(bytes uint64) string {
 		return fmt.Sprintf("%d B", bytes)
 	}
 }
-

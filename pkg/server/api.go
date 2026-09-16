@@ -101,6 +101,21 @@ func NewServer(hub *Hub, storage *Storage, downsampler *Downsampler, notifier *N
 		}
 	}
 
+	// Gin trusts every proxy by default, which makes c.ClientIP() read a
+	// caller-supplied X-Forwarded-For. Login throttling counts failures per IP,
+	// so that default lets an attacker sidestep the lockout by varying the
+	// header. Trust nobody unless the operator names the proxies in front of us.
+	var trustedProxies []string
+	for _, p := range strings.Split(os.Getenv("PROBE_TRUSTED_PROXIES"), ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			trustedProxies = append(trustedProxies, p)
+		}
+	}
+	if err := router.SetTrustedProxies(trustedProxies); err != nil {
+		log.Printf("[Server] Invalid PROBE_TRUSTED_PROXIES, falling back to trusting none: %v", err)
+		_ = router.SetTrustedProxies(nil)
+	}
+
 	s.setupRoutes()
 	return s
 }
@@ -254,7 +269,10 @@ func (s *Server) handleAgentWS(c *gin.Context) {
 		log.Printf("[AgentWS] Upgrade failed: %v", err)
 		return
 	}
-	defer conn.Close()
+	// All writes to this socket go through the queue; the reader below stays on
+	// this goroutine. Closing the queue closes the underlying connection.
+	agentQueue := newWSWriteQueue(conn)
+	defer agentQueue.Close()
 
 	// Initial node metadata from headers if present
 	headerNodeID := c.GetHeader("X-Node-ID")
@@ -264,7 +282,7 @@ func (s *Server) handleAgentWS(c *gin.Context) {
 	log.Printf("[AgentWS] Agent connected: %s (IP: %s)", headerNodeID, c.ClientIP())
 
 	if headerNodeID != "" {
-		s.hub.RegisterAgent(headerNodeID, conn)
+		s.hub.RegisterAgent(headerNodeID, agentQueue)
 		defer s.hub.UnregisterAgent(headerNodeID)
 	}
 
@@ -314,7 +332,7 @@ func (s *Server) handleAgentWS(c *gin.Context) {
 			}
 
 			if report.NodeID != "" {
-				s.hub.RegisterAgent(report.NodeID, conn)
+				s.hub.RegisterAgent(report.NodeID, agentQueue)
 			}
 
 			s.hub.IngestReport(&report)
@@ -343,8 +361,8 @@ func (s *Server) handleClientWS(c *gin.Context) {
 		return
 	}
 
-	s.hub.RegisterClient(conn)
-	defer s.hub.UnregisterClient(conn)
+	clientQueue := s.hub.RegisterClient(conn)
+	defer s.hub.UnregisterClient(clientQueue)
 
 	// Keep alive & wait for close
 	for {
@@ -764,20 +782,23 @@ func (s *Server) handleTestPingTarget(c *gin.Context) {
 		return
 	}
 
-	addr := req.Target
-	if !strings.Contains(addr, ":") {
-		port := 443
-		if req.Port > 0 {
-			port = req.Port
-		} else if strings.Contains(req.Target, "8.8.8.8") || strings.Contains(req.Target, "223.5.5.5") || strings.Contains(req.Target, "1.1.1.1") {
-			port = 53
-		}
-		addr = net.JoinHostPort(addr, strconv.Itoa(port))
+	// This endpoint reports reachability and timing for an operator-supplied
+	// address, so it is only as safe as the address is. validateProbeTarget keeps
+	// it off internal ranges and non-probe ports; the dialer re-checks the
+	// resolved IP so a hostname cannot rebind onto one.
+	fallbackPort := req.Port
+	if fallbackPort <= 0 {
+		fallbackPort = 443
+	}
+	addr, err := validateProbeTarget(req.Target, fallbackPort)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
 	}
 
 	start := time.Now()
 	timeout := 2500 * time.Millisecond
-	conn, err := net.DialTimeout("tcp", addr, timeout)
+	conn, err := dialGuarded(c.Request.Context(), addr, timeout)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -963,7 +984,7 @@ func (s *Server) handleSaveExchangeRates(c *gin.Context) {
 
 // handleRefreshExchangeRates pulls live rates from open.er-api.com.
 func (s *Server) handleRefreshExchangeRates(c *gin.Context) {
-	client := http.Client{Timeout: 5 * time.Second}
+	client := newGuardedHTTPClient(5 * time.Second)
 	resp, err := client.Get("https://open.er-api.com/v6/latest/CNY")
 
 	newRates := map[string]float64{
@@ -1121,6 +1142,12 @@ func (s *Server) handleGeoIPLookup(c *gin.Context) {
 	ip := strings.TrimSpace(c.Query("ip"))
 	if ip == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "ip parameter is required"})
+		return
+	}
+	// The value is interpolated into an upstream request path, so require a
+	// literal IP rather than passing arbitrary text through.
+	if net.ParseIP(ip) == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ip must be a valid IPv4 or IPv6 address"})
 		return
 	}
 	details := ResolveNodeGeoAndProvider(ip)
