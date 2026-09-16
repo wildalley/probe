@@ -17,6 +17,17 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+// readWait bounds how long the agent waits for a frame from the server before
+// treating the link as dead. The server pings every 30s and each ping refreshes
+// this deadline, so a healthy connection never reaches it. A variable rather
+// than a constant so tests can drive the deadline down instead of waiting out
+// a real minute.
+var readWait = 60 * time.Second
+
+// writeWait bounds a single frame write, including the pong sent from inside
+// the read loop.
+const writeWait = 5 * time.Second
+
 // AgentConfig encapsulates agent runtime parameters.
 type AgentConfig struct {
 	ServerURL      string        `json:"server_url" yaml:"server_url"`
@@ -127,9 +138,17 @@ func (c *Client) connectAndServe(ctx context.Context) error {
 	ticker := time.NewTicker(c.cfg.ReportInterval)
 	defer ticker.Stop()
 
-	// Handle Pong and Ping
+	// Handle Pong and Ping. Setting a ping handler replaces the default one, so
+	// this is responsible for answering with the pong the server's read
+	// deadline depends on; refreshing our own deadline is what keeps the
+	// one-minute read timeout below from firing on an idle-but-healthy link.
+	conn.SetPingHandler(func(appData string) error {
+		_ = conn.SetReadDeadline(time.Now().Add(readWait))
+		return conn.WriteControl(websocket.PongMessage, []byte(appData),
+			time.Now().Add(writeWait))
+	})
 	conn.SetPongHandler(func(string) error {
-		_ = conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		_ = conn.SetReadDeadline(time.Now().Add(readWait))
 		return nil
 	})
 
@@ -138,7 +157,7 @@ func (c *Client) connectAndServe(ctx context.Context) error {
 	// Goroutine to read server messages / keep connection alive
 	go func() {
 		for {
-			_ = conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+			_ = conn.SetReadDeadline(time.Now().Add(readWait))
 			msgType, msg, err := conn.ReadMessage()
 			if err != nil {
 				errChan <- err
@@ -199,7 +218,7 @@ func (c *Client) connectAndServe(ctx context.Context) error {
 				continue
 			}
 
-			_ = conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+			_ = conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := conn.WriteMessage(websocket.TextMessage, payload); err != nil {
 				return fmt.Errorf("socket write error: %w", err)
 			}

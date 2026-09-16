@@ -15,6 +15,15 @@ const (
 	// wsWriteTimeout bounds a single frame write so one stalled peer cannot pin
 	// its writer goroutine indefinitely.
 	wsWriteTimeout = 10 * time.Second
+
+	// wsPingInterval is how often a WebSocket ping goes out on every connection.
+	//
+	// Both peers set a 60s read deadline that only a received Pong refreshes, so
+	// without a heartbeat each side declares the other dead every 60s and the
+	// agent reconnects on a fixed one-minute cycle. The interval sits well inside
+	// that deadline, and inside the agent's own reporting interval budget, so a
+	// healthy link is refreshed twice per window.
+	wsPingInterval = 30 * time.Second
 )
 
 // wsWriteQueue serializes all writes to a single WebSocket connection.
@@ -27,17 +36,25 @@ const (
 type wsWriteQueue struct {
 	conn        *websocket.Conn
 	send        chan []byte
-	minSequence uint64 // events at or below this preceded the initial snapshot
+	ping        time.Duration // heartbeat interval for this connection
+	minSequence uint64        // events at or below this preceded the initial snapshot
 
 	closeOnce sync.Once
 	closed    chan struct{}
 }
 
 func newWSWriteQueue(conn *websocket.Conn) *wsWriteQueue {
+	return newWSWriteQueuePinging(conn, wsPingInterval)
+}
+
+// newWSWriteQueuePinging is newWSWriteQueue with the heartbeat interval exposed
+// so tests can exercise it without waiting out the real one.
+func newWSWriteQueuePinging(conn *websocket.Conn, pingInterval time.Duration) *wsWriteQueue {
 	q := &wsWriteQueue{
 		conn:   conn,
 		send:   make(chan []byte, wsSendBuffer),
 		closed: make(chan struct{}),
+		ping:   pingInterval,
 	}
 	go q.run()
 	return q
@@ -47,6 +64,9 @@ func newWSWriteQueue(conn *websocket.Conn) *wsWriteQueue {
 func (q *wsWriteQueue) run() {
 	defer func() { _ = q.conn.Close() }()
 
+	pings := time.NewTicker(q.ping)
+	defer pings.Stop()
+
 	for {
 		select {
 		case <-q.closed:
@@ -54,6 +74,15 @@ func (q *wsWriteQueue) run() {
 		case payload := <-q.send:
 			_ = q.conn.SetWriteDeadline(time.Now().Add(wsWriteTimeout))
 			if err := q.conn.WriteMessage(websocket.TextMessage, payload); err != nil {
+				q.Close()
+				return
+			}
+		case <-pings.C:
+			// WriteControl is safe to call alongside the frame writes above.
+			// Peers answer a ping with a pong on their own, which is what
+			// refreshes the read deadline on their side of the connection.
+			_ = q.conn.SetWriteDeadline(time.Now().Add(wsWriteTimeout))
+			if err := q.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				q.Close()
 				return
 			}
