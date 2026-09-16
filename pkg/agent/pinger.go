@@ -38,19 +38,28 @@ type Pinger struct {
 	stats   map[string]*targetState
 }
 
+// lossWindow is how many recent probes the packet loss rate is computed over.
+const lossWindow = 100
+
 type targetState struct {
-	label      string
-	address    string
-	color      string
-	protocol   string
-	interval   int
-	lastProbe  time.Time
-	latencyMs  float64
-	lastLatMs  float64
-	jitter     float64
-	totalPings int
-	lostPings  int
-	probing    bool
+	label     string
+	address   string
+	color     string
+	protocol  string
+	interval  int
+	lastProbe time.Time
+	latencyMs float64
+	jitter    float64
+	probing   bool
+
+	// Ring buffer of the last `lossWindow` probe outcomes (true = lost), with a
+	// running count so the rate is O(1) to read. A real sliding window replaces
+	// the earlier rescale-on-overflow scheme, which used integer division and so
+	// silently rounded a handful of losses down to zero.
+	lost         [lossWindow]bool
+	lostIdx      int
+	lostFilled   int
+	lostInWindow int
 }
 
 // NewPinger initializes a latency & packet loss testing engine.
@@ -195,21 +204,27 @@ func (p *Pinger) probeOne(t TargetConfig) {
 	st.probing = false
 	st.lastProbe = time.Now()
 
-	st.totalPings++
+	// Slide the window: drop the outcome leaving the buffer, record the new one.
+	if st.lostFilled == lossWindow && st.lost[st.lostIdx] {
+		st.lostInWindow--
+	}
+	st.lost[st.lostIdx] = !success
 	if !success {
-		st.lostPings++
-	} else {
-		if st.lastLatMs > 0 {
-			st.jitter = math.Abs(latency - st.lastLatMs)
-		}
-		st.lastLatMs = st.latencyMs
-		st.latencyMs = math.Round(latency*100) / 100
+		st.lostInWindow++
+	}
+	st.lostIdx = (st.lostIdx + 1) % lossWindow
+	if st.lostFilled < lossWindow {
+		st.lostFilled++
 	}
 
-	// Rolling window reset
-	if st.totalPings >= 100 {
-		st.totalPings = 20
-		st.lostPings = (st.lostPings * 20) / 100
+	if success {
+		rounded := math.Round(latency*100) / 100
+		// Compare against the previous successful probe. Reading st.latencyMs
+		// before overwriting it keeps this to consecutive samples.
+		if st.latencyMs > 0 {
+			st.jitter = math.Abs(rounded - st.latencyMs)
+		}
+		st.latencyMs = rounded
 	}
 }
 
@@ -226,8 +241,8 @@ func (p *Pinger) GetStats() []model.PingStat {
 		}
 
 		lossRate := 0.0
-		if st.totalPings > 0 {
-			lossRate = math.Round((float64(st.lostPings)/float64(st.totalPings)*100)*100) / 100
+		if st.lostFilled > 0 {
+			lossRate = math.Round((float64(st.lostInWindow)/float64(st.lostFilled)*100)*100) / 100
 		}
 
 		res = append(res, model.PingStat{
