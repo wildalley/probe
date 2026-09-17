@@ -128,6 +128,7 @@ func (s *Storage) initSchema() error {
 		bandwidth_quota INTEGER DEFAULT 0,
 		bandwidth_used INTEGER DEFAULT 0,
 		auto_renewal INTEGER DEFAULT 0,
+		note TEXT DEFAULT '',
 		updated_at INTEGER NOT NULL
 	);
 
@@ -258,6 +259,7 @@ func (s *Storage) migrateTableColumns() {
 		"ALTER TABLE ping_targets ADD COLUMN auto_start INTEGER DEFAULT 1",
 		"ALTER TABLE ping_targets ADD COLUMN assigned_servers TEXT DEFAULT ''",
 		"ALTER TABLE node_settings ADD COLUMN bandwidth_used INTEGER DEFAULT 0",
+		"ALTER TABLE node_settings ADD COLUMN note TEXT DEFAULT ''",
 		// First entry against the nodes table. Re-running is harmless because the
 		// error from a duplicate column is swallowed below, which is what makes
 		// this whole slice idempotent.
@@ -269,24 +271,21 @@ func (s *Storage) migrateTableColumns() {
 }
 
 // requireColumns asserts that migrateTableColumns actually landed.
-//
-// The ALTER statements above swallow every error so that re-running them is
-// harmless, which means a migration that fails for a real reason — a locked or
-// read-only database, a full disk — leaves no trace. That was survivable while
-// the slice only touched columns the dashboard could do without. It is not
-// survivable for agent_version: GetAllNodes selects it, so a missing column
-// makes every row fail to scan, every node disappear, and the dashboard come up
-// empty with nothing in the log to explain it. Failing startup loudly is the
-// better outcome.
 func (s *Storage) requireColumns() error {
-	required := []string{"agent_version"}
-	for _, col := range required {
-		found, err := s.columnExists("nodes", col)
+	required := []struct {
+		table string
+		col   string
+	}{
+		{"nodes", "agent_version"},
+		{"node_settings", "note"},
+	}
+	for _, req := range required {
+		found, err := s.columnExists(req.table, req.col)
 		if err != nil {
 			return fmt.Errorf("failed to verify schema: %w", err)
 		}
 		if !found {
-			return fmt.Errorf("schema migration incomplete: nodes.%s is missing", col)
+			return fmt.Errorf("schema migration incomplete: %s.%s is missing", req.table, req.col)
 		}
 	}
 	return nil
@@ -756,13 +755,13 @@ func (s *Storage) GetNodeSettings(nodeID string) (*model.NodeSettings, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	row := s.db.QueryRow(`SELECT node_id, name, region, tags, provider, public_ip, price, currency, billing_cycle, expiry_date, bandwidth_quota, bandwidth_used, auto_renewal, updated_at
+	row := s.db.QueryRow(`SELECT node_id, name, region, tags, provider, public_ip, price, currency, billing_cycle, expiry_date, bandwidth_quota, bandwidth_used, auto_renewal, note, updated_at
 		FROM node_settings WHERE node_id = ?`, nodeID)
 
 	var ns model.NodeSettings
 	var tagsJSON string
 	var autoRenewInt int
-	err := row.Scan(&ns.NodeID, &ns.Name, &ns.Region, &tagsJSON, &ns.Provider, &ns.PublicIP, &ns.Price, &ns.Currency, &ns.BillingCycle, &ns.ExpiryDate, &ns.BandwidthQuota, &ns.BandwidthUsed, &autoRenewInt, &ns.UpdatedAt)
+	err := row.Scan(&ns.NodeID, &ns.Name, &ns.Region, &tagsJSON, &ns.Provider, &ns.PublicIP, &ns.Price, &ns.Currency, &ns.BillingCycle, &ns.ExpiryDate, &ns.BandwidthQuota, &ns.BandwidthUsed, &autoRenewInt, &ns.Note, &ns.UpdatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -781,7 +780,7 @@ func (s *Storage) GetAllNodeSettings() (map[string]*model.NodeSettings, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	rows, err := s.db.Query(`SELECT node_id, name, region, tags, provider, public_ip, price, currency, billing_cycle, expiry_date, bandwidth_quota, bandwidth_used, auto_renewal, updated_at FROM node_settings`)
+	rows, err := s.db.Query(`SELECT node_id, name, region, tags, provider, public_ip, price, currency, billing_cycle, expiry_date, bandwidth_quota, bandwidth_used, auto_renewal, note, updated_at FROM node_settings`)
 	if err != nil {
 		return nil, err
 	}
@@ -792,7 +791,7 @@ func (s *Storage) GetAllNodeSettings() (map[string]*model.NodeSettings, error) {
 		var ns model.NodeSettings
 		var tagsJSON string
 		var autoRenewInt int
-		if err := rows.Scan(&ns.NodeID, &ns.Name, &ns.Region, &tagsJSON, &ns.Provider, &ns.PublicIP, &ns.Price, &ns.Currency, &ns.BillingCycle, &ns.ExpiryDate, &ns.BandwidthQuota, &ns.BandwidthUsed, &autoRenewInt, &ns.UpdatedAt); err != nil {
+		if err := rows.Scan(&ns.NodeID, &ns.Name, &ns.Region, &tagsJSON, &ns.Provider, &ns.PublicIP, &ns.Price, &ns.Currency, &ns.BillingCycle, &ns.ExpiryDate, &ns.BandwidthQuota, &ns.BandwidthUsed, &autoRenewInt, &ns.Note, &ns.UpdatedAt); err != nil {
 			continue
 		}
 		ns.AutoRenewal = (autoRenewInt == 1)
@@ -818,8 +817,8 @@ func (s *Storage) SaveNodeSettings(ns *model.NodeSettings) error {
 	tagsBytes, _ := json.Marshal(ns.Tags)
 
 	_, err := s.db.Exec(`INSERT INTO node_settings (
-		node_id, name, region, tags, provider, public_ip, price, currency, billing_cycle, expiry_date, bandwidth_quota, bandwidth_used, auto_renewal, updated_at
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		node_id, name, region, tags, provider, public_ip, price, currency, billing_cycle, expiry_date, bandwidth_quota, bandwidth_used, auto_renewal, note, updated_at
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	ON CONFLICT(node_id) DO UPDATE SET
 		name = excluded.name,
 		region = excluded.region,
@@ -833,8 +832,9 @@ func (s *Storage) SaveNodeSettings(ns *model.NodeSettings) error {
 		bandwidth_quota = excluded.bandwidth_quota,
 		bandwidth_used = excluded.bandwidth_used,
 		auto_renewal = excluded.auto_renewal,
+		note = excluded.note,
 		updated_at = excluded.updated_at`,
-		ns.NodeID, ns.Name, ns.Region, string(tagsBytes), ns.Provider, ns.PublicIP, ns.Price, ns.Currency, ns.BillingCycle, ns.ExpiryDate, ns.BandwidthQuota, ns.BandwidthUsed, autoRenewInt, now)
+		ns.NodeID, ns.Name, ns.Region, string(tagsBytes), ns.Provider, ns.PublicIP, ns.Price, ns.Currency, ns.BillingCycle, ns.ExpiryDate, ns.BandwidthQuota, ns.BandwidthUsed, autoRenewInt, ns.Note, now)
 	return err
 }
 

@@ -11,6 +11,8 @@ import {
   Calendar,
   Coins,
   Activity,
+  Ticket,
+  Check,
 } from "lucide-react";
 import { NodeState } from "../types";
 import { formatBytes, formatRate } from "../utils/format";
@@ -48,6 +50,7 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
   const divRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [opacity, setOpacity] = useState(0);
+  const [copiedNote, setCopiedNote] = useState(false);
   const [isStarred, setIsStarred] = useState<boolean>(() => {
     try {
       const saved = localStorage.getItem(`starred_${node.node_id}`);
@@ -265,8 +268,8 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
         </div>
       </div>
 
-      {/* 2. Sub-header Badges: Uptime & Pricing */}
-      <div className="mt-2.5 flex items-center gap-2">
+      {/* 2. Sub-header Badges: Uptime & Pricing & Note */}
+      <div className="mt-2.5 flex flex-wrap items-center gap-1.5 sm:gap-2">
         <span
           className={`rounded-md px-2 py-0.5 text-11 font-sans font-medium border flex items-center gap-1 ${
             node.is_online
@@ -291,6 +294,33 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
         >
           {priceText}
         </span>
+
+        {node.billing?.note && (
+          <span
+            onClick={(e) => {
+              e.stopPropagation();
+              navigator.clipboard.writeText(node.billing?.note || "");
+              setCopiedNote(true);
+              setTimeout(() => setCopiedNote(false), 1500);
+            }}
+            className={cn(
+              "rounded-md px-2 py-0.5 text-11 font-sans font-medium border flex items-center gap-1 cursor-pointer transition-all active:scale-95 group/note max-w-[140px] truncate",
+              copiedNote
+                ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-600 dark:text-emerald-400"
+                : isBlueprint
+                ? "bg-amber-50/90 border-amber-200/90 text-amber-700 hover:bg-amber-100/90 shadow-2xs"
+                : "bg-amber-950/40 border-amber-500/30 text-amber-300 hover:bg-amber-900/50"
+            )}
+            title={`备注/折扣码: ${node.billing.note} (点击复制)`}
+          >
+            {copiedNote ? (
+              <Check className="h-3 w-3 text-emerald-500 shrink-0" />
+            ) : (
+              <Ticket className="h-3 w-3 text-amber-500 shrink-0 group-hover/note:rotate-12 transition-transform" />
+            )}
+            <span className="truncate">{copiedNote ? "已复制" : node.billing.note}</span>
+          </span>
+        )}
 
         {/* 与基准一致时这个组件返回 null，所以健康机群的卡片宽度不变。 */}
         <AgentVersionMark

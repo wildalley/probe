@@ -38,6 +38,7 @@ type BillingInfo struct {
 	BandwidthUsed  uint64  `json:"bandwidth_used"`  // Configured or live consumed bytes
 	Provider       string  `json:"provider"`        // e.g. "Zillion Network Inc. · AS54801"
 	AutoRenewal    bool    `json:"auto_renewal"`
+	Note           string  `json:"note,omitempty"`  // e.g. "续费折扣码: PROMO60"
 }
 
 // PingTargetConfig defines a ping target for network quality detection.
@@ -73,6 +74,7 @@ type NodeSettings struct {
 	BandwidthQuota uint64   `json:"bandwidth_quota"` // Total allowed bytes
 	BandwidthUsed  uint64   `json:"bandwidth_used"`  // Used bytes override/calibration
 	AutoRenewal    bool     `json:"auto_renewal"`
+	Note           string   `json:"note,omitempty"`
 	UpdatedAt      int64    `json:"updated_at"`
 }
 

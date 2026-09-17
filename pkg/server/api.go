@@ -964,6 +964,7 @@ func (s *Server) handleSaveNodeSettings(c *gin.Context) {
 			state.Billing.BandwidthUsed = ns.BandwidthUsed
 		}
 		state.Billing.AutoRenewal = ns.AutoRenewal
+		state.Billing.Note = ns.Note
 
 		s.hub.ratesMu.RLock()
 		rates := s.hub.exchangeRates

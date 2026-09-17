@@ -31,6 +31,7 @@ import {
   Server,
   Eye,
   EyeOff,
+  Ticket,
 } from "lucide-react";
 import { Tabs } from "@heroui/react";
 import { HistoryPoint, NodeState, PingHistoryPoint, PingStat, PingTargetConfig } from "../types";
@@ -794,6 +795,59 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
             </div>
           </BlurFade>
         </div>
+
+        {/* Remark / Promo Code Banner (备注与优惠码) */}
+        {node.billing?.note && (
+          <BlurFade delay={0.25} className="mt-3 sm:mt-4">
+            <div
+              className={cn(
+                "flex flex-wrap items-center justify-between gap-3 px-4 py-3 rounded-xl border transition-all text-xs font-sans",
+                isBlueprint
+                  ? "bg-amber-50/80 border-amber-200/90 text-amber-900 shadow-2xs"
+                  : "bg-amber-950/20 border-amber-800/40 text-amber-200"
+              )}
+            >
+              <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-500/20 text-amber-600 dark:text-amber-400">
+                  <Ticket className="h-4 w-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 font-semibold text-amber-700 dark:text-amber-400">
+                    <span>配置备注 / 折扣码</span>
+                  </div>
+                  <div className="font-mono text-xs sm:text-sm font-medium mt-0.5 break-all select-all text-slate-800 dark:text-zinc-200">
+                    {node.billing.note}
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => copyText(node.billing?.note || "", "note")}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all cursor-pointer active:scale-95 shrink-0",
+                  copiedField === "note"
+                    ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-600 dark:text-emerald-400"
+                    : isBlueprint
+                    ? "bg-white hover:bg-amber-100/60 border-amber-300/80 text-amber-800 shadow-2xs"
+                    : "bg-zinc-900 hover:bg-zinc-800 border-amber-700/50 text-amber-300"
+                )}
+              >
+                {copiedField === "note" ? (
+                  <>
+                    <Check className="h-3.5 w-3.5 text-emerald-500" />
+                    <span>已复制到剪贴板</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-3.5 w-3.5" />
+                    <span>复制备注/折扣码</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </BlurFade>
+        )}
 
         {/* 3. 4 Information Cards (2x2 Grid) */}
         <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3.5 font-sans text-xs">

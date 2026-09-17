@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Check, CheckCircle2, Globe, Sliders, X, Zap } from "lucide-react";
+import { Check, CheckCircle2, Globe, Sliders, Ticket, X, Zap } from "lucide-react";
 import { Button, Chip, Input, ListBox, Select, Switch } from "@heroui/react";
 import { NodeSettings, NodeState } from "../../../types";
 import { getRegionFlag } from "../../../utils/flags";
@@ -39,6 +39,7 @@ const toDraft = (node: NodeState): NodeSettings => {
     bandwidth_quota: node.billing?.bandwidth_quota || 2 * 1024 * 1024 * 1024 * 1024,
     bandwidth_used: node.billing?.bandwidth_used || liveTraffic,
     auto_renewal: node.billing?.auto_renewal || false,
+    note: node.billing?.note || "",
   };
 };
 
@@ -388,6 +389,29 @@ export const HostEditDialog: React.FC<HostEditDialogProps> = ({
               onChange={(newTags) => patch({ tags: newTags })}
               theme={theme}
             />
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className={cn(labelCls, "text-xs mb-0 flex items-center gap-1.5")} htmlFor="host-note">
+                <Ticket className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                <span>备注备忘 / 优惠折扣码 (Notes & Promo Code)</span>
+              </label>
+              <span className={cn("text-10", isBlueprint ? "text-slate-400" : "text-zinc-500")}>
+                选填 · 支持随时修改
+              </span>
+            </div>
+            <Input
+              id="host-note"
+              type="text"
+              value={draft.note || ""}
+              onChange={(e) => patch({ note: e.target.value })}
+              placeholder="如：续费循环5折码 PROMO50 / 购买渠道 / 账号备忘"
+              className="w-full text-xs font-mono"
+            />
+            <p className={cn("mt-1 text-[11px]", isBlueprint ? "text-slate-500" : "text-zinc-400")}>
+              保存后会在主机卡片和详情页醒目标出，支持在卡片与详情页一键复制。
+            </p>
           </div>
 
           <div className="pt-1">

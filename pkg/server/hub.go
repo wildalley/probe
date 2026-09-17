@@ -583,6 +583,7 @@ func (h *Hub) IngestReport(report *model.NodeReport) {
 			billing.BandwidthUsed = settings.BandwidthUsed
 		}
 		billing.AutoRenewal = settings.AutoRenewal
+		billing.Note = settings.Note
 	}
 
 	if billing.BandwidthUsed == 0 {

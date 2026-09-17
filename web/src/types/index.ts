@@ -20,6 +20,7 @@ export interface BillingInfo {
   bandwidth_used?: number;
   provider: string;
   auto_renewal?: boolean;
+  note?: string;
 }
 
 export interface PingTargetConfig {
@@ -51,6 +52,7 @@ export interface NodeSettings {
   bandwidth_quota: number;
   bandwidth_used?: number;
   auto_renewal: boolean;
+  note?: string;
   updated_at?: number;
 }
 

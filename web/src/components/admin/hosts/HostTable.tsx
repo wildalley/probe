@@ -1,5 +1,5 @@
 import React from "react";
-import { Server, Sliders, Trash2 } from "lucide-react";
+import { Server, Sliders, Ticket, Trash2 } from "lucide-react";
 import { Button } from "@heroui/react";
 import { NodeState } from "../../../types";
 import { getRegionFlag } from "../../../utils/flags";
@@ -119,6 +119,15 @@ export const HostTable: React.FC<HostTableProps> = ({
                     >
                       {n.node_id}
                     </div>
+                    {n.billing?.note && (
+                      <div
+                        className="mt-1 flex items-center gap-1 text-[11px] font-mono text-amber-600 dark:text-amber-400 font-normal truncate max-w-[190px]"
+                        title={`备注/折扣码: ${n.billing.note}`}
+                      >
+                        <Ticket className="h-3 w-3 shrink-0 text-amber-500" />
+                        <span className="truncate">{n.billing.note}</span>
+                      </div>
+                    )}
                   </td>
                   <td className="py-3.5 px-4 whitespace-nowrap">
                     <span className="flex items-center gap-1.5 font-medium">
@@ -316,6 +325,22 @@ export const HostTable: React.FC<HostTableProps> = ({
                   </span>
                 </div>
               </div>
+
+              {/* Note / Promo Code Banner on Mobile */}
+              {n.billing?.note && (
+                <div
+                  className={cn(
+                    "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-11 font-mono border",
+                    isBlueprint
+                      ? "bg-amber-50/80 border-amber-200/80 text-amber-800"
+                      : "bg-amber-950/30 border-amber-800/40 text-amber-300"
+                  )}
+                >
+                  <Ticket className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                  <span className="font-sans font-medium text-[10px] opacity-75 shrink-0">备注/折扣:</span>
+                  <span className="truncate">{n.billing.note}</span>
+                </div>
+              )}
 
               {/* Row 4: Bandwidth Quota Progress */}
               <div className="space-y-1">
