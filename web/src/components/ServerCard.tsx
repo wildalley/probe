@@ -32,28 +32,6 @@ interface ServerCardProps {
   latestAgentVersion?: string;
 }
 
-type TickTone = "good" | "fair" | "moderate" | "poor" | "warn" | "lost" | "muted";
-
-interface Tick {
-  tone: TickTone;
-  label: string;
-  valueStr: string;
-  gradeStr: string;
-}
-
-// Tooltip value color. Both bars read from the same map so a "--" reading never
-// renders in the alarm color.
-const tickTextColor = (tone: TickTone) => {
-  switch (tone) {
-    case "muted": return "text-zinc-400";
-    case "fair": return "text-teal-300";
-    case "moderate":
-    case "warn": return "text-amber-300";
-    case "poor":
-    case "lost": return "text-rose-400";
-    default: return "text-emerald-400";
-  }
-};
 
 
 const getCycleLabel = (cycle?: string) => {
@@ -170,86 +148,8 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
     return { label: "拥堵", color: "text-rose-500 dark:text-rose-400", dot: "bg-rose-500", badge: "bg-rose-500/10 border-rose-500/25 text-rose-600 dark:text-rose-400" };
   }, [node.is_online, avgLatency]);
 
-  const latencyTicks = useMemo<Tick[]>(() => {
-    if (!node.is_online) {
-      return pings.map((p) => ({
-        tone: "muted",
-        label: p.label,
-        valueStr: "--",
-        gradeStr: "节点失联",
-      }));
-    }
-    return pings.map((p) => {
-      if (p.latency_ms <= 0) {
-        return {
-          tone: "muted",
-          label: p.label,
-          valueStr: "--",
-          gradeStr: "无响应",
-        };
-      }
-      let tone: TickTone = "good";
-      let grade = "极速 (优秀)";
-      if (p.latency_ms >= 230) {
-        tone = "poor";
-        grade = "高延迟 (告警)";
-      } else if (p.latency_ms >= 130) {
-        tone = "moderate";
-        grade = "稍慢 (跨洋)";
-      } else if (p.latency_ms >= 60) {
-        tone = "fair";
-        grade = "平稳 (良好)";
-      }
-      return {
-        tone,
-        label: p.label,
-        valueStr: `${p.latency_ms.toFixed(1)} ms`,
-        gradeStr: grade,
-      };
-    });
-  }, [node.is_online, pings]);
-
-  const lossTicks = useMemo<Tick[]>(() => {
-    if (!node.is_online) {
-      return pings.map((p) => ({
-        tone: "muted",
-        label: p.label,
-        valueStr: "--",
-        gradeStr: "节点失联",
-      }));
-    }
-    return pings.map((p) => {
-      if (p.latency_ms <= 0) {
-        return {
-          tone: "muted",
-          label: p.label,
-          valueStr: "--",
-          gradeStr: "无响应",
-        };
-      }
-      let tone: TickTone = "good";
-      let grade = "零丢包 · 线路通畅";
-      if (p.packet_loss > 10) {
-        tone = "lost";
-        grade = "严重丢包";
-      } else if (p.packet_loss > 0) {
-        tone = "warn";
-        grade = "偶发轻度丢包";
-      }
-      return {
-        tone,
-        label: p.label,
-        valueStr: `${p.packet_loss.toFixed(1)}%`,
-        gradeStr: grade,
-      };
-    });
-  }, [node.is_online, pings]);
-
-  const [hoveredTick, setHoveredTick] = useState<{
-    type: "latency" | "loss";
-    tick: Tick;
-    xPercent: number;
-  } | null>(null);
+  const [expandedPings, setExpandedPings] = useState(false);
+  const displayedPings = pings.length <= 4 || expandedPings ? pings : pings.slice(0, 4);
 
 
   // Progress Bar Semantic Colors
@@ -570,34 +470,14 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
         </div>
       </div>
 
-      {/* 5. Latency & Packet Loss Section (Telemetry Segmented Bar Chart) */}
-      <div className={`mt-3.5 pt-3 border-t grid grid-cols-2 gap-3 font-mono text-xs ${
+      {/* 5. Latency & Packet Loss Section (Per-target segmented chart) */}
+      <div className={`mt-3.5 pt-3 border-t font-mono text-xs ${
         isBlueprint ? "border-slate-100" : "border-zinc-800/60"
       }`}>
-        {/* Latency */}
-        <div className="relative group/latency" onMouseLeave={() => setHoveredTick((prev) => prev?.type === "latency" ? null : prev)}>
-          {/* Floating Tooltip for Latency */}
-          {hoveredTick?.type === "latency" && (
-            <div
-              className="absolute -top-9 z-30 pointer-events-none transform -translate-x-1/2 transition-all duration-75 animate-in fade-in zoom-in-95"
-              style={{ left: `${Math.min(92, Math.max(8, hoveredTick.xPercent))}%` }}
-            >
-              <div className={`px-2 py-0.5 rounded-md text-11 font-sans font-medium whitespace-nowrap shadow-xl border flex items-center gap-1.5 backdrop-blur-md ${
-                isBlueprint
-                  ? "bg-slate-900/95 text-white border-slate-700 shadow-slate-900/25"
-                  : "bg-zinc-900/95 text-zinc-100 border-zinc-700 shadow-black/80"
-              }`}>
-                <span className="text-zinc-400 text-10">{hoveredTick.tick.label}</span>
-                <span className={cn("font-mono font-bold", tickTextColor(hoveredTick.tick.tone))}>
-                  {hoveredTick.tick.valueStr}
-                </span>
-                <span className="text-10 text-zinc-300 font-normal">({hoveredTick.tick.gradeStr})</span>
-              </div>
-              <div className="w-0 h-0 border-x-4 border-x-transparent border-t-4 border-t-slate-900 dark:border-t-zinc-900 mx-auto" />
-            </div>
-          )}
-
-          <div className="flex items-center justify-between mb-1.5">
+        {/* Summary Header */}
+        <div className="grid grid-cols-2 gap-3 mb-2.5">
+          {/* Latency Summary */}
+          <div className="flex items-center justify-between">
             <div className="flex items-center gap-1.5">
               <span className={isBlueprint ? "text-slate-600 font-medium" : "text-zinc-400"}>延迟</span>
               {node.is_online && avgLatency !== null && (
@@ -611,59 +491,9 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
               {node.is_online && avgLatency !== null ? `${avgLatency.toFixed(0)} ms` : "--"}
             </span>
           </div>
-          <div className="flex items-center gap-1 py-0.5">
-            {latencyTicks.length === 0 && (
-              <div className={cn("flex-1 h-2.5 rounded-sm", isBlueprint ? "bg-slate-200" : "bg-zinc-800")} />
-            )}
-            {latencyTicks.map((tick, idx) => {
-              let bg = "bg-emerald-500 hover:bg-emerald-400";
-              if (tick.tone === "fair") bg = "bg-teal-400 hover:bg-teal-300";
-              else if (tick.tone === "moderate") bg = "bg-amber-400 hover:bg-amber-300";
-              else if (tick.tone === "poor") bg = "bg-rose-500 hover:bg-rose-400";
-              else if (tick.tone === "muted") bg = isBlueprint ? "bg-slate-200" : "bg-zinc-800";
-              return (
-                <div
-                  key={idx}
-                  onMouseEnter={(e) => {
-                    e.stopPropagation();
-                    setHoveredTick({
-                      type: "latency",
-                      tick,
-                      xPercent: ((idx + 0.5) / latencyTicks.length) * 100,
-                    });
-                  }}
-                  className={`flex-1 h-2.5 rounded-sm cursor-pointer transition-all duration-150 ease-out origin-bottom hover:scale-y-[1.6] hover:brightness-125 hover:shadow-xs ${bg}`}
-                  title={`${tick.label}: ${tick.valueStr} (${tick.gradeStr})`}
-                />
-              );
-            })}
-          </div>
-        </div>
 
-        {/* Packet Loss */}
-        <div className="relative group/loss" onMouseLeave={() => setHoveredTick((prev) => prev?.type === "loss" ? null : prev)}>
-          {/* Floating Tooltip for Loss */}
-          {hoveredTick?.type === "loss" && (
-            <div
-              className="absolute -top-9 z-30 pointer-events-none transform -translate-x-1/2 transition-all duration-75 animate-in fade-in zoom-in-95"
-              style={{ left: `${Math.min(92, Math.max(8, hoveredTick.xPercent))}%` }}
-            >
-              <div className={`px-2 py-0.5 rounded-md text-11 font-sans font-medium whitespace-nowrap shadow-xl border flex items-center gap-1.5 backdrop-blur-md ${
-                isBlueprint
-                  ? "bg-slate-900/95 text-white border-slate-700 shadow-slate-900/25"
-                  : "bg-zinc-900/95 text-zinc-100 border-zinc-700 shadow-black/80"
-              }`}>
-                <span className="text-zinc-400 text-10">{hoveredTick.tick.label}</span>
-                <span className={cn("font-mono font-bold", tickTextColor(hoveredTick.tick.tone))}>
-                  {hoveredTick.tick.valueStr}
-                </span>
-                <span className="text-10 text-zinc-300 font-normal">({hoveredTick.tick.gradeStr})</span>
-              </div>
-              <div className="w-0 h-0 border-x-4 border-x-transparent border-t-4 border-t-slate-900 dark:border-t-zinc-900 mx-auto" />
-            </div>
-          )}
-
-          <div className="flex items-center justify-between mb-1.5">
+          {/* Packet Loss Summary */}
+          <div className="flex items-center justify-between">
             <div className="flex items-center gap-1.5">
               <span className={isBlueprint ? "text-slate-600 font-medium" : "text-zinc-400"}>丢包</span>
               {node.is_online && (avgLoss === 0 || avgLoss === null) && (
@@ -685,86 +515,160 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
               {node.is_online && avgLoss !== null ? `${avgLoss.toFixed(1)}%` : "--"}
             </span>
           </div>
-          <div className="flex items-center gap-1 py-0.5">
-            {lossTicks.length === 0 && (
-              <div className={cn("flex-1 h-2.5 rounded-sm", isBlueprint ? "bg-slate-200" : "bg-zinc-800")} />
-            )}
-            {lossTicks.map((tick, idx) => {
-              let bg = "bg-emerald-500 hover:bg-emerald-400";
-              if (tick.tone === "warn") bg = "bg-amber-400 hover:bg-amber-300";
-              else if (tick.tone === "lost") bg = "bg-rose-500 hover:bg-rose-400";
-              else if (tick.tone === "muted") bg = isBlueprint ? "bg-slate-200" : "bg-zinc-800";
+        </div>
+
+        {/* Dedicated Target Rows with Segmented Bar Chart */}
+        <div className="space-y-1.5">
+          {pings.length === 0 ? (
+            <div className={cn("text-[11px] py-2 text-center rounded-lg border border-dashed font-sans", isBlueprint ? "border-slate-200 text-slate-400 bg-slate-50/50" : "border-zinc-800/80 text-zinc-500 bg-zinc-950/20")}>
+              暂未配置监测目标
+            </div>
+          ) : (
+            displayedPings.map((p, idx) => {
+              const isOnline = node.is_online && p.latency_ms > 0;
+              const hasLoss = node.is_online && p.packet_loss > 0;
+              const latVal = isOnline ? (p.latency_ms < 10 ? `${p.latency_ms.toFixed(1)} ms` : `${p.latency_ms.toFixed(0)} ms`) : "--";
+
+              let baseColor = "bg-emerald-500 hover:bg-emerald-400";
+              let latColor = "text-emerald-600 dark:text-emerald-400";
+              let grade = "极速 (优)";
+
+              if (!isOnline) {
+                baseColor = isBlueprint ? "bg-slate-200" : "bg-zinc-800";
+                latColor = "text-zinc-500";
+                grade = !node.is_online ? "节点离线" : "无响应";
+              } else if (p.latency_ms >= 260) {
+                baseColor = "bg-rose-500 hover:bg-rose-400";
+                latColor = "text-rose-500 dark:text-rose-400";
+                grade = "拥堵 (高延迟)";
+              } else if (p.latency_ms >= 180) {
+                baseColor = "bg-amber-400 hover:bg-amber-300";
+                latColor = "text-amber-500 dark:text-amber-400";
+                grade = "稍慢 (跨洋)";
+              } else if (p.latency_ms >= 100) {
+                baseColor = "bg-sky-400 hover:bg-sky-300";
+                latColor = "text-sky-600 dark:text-sky-400";
+                grade = "良好 (可)";
+              } else if (p.latency_ms >= 50) {
+                baseColor = "bg-teal-400 hover:bg-teal-300";
+                latColor = "text-teal-600 dark:text-teal-400";
+                grade = "平稳 (良)";
+              }
+
+              const TOTAL_SEGMENTS = 10;
+              const lossBlocks = hasLoss
+                ? Math.min(TOTAL_SEGMENTS, Math.max(1, Math.round((p.packet_loss / 100) * TOTAL_SEGMENTS)))
+                : 0;
+
+              const segments = Array.from({ length: TOTAL_SEGMENTS }).map((_, sIdx) => {
+                if (!isOnline) {
+                  return {
+                    color: isBlueprint ? "bg-slate-200" : "bg-zinc-800",
+                    grade: !node.is_online ? "节点离线" : "无响应",
+                  };
+                }
+                if (hasLoss && sIdx >= TOTAL_SEGMENTS - lossBlocks) {
+                  return {
+                    color: "bg-rose-500 hover:bg-rose-400 animate-pulse",
+                    grade: `丢包 ${p.packet_loss.toFixed(1)}%`,
+                  };
+                }
+                return {
+                  color: baseColor,
+                  grade,
+                };
+              });
+
               return (
                 <div
-                  key={idx}
-                  onMouseEnter={(e) => {
-                    e.stopPropagation();
-                    setHoveredTick({
-                      type: "loss",
-                      tick,
-                      xPercent: ((idx + 0.5) / lossTicks.length) * 100,
-                    });
-                  }}
-                  className={`flex-1 h-2.5 rounded-sm cursor-pointer transition-all duration-150 ease-out origin-bottom hover:scale-y-[1.6] hover:brightness-125 hover:shadow-xs ${bg}`}
-                  title={`${tick.label}: ${tick.valueStr} (${tick.gradeStr})`}
-                />
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* Target Breakdown Micro-Chips (Direct line view without needing hover) */}
-      {node.is_online && pings.length > 0 && (
-        <div className="mt-2.5 flex flex-wrap items-center gap-1.5 pt-0.5">
-          {pings.slice(0, 4).map((p, idx) => {
-            const latVal = p.latency_ms > 0 ? `${p.latency_ms.toFixed(0)}ms` : "--";
-            const hasLoss = p.packet_loss > 0;
-            return (
-              <div
-                key={idx}
-                className={cn(
-                  "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-mono border transition-all cursor-default",
-                  isBlueprint
-                    ? "bg-slate-50 hover:bg-slate-100 border-slate-200/90 text-slate-700 shadow-2xs"
-                    : "bg-zinc-900/80 hover:bg-zinc-800/80 border-white/[0.06] text-zinc-300"
-                )}
-                title={`${p.label}: ${p.latency_ms > 0 ? `${p.latency_ms.toFixed(1)}ms` : "无响应"} · 丢包 ${p.packet_loss.toFixed(1)}%`}
-              >
-                <span
-                  className="h-1.5 w-1.5 rounded-full shrink-0"
-                  style={{ backgroundColor: hasLoss ? "#f43f5e" : (p.color || "#10b981") }}
-                />
-                <span className="font-sans text-[10px] opacity-75 truncate max-w-[65px]">{p.label}</span>
-                <span
+                  key={p.target || idx}
                   className={cn(
-                    "font-semibold",
-                    hasLoss
-                      ? "text-rose-500"
-                      : p.latency_ms > 200
-                      ? "text-amber-500"
-                      : p.latency_ms > 0
-                      ? "text-emerald-600 dark:text-emerald-400"
-                      : "text-zinc-500"
+                    "flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg border text-xs transition-all",
+                    isBlueprint
+                      ? "bg-slate-50/70 hover:bg-slate-100/80 border-slate-200/80 text-slate-800 shadow-2xs"
+                      : "bg-zinc-950/50 hover:bg-zinc-900/60 border-zinc-800/60 text-zinc-200"
                   )}
                 >
-                  {latVal}
-                </span>
-                {hasLoss && (
-                  <span className="text-[9px] text-rose-500 font-bold">
-                    ({p.packet_loss.toFixed(0)}%)
-                  </span>
-                )}
-              </div>
-            );
-          })}
+                  {/* Target Identity */}
+                  <div className="flex items-center gap-1.5 min-w-[65px] max-w-[85px] sm:max-w-[105px] shrink-0">
+                    <span
+                      className="h-2 w-2 rounded-full shrink-0 shadow-xs"
+                      style={{
+                        backgroundColor: !node.is_online
+                          ? "#71717a"
+                          : hasLoss
+                          ? "#f43f5e"
+                          : (p.color || (isOnline ? "#10b981" : "#71717a")),
+                      }}
+                    />
+                    <span className="truncate font-sans font-medium text-xs text-slate-800 dark:text-zinc-200" title={p.label}>
+                      {p.label}
+                    </span>
+                  </div>
+
+                  {/* Segmented Bar Chart */}
+                  <div className="flex-1 flex items-center gap-1 py-0.5 px-1 min-w-0">
+                    {segments.map((seg, sIdx) => (
+                      <div
+                        key={sIdx}
+                        className={cn(
+                          "flex-1 h-2.5 rounded-[2px] cursor-pointer transition-all duration-150 ease-out origin-bottom hover:scale-y-[1.6] hover:brightness-125",
+                          seg.color
+                        )}
+                        title={`${p.label}: ${latVal} (${seg.grade}) · ${hasLoss ? `丢包 ${p.packet_loss.toFixed(1)}%` : "0%丢包"}${p.jitter > 0 ? ` · 抖动 ${p.jitter.toFixed(1)}ms` : ""}`}
+                      />
+                    ))}
+                  </div>
+
+                  {/* Latency & Loss Pills */}
+                  <div className="flex items-center gap-1.5 shrink-0 text-right font-mono">
+                    <span className={cn("font-bold text-xs min-w-[46px] text-right", latColor)}>
+                      {latVal}
+                    </span>
+
+                    <span
+                      className={cn(
+                        "text-[10px] font-mono px-1.5 py-0.2 rounded border min-w-[42px] text-center shrink-0 font-medium",
+                        !node.is_online || p.latency_ms <= 0
+                          ? "bg-zinc-500/10 border-zinc-500/20 text-zinc-500"
+                          : hasLoss
+                          ? "bg-rose-500/15 border-rose-500/30 text-rose-500 font-bold animate-pulse"
+                          : isBlueprint
+                          ? "bg-emerald-50 border-emerald-200/80 text-emerald-700"
+                          : "bg-emerald-950/30 border-emerald-500/25 text-emerald-400"
+                      )}
+                    >
+                      {node.is_online && p.latency_ms > 0
+                        ? hasLoss
+                          ? `失${p.packet_loss.toFixed(0)}%`
+                          : "0%丢包"
+                        : "--"}
+                    </span>
+                  </div>
+                </div>
+              );
+            })
+          )}
+
           {pings.length > 4 && (
-            <span className={cn("text-[10px] font-mono px-1 rounded", isBlueprint ? "text-slate-400" : "text-zinc-500")}>
-              +{pings.length - 4}
-            </span>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setExpandedPings(!expandedPings);
+              }}
+              className={cn(
+                "w-full text-center py-1 text-[11px] font-sans font-medium rounded-md border transition-all cursor-pointer active:scale-98",
+                isBlueprint
+                  ? "text-indigo-600 bg-indigo-50/50 hover:bg-indigo-50 border-indigo-200/60"
+                  : "text-indigo-400 bg-indigo-950/20 hover:bg-indigo-950/40 border-indigo-800/40"
+              )}
+            >
+              {expandedPings ? "收起监测目标 ▴" : `展开其余 ${pings.length - 4} 个监测目标 ▾`}
+            </button>
           )}
         </div>
-      )}
+      </div>
 
       {/* 6. Bottom Tags with Vibrant Colors */}
       {displayTags.length > 0 && (
