@@ -46,6 +46,13 @@ const getCycleLabel = (cycle?: string) => {
   }
 };
 
+const WAVE_PATTERNS = [
+  [40, 65, 90, 100, 75, 90, 100, 70, 55, 40],
+  [55, 85, 100, 70, 60, 95, 80, 100, 65, 45],
+  [45, 70, 80, 100, 85, 65, 95, 80, 60, 40],
+  [60, 90, 75, 85, 100, 90, 70, 85, 60, 50],
+];
+
 export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion }: ServerCardProps) {
   const divRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -517,14 +524,22 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
           </div>
         </div>
 
-        {/* Dedicated Target Rows with Segmented Bar Chart */}
-        <div className="space-y-1.5">
-          {pings.length === 0 ? (
-            <div className={cn("text-[11px] py-2 text-center rounded-lg border border-dashed font-sans", isBlueprint ? "border-slate-200 text-slate-400 bg-slate-50/50" : "border-zinc-800/80 text-zinc-500 bg-zinc-950/20")}>
-              暂未配置监测目标
-            </div>
-          ) : (
-            displayedPings.map((p, idx) => {
+        {/* Dedicated Target Rows with Equalizer Spectrum Wave */}
+        {pings.length === 0 ? (
+          <div className={cn(
+            "text-[11px] py-2 text-center rounded-lg border border-dashed font-sans",
+            isBlueprint ? "border-slate-200 text-slate-400 bg-slate-50/50" : "border-zinc-800/80 text-zinc-500 bg-zinc-950/20"
+          )}>
+            暂未配置监测目标
+          </div>
+        ) : (
+          <div className={cn(
+            "rounded-lg border overflow-hidden",
+            isBlueprint
+              ? "bg-slate-50/70 border-slate-200/80 divide-y divide-slate-100"
+              : "bg-zinc-950/40 border-zinc-800/50 divide-y divide-zinc-800/30"
+          )}>
+            {displayedPings.map((p, idx) => {
               const isOnline = node.is_online && p.latency_ms > 0;
               const hasLoss = node.is_online && p.packet_loss > 0;
               const latVal = isOnline ? (p.latency_ms < 10 ? `${p.latency_ms.toFixed(1)} ms` : `${p.latency_ms.toFixed(0)} ms`) : "--";
@@ -534,7 +549,7 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
               let grade = "极速 (优)";
 
               if (!isOnline) {
-                baseColor = isBlueprint ? "bg-slate-200" : "bg-zinc-800";
+                baseColor = isBlueprint ? "bg-slate-300" : "bg-zinc-800";
                 latColor = "text-zinc-500";
                 grade = !node.is_online ? "节点离线" : "无响应";
               } else if (p.latency_ms >= 260) {
@@ -560,10 +575,12 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
                 ? Math.min(TOTAL_SEGMENTS, Math.max(1, Math.round((p.packet_loss / 100) * TOTAL_SEGMENTS)))
                 : 0;
 
+              const pattern = WAVE_PATTERNS[idx % WAVE_PATTERNS.length];
+
               const segments = Array.from({ length: TOTAL_SEGMENTS }).map((_, sIdx) => {
                 if (!isOnline) {
                   return {
-                    color: isBlueprint ? "bg-slate-200" : "bg-zinc-800",
+                    color: isBlueprint ? "bg-slate-300" : "bg-zinc-800",
                     grade: !node.is_online ? "节点离线" : "无响应",
                   };
                 }
@@ -583,16 +600,19 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
                 <div
                   key={p.target || idx}
                   className={cn(
-                    "flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg border text-xs transition-all",
+                    "flex items-center justify-between gap-2 px-2.5 py-1.5 text-xs transition-colors duration-150",
                     isBlueprint
-                      ? "bg-slate-50/70 hover:bg-slate-100/80 border-slate-200/80 text-slate-800 shadow-2xs"
-                      : "bg-zinc-950/50 hover:bg-zinc-900/60 border-zinc-800/60 text-zinc-200"
+                      ? "hover:bg-slate-100/70 text-slate-800"
+                      : "hover:bg-white/[0.02] text-zinc-200"
                   )}
                 >
                   {/* Target Identity */}
                   <div className="flex items-center gap-1.5 min-w-[65px] max-w-[85px] sm:max-w-[105px] shrink-0">
                     <span
-                      className="h-2 w-2 rounded-full shrink-0 shadow-xs"
+                      className={cn(
+                        "h-2 w-2 rounded-full shrink-0 shadow-2xs transition-all",
+                        hasLoss ? "ring-2 ring-rose-500/20" : isOnline ? "ring-2 ring-emerald-500/20" : ""
+                      )}
                       style={{
                         backgroundColor: !node.is_online
                           ? "#71717a"
@@ -606,68 +626,73 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
                     </span>
                   </div>
 
-                  {/* Segmented Bar Chart */}
-                  <div className="flex-1 flex items-center gap-1 py-0.5 px-1 min-w-0">
+                  {/* Equalizer Spectrum Wave */}
+                  <div
+                    className="flex-1 flex items-end h-3.5 gap-[3px] px-1.5 min-w-0"
+                    title={`${p.label}: ${latVal} (${grade}) · ${hasLoss ? `丢包 ${p.packet_loss.toFixed(1)}%` : "0%丢包"}${p.jitter > 0 ? ` · 抖动 ${p.jitter.toFixed(1)}ms` : ""}`}
+                  >
                     {segments.map((seg, sIdx) => (
                       <div
                         key={sIdx}
                         className={cn(
-                          "flex-1 h-2.5 rounded-[2px] cursor-pointer transition-all duration-150 ease-out origin-bottom hover:scale-y-[1.6] hover:brightness-125",
+                          "flex-1 rounded-t-[1.5px] rounded-b-[0.5px] cursor-pointer transition-all duration-150 ease-out origin-bottom hover:scale-y-125 hover:brightness-125",
                           seg.color
                         )}
-                        title={`${p.label}: ${latVal} (${seg.grade}) · ${hasLoss ? `丢包 ${p.packet_loss.toFixed(1)}%` : "0%丢包"}${p.jitter > 0 ? ` · 抖动 ${p.jitter.toFixed(1)}ms` : ""}`}
+                        style={{
+                          height: isOnline ? `${pattern[sIdx]}%` : "20%",
+                        }}
+                        title={`${p.label}: ${latVal} (${seg.grade}) · ${hasLoss ? `丢包 ${p.packet_loss.toFixed(1)}%` : "0%丢包"}`}
                       />
                     ))}
                   </div>
 
-                  {/* Latency & Loss Pills */}
-                  <div className="flex items-center gap-1.5 shrink-0 text-right font-mono">
-                    <span className={cn("font-bold text-xs min-w-[46px] text-right", latColor)}>
+                  {/* Latency & De-cluttered Loss Indicator */}
+                  <div className="flex items-center justify-end gap-2 shrink-0 font-mono">
+                    <span className={cn("font-bold text-xs min-w-[44px] text-right", latColor)}>
                       {latVal}
                     </span>
 
-                    <span
-                      className={cn(
-                        "text-[10px] font-mono px-1.5 py-0.2 rounded border min-w-[42px] text-center shrink-0 font-medium",
-                        !node.is_online || p.latency_ms <= 0
-                          ? "bg-zinc-500/10 border-zinc-500/20 text-zinc-500"
-                          : hasLoss
-                          ? "bg-rose-500/15 border-rose-500/30 text-rose-500 font-bold animate-pulse"
-                          : isBlueprint
-                          ? "bg-emerald-50 border-emerald-200/80 text-emerald-700"
-                          : "bg-emerald-950/30 border-emerald-500/25 text-emerald-400"
+                    <div className="min-w-[42px] text-right">
+                      {!isOnline ? (
+                        <span className="text-[10px] text-zinc-500">--</span>
+                      ) : hasLoss ? (
+                        <span className="inline-flex items-center gap-0.5 text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-full border bg-rose-500/15 border-rose-500/30 text-rose-500 animate-pulse">
+                          <span className="h-1 w-1 rounded-full bg-rose-500 shrink-0" />
+                          失{p.packet_loss.toFixed(0)}%
+                        </span>
+                      ) : (
+                        <span className={cn(
+                          "text-[10px] font-mono font-medium opacity-80",
+                          isBlueprint ? "text-emerald-700" : "text-emerald-400"
+                        )}>
+                          0%
+                        </span>
                       )}
-                    >
-                      {node.is_online && p.latency_ms > 0
-                        ? hasLoss
-                          ? `失${p.packet_loss.toFixed(0)}%`
-                          : "0%丢包"
-                        : "--"}
-                    </span>
+                    </div>
                   </div>
                 </div>
               );
-            })
-          )}
+            })}
 
-          {pings.length > 4 && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setExpandedPings(!expandedPings);
-              }}
-              className={cn(
-                "w-full text-center py-1 text-[11px] font-sans font-medium rounded-md border transition-all cursor-pointer active:scale-98",
-                isBlueprint
-                  ? "text-indigo-600 bg-indigo-50/50 hover:bg-indigo-50 border-indigo-200/60"
-                  : "text-indigo-400 bg-indigo-950/20 hover:bg-indigo-950/40 border-indigo-800/40"
-              )}
-            >
-              {expandedPings ? "收起监测目标 ▴" : `展开其余 ${pings.length - 4} 个监测目标 ▾`}
-            </button>
-          )}
-        </div>
+            {pings.length > 4 && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setExpandedPings(!expandedPings);
+                }}
+                className={cn(
+                  "w-full py-1.5 text-center text-[11px] font-sans font-medium transition-colors cursor-pointer border-t",
+                  isBlueprint
+                    ? "text-indigo-600 hover:bg-indigo-50/60 border-slate-100"
+                    : "text-indigo-400/90 hover:text-indigo-300 hover:bg-white/[0.02] border-zinc-800/30"
+                )}
+              >
+                {expandedPings ? "收起监测目标 ▴" : `展开其余 ${pings.length - 4} 个监测目标 ▾`}
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* 6. Bottom Tags with Vibrant Colors */}
