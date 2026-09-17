@@ -51,6 +51,7 @@ const WAVE_PATTERNS = [
   [55, 85, 100, 70, 60, 95, 80, 100, 65, 45],
   [45, 70, 80, 100, 85, 65, 95, 80, 60, 40],
   [60, 90, 75, 85, 100, 90, 70, 85, 60, 50],
+  [50, 75, 95, 80, 65, 100, 85, 75, 90, 45],
 ];
 
 export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion }: ServerCardProps) {
@@ -156,7 +157,7 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
   }, [node.is_online, avgLatency]);
 
   const [expandedPings, setExpandedPings] = useState(false);
-  const displayedPings = pings.length <= 4 || expandedPings ? pings : pings.slice(0, 4);
+  const displayedPings = pings.length <= 5 || expandedPings ? pings : pings.slice(0, 5);
 
 
   // Progress Bar Semantic Colors
@@ -533,12 +534,7 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
             暂未配置监测目标
           </div>
         ) : (
-          <div className={cn(
-            "rounded-lg border overflow-hidden",
-            isBlueprint
-              ? "bg-slate-50/70 border-slate-200/80 divide-y divide-slate-100"
-              : "bg-zinc-950/40 border-zinc-800/50 divide-y divide-zinc-800/30"
-          )}>
+          <div className="space-y-0.5">
             {displayedPings.map((p, idx) => {
               const isOnline = node.is_online && p.latency_ms > 0;
               const hasLoss = node.is_online && p.packet_loss > 0;
@@ -600,10 +596,10 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
                 <div
                   key={p.target || idx}
                   className={cn(
-                    "flex items-center justify-between gap-2 px-2.5 py-1.5 text-xs transition-colors duration-150",
+                    "flex items-center justify-between gap-2 px-1.5 py-1 rounded-md text-xs transition-colors duration-150",
                     isBlueprint
                       ? "hover:bg-slate-100/70 text-slate-800"
-                      : "hover:bg-white/[0.02] text-zinc-200"
+                      : "hover:bg-white/[0.04] text-zinc-200"
                   )}
                 >
                   {/* Target Identity */}
@@ -674,7 +670,7 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
               );
             })}
 
-            {pings.length > 4 && (
+            {pings.length > 5 && (
               <button
                 type="button"
                 onClick={(e) => {
@@ -682,13 +678,13 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
                   setExpandedPings(!expandedPings);
                 }}
                 className={cn(
-                  "w-full py-1.5 text-center text-[11px] font-sans font-medium transition-colors cursor-pointer border-t",
+                  "w-full py-1 text-center text-[11px] font-sans font-medium rounded-md transition-colors cursor-pointer mt-1",
                   isBlueprint
-                    ? "text-indigo-600 hover:bg-indigo-50/60 border-slate-100"
-                    : "text-indigo-400/90 hover:text-indigo-300 hover:bg-white/[0.02] border-zinc-800/30"
+                    ? "text-indigo-600 hover:bg-indigo-50/80"
+                    : "text-indigo-400 hover:text-indigo-300 hover:bg-white/[0.04]"
                 )}
               >
-                {expandedPings ? "收起监测目标 ▴" : `展开其余 ${pings.length - 4} 个监测目标 ▾`}
+                {expandedPings ? "收起监测目标 ▴" : `展开其余 ${pings.length - 5} 个监测目标 ▾`}
               </button>
             )}
           </div>
