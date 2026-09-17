@@ -52,10 +52,10 @@ export const HostDeployDialog: React.FC<HostDeployDialogProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-3 sm:p-6 bg-black/75 backdrop-blur-sm animate-fade-in font-sans">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-0 sm:p-4 lg:p-6 bg-black/75 backdrop-blur-sm animate-fade-in font-sans">
       <div
         className={cn(
-          "relative flex flex-col w-full max-w-2xl max-h-[90vh] rounded-2xl border shadow-2xl overflow-hidden transition-colors",
+          "relative flex flex-col w-full max-w-2xl h-[100dvh] sm:h-auto sm:max-h-[90vh] rounded-none sm:rounded-2xl border shadow-2xl overflow-hidden transition-colors",
           isBlueprint
             ? "bg-white border-slate-200/90 text-slate-900 shadow-slate-300/60"
             : "bg-zinc-900 border-zinc-800 text-zinc-100 shadow-black/80"
@@ -64,7 +64,7 @@ export const HostDeployDialog: React.FC<HostDeployDialogProps> = ({
         {/* Dialog header */}
         <div
           className={cn(
-            "flex items-center justify-between gap-3 px-6 py-4 border-b shrink-0",
+            "flex items-center justify-between gap-3 px-4 py-3 sm:px-6 sm:py-4 border-b shrink-0",
             isBlueprint ? "border-slate-200/80 bg-slate-50/70" : "border-zinc-800 bg-zinc-950/40"
           )}
         >
@@ -99,7 +99,7 @@ export const HostDeployDialog: React.FC<HostDeployDialogProps> = ({
         </div>
 
         {/* Scrollable body */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-4 text-xs">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 text-xs">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label
@@ -198,7 +198,7 @@ export const HostDeployDialog: React.FC<HostDeployDialogProps> = ({
                 <span>{copiedId === "oneclick" ? "已复制" : "复制命令"}</span>
               </Button>
             </div>
-            <pre className="p-4 rounded-xl border border-slate-800 bg-slate-950 text-emerald-400 font-mono text-xs overflow-x-auto whitespace-pre-wrap select-all leading-relaxed shadow-inner">
+            <pre className="p-3.5 sm:p-4 rounded-xl border border-slate-800 bg-slate-950 text-emerald-400 font-mono text-xs overflow-x-auto whitespace-pre-wrap break-all select-all leading-relaxed shadow-inner">
               {oneClickCmd}
             </pre>
           </div>
@@ -222,7 +222,7 @@ export const HostDeployDialog: React.FC<HostDeployDialogProps> = ({
             </div>
             <pre
               className={cn(
-                "p-3 rounded-xl border font-mono text-xs overflow-x-auto whitespace-pre-wrap select-all",
+                "p-3 rounded-xl border font-mono text-xs overflow-x-auto whitespace-pre-wrap break-all select-all",
                 isBlueprint
                   ? "bg-slate-100 border-slate-200 text-slate-800"
                   : "bg-zinc-950 border-zinc-800 text-zinc-300"
@@ -254,11 +254,11 @@ export const HostDeployDialog: React.FC<HostDeployDialogProps> = ({
         {/* Footer */}
         <div
           className={cn(
-            "flex items-center justify-end gap-3 px-6 py-4 border-t shrink-0 text-xs",
+            "flex items-center justify-end gap-3 px-4 py-3 sm:px-6 sm:py-4 border-t shrink-0 text-xs",
             isBlueprint ? "border-slate-200/80 bg-slate-50/70" : "border-zinc-800 bg-zinc-950/40"
           )}
         >
-          <span className={cn("mr-auto", isBlueprint ? "text-slate-500" : "text-zinc-500")}>
+          <span className={cn("mr-auto hidden sm:inline", isBlueprint ? "text-slate-500" : "text-zinc-500")}>
             在目标机器执行命令后，主机会自动出现在列表中
           </span>
           <Button variant="ghost" size="sm" type="button" onPress={onClose} className="text-slate-600 dark:text-zinc-400">

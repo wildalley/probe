@@ -304,14 +304,15 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     key: TabKey;
     icon: LucideIcon;
     label: string;
+    shortLabel: string;
     badge?: number | string;
     badgeTone?: "count" | "new";
   }[] = [
-    { key: "hosts", icon: Server, label: "主机管理", badge: nodes.length },
-    { key: "network", icon: Activity, label: "网络延迟与丢包检测", badge: pingTargets.length },
-    { key: "billing", icon: Coins, label: "财务计费与实时汇率" },
-    { key: "tokens", icon: Key, label: "通信鉴权 Token", badge: tokens.length },
-    { key: "notifications", icon: Bell, label: "自定义通知与告警", badge: "NEW", badgeTone: "new" },
+    { key: "hosts", icon: Server, label: "主机管理", shortLabel: "主机", badge: nodes.length },
+    { key: "network", icon: Activity, label: "网络延迟与丢包检测", shortLabel: "网络监测", badge: pingTargets.length },
+    { key: "billing", icon: Coins, label: "财务计费与实时汇率", shortLabel: "财务汇率" },
+    { key: "tokens", icon: Key, label: "通信鉴权 Token", shortLabel: "Token", badge: tokens.length },
+    { key: "notifications", icon: Bell, label: "自定义通知与告警", shortLabel: "告警通知", badge: "NEW", badgeTone: "new" },
   ];
 
   const handleTabChange = (key: TabKey) => {
@@ -600,9 +601,9 @@ export const AdminModal: React.FC<AdminModalProps> = ({
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-md animate-fade-in font-sans">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 lg:p-6 bg-black/80 backdrop-blur-md animate-fade-in font-sans">
       <div
-        className={`relative flex flex-col w-full max-w-[1440px] h-[92vh] rounded-2xl border shadow-2xl overflow-hidden transition-colors ${
+        className={`relative flex flex-col w-full max-w-[1440px] h-[100dvh] sm:h-[92vh] rounded-none sm:rounded-2xl border-0 sm:border shadow-2xl overflow-hidden transition-colors ${
           isBlueprint
             ? "bg-slate-50 border-slate-200/90 text-slate-900"
             : "bg-zinc-950 border-zinc-800 text-zinc-100"
@@ -610,24 +611,24 @@ export const AdminModal: React.FC<AdminModalProps> = ({
       >
         {/* Modal Header */}
         <div
-          className={`flex items-center justify-between px-6 py-3.5 border-b shrink-0 ${
+          className={`flex items-center justify-between px-3.5 py-2.5 sm:px-6 sm:py-3.5 border-b shrink-0 ${
             isBlueprint ? "bg-white border-slate-200/80" : "bg-zinc-900/90 border-zinc-800"
           }`}
         >
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-indigo-50 border border-indigo-200/80 text-indigo-600 dark:bg-indigo-950/50 dark:border-indigo-800/60 dark:text-indigo-400">
-              <Sliders className="h-4.5 w-4.5" />
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="p-2 sm:p-2.5 rounded-xl bg-indigo-50 border border-indigo-200/80 text-indigo-600 dark:bg-indigo-950/50 dark:border-indigo-800/60 dark:text-indigo-400 shrink-0">
+              <Sliders className="h-4 w-4 sm:h-4.5 sm:w-4.5" />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold font-sans tracking-tight text-slate-900 dark:text-zinc-100">
+                <h2 className="text-sm sm:text-base font-bold font-sans tracking-tight truncate text-slate-900 dark:text-zinc-100">
                   PROBE ADMIN CONSOLE
                 </h2>
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-11 font-sans font-semibold bg-indigo-50 text-indigo-600 border border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-400 dark:border-indigo-800">
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-10 sm:text-11 font-sans font-semibold bg-indigo-50 text-indigo-600 border border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-400 dark:border-indigo-800 shrink-0">
                   管理后台
                 </span>
               </div>
-              <p className={`text-xs font-sans mt-0.5 ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}>
+              <p className={`hidden sm:block text-xs font-sans mt-0.5 truncate ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}>
                 主机管理 · 网络延迟丢包监控 · 财务定价与实时汇率 · 自定义多渠道通知
               </p>
             </div>
@@ -637,7 +638,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
             size="sm"
             isIconOnly
             onPress={onClose}
-            className="text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200"
+            className="text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 shrink-0"
             aria-label="关闭"
           >
             <X className="h-4 w-4" />
@@ -647,7 +648,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
         {/* Tab Navigation */}
         <div
           className={cn(
-            "px-6 border-b shrink-0 overflow-x-auto",
+            "px-2.5 sm:px-6 border-b shrink-0 overflow-x-auto no-scrollbar",
             isBlueprint ? "bg-white border-slate-200/80" : "bg-zinc-900/60 border-zinc-800"
           )}
         >
@@ -657,17 +658,15 @@ export const AdminModal: React.FC<AdminModalProps> = ({
             aria-label="管理后台分区"
           >
             <Tabs.List className="flex-nowrap min-w-max -mb-px">
-              {tabItems.map(({ key, icon: Icon, label, badge, badgeTone }) => (
+              {tabItems.map(({ key, icon: Icon, label, shortLabel, badge, badgeTone }) => (
                 <Tabs.Tab
                   key={key}
                   id={key}
-                  // HeroUI's .tabs__tab is `w-full` + shrinkable, so five tabs split
-                  // the bar into equal fifths and the long labels wrapped to two
-                  // lines. Sizing to content instead keeps every label on one line.
-                  className="h-11 w-auto shrink-0 gap-2 whitespace-nowrap text-xs font-sans"
+                  className="h-10 sm:h-11 w-auto shrink-0 gap-1.5 sm:gap-2 whitespace-nowrap text-xs font-sans px-2 sm:px-3"
                 >
-                  <Icon className="h-3.5 w-3.5" />
-                  <span>{label}</span>
+                  <Icon className="h-3.5 w-3.5 shrink-0" />
+                  <span className="sm:hidden">{shortLabel}</span>
+                  <span className="hidden sm:inline">{label}</span>
                   {badge != null && (
                     <span
                       className={cn(
@@ -689,7 +688,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
 
         {/* Tab Contents. Keyed on activeTab so switching panes fades in and
             resets the scroll position instead of keeping the previous offset. */}
-        <div key={activeTab} className="flex-1 overflow-y-auto p-6 space-y-6 animate-fade-in">
+        <div key={activeTab} className="flex-1 overflow-y-auto p-3.5 sm:p-6 space-y-4 sm:space-y-6 animate-fade-in">
           {/* TAB 1: HOSTS — roster only; add and edit live in dialogs. */}
           {activeTab === "hosts" && (
             <div className="space-y-5">
@@ -766,18 +765,20 @@ export const AdminModal: React.FC<AdminModalProps> = ({
 
               {/* Instant ping tester quick bar */}
               <div
-                className={`p-3 rounded-xl border flex flex-wrap items-center justify-between gap-3 ${
+                className={`p-3 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
                   isBlueprint ? "bg-white border-slate-200/90 shadow-xs" : "bg-zinc-900/60 border-zinc-800"
                 }`}
               >
-                <div className="flex items-center gap-2 text-xs font-sans">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-500/10 text-amber-500 shrink-0">
-                    <Zap className="h-4 w-4" />
-                  </div>
-                  <span className={`font-semibold ${isBlueprint ? "text-slate-800" : "text-zinc-200"}`}>
-                    即时测速:
-                  </span>
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-xs font-sans w-full sm:w-auto">
                   <div className="flex items-center gap-2">
+                    <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-500/10 text-amber-500 shrink-0">
+                      <Zap className="h-4 w-4" />
+                    </div>
+                    <span className={`font-semibold ${isBlueprint ? "text-slate-800" : "text-zinc-200"}`}>
+                      即时测速:
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 w-full sm:w-auto">
                     <Input
                       type="text"
                       placeholder="输入 IP 或域名，如 1.1.1.1"
@@ -788,14 +789,14 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                           handleTestTarget(instantTargetInput.trim());
                         }
                       }}
-                      className="font-mono text-xs w-64"
+                      className="font-mono text-xs flex-1 sm:w-64"
                     />
                     <Button
                       variant="primary"
                       size="sm"
                       onPress={() => handleTestTarget(instantTargetInput.trim())}
                       isDisabled={isTesting || !instantTargetInput.trim()}
-                      className="font-sans font-medium"
+                      className="font-sans font-medium shrink-0"
                     >
                       {isTesting ? "测试中..." : "测试连接"}
                     </Button>
@@ -839,7 +840,8 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                   isBlueprint ? "bg-white border-slate-200/90 shadow-xs" : "bg-zinc-900/60 border-zinc-800"
                 }`}
               >
-                <div className="overflow-x-auto">
+                {/* Desktop Table View */}
+                <div className="hidden md:block overflow-x-auto">
                   <table className="w-full text-left text-xs font-sans">
                     <thead
                       className={`border-b text-xs font-semibold ${
@@ -966,6 +968,99 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                       )}
                     </tbody>
                   </table>
+                </div>
+
+                {/* Mobile Responsive Target Cards View */}
+                <div className="block md:hidden divide-y divide-slate-100 dark:divide-zinc-800/60">
+                  {pingTargets.map((t) => (
+                    <div
+                      key={t.id || t.label}
+                      className={cn(
+                        "p-3.5 space-y-2.5 transition-colors",
+                        isBlueprint ? "bg-white hover:bg-slate-50/50" : "bg-zinc-900/40 hover:bg-zinc-900/70"
+                      )}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span
+                            className="h-2.5 w-2.5 rounded-full shrink-0 ring-2 ring-white dark:ring-zinc-900"
+                            style={{ backgroundColor: t.color || "#6366f1" }}
+                          />
+                          <span className={cn("font-bold text-xs truncate", isBlueprint ? "text-slate-800" : "text-zinc-200")}>
+                            {t.label}
+                          </span>
+                          <span
+                            className={cn(
+                              "px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold uppercase border shrink-0",
+                              t.protocol === "http"
+                                ? isBlueprint ? "bg-purple-50 text-purple-700 border-purple-200" : "bg-purple-950/40 text-purple-400 border-purple-800/60"
+                                : t.protocol === "tcp"
+                                ? isBlueprint ? "bg-sky-50 text-sky-700 border-sky-200" : "bg-sky-950/40 text-sky-400 border-sky-800/60"
+                                : isBlueprint ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-emerald-950/40 text-emerald-400 border-emerald-800/60"
+                            )}
+                          >
+                            {t.protocol || "tcp"}
+                          </span>
+                        </div>
+                        <Switch
+                          isSelected={t.enabled !== false}
+                          onChange={() => handleToggleTarget(t)}
+                          size="sm"
+                        >
+                          <Switch.Content>
+                            <Switch.Control>
+                              <Switch.Thumb />
+                            </Switch.Control>
+                          </Switch.Content>
+                        </Switch>
+                      </div>
+
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-11">
+                        <span className={cn(
+                          "px-2 py-0.5 rounded font-mono font-medium border text-xs",
+                          isBlueprint ? "bg-slate-50 text-slate-700 border-slate-200/80" : "bg-zinc-950 text-zinc-300 border-zinc-800"
+                        )}>
+                          {t.target}
+                        </span>
+                        <span className={cn(isBlueprint ? "text-slate-500" : "text-zinc-400")}>
+                          每 <strong className="font-mono">{t.interval || 60}</strong> 秒检测一次
+                        </span>
+                      </div>
+
+                      <div className={cn("flex items-center justify-between pt-1 border-t text-xs", isBlueprint ? "border-slate-100" : "border-zinc-800/60")}>
+                        <span className={cn("text-11", isBlueprint ? "text-slate-500" : "text-zinc-400")}>
+                          {t.servers && t.servers.length > 0
+                            ? `${t.servers.length} 台服务器`
+                            : t.auto_start === false ? "已接入服务器" : "全部服务器"}
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onPress={() => openEditTargetModal(t)}
+                            className="h-7 px-2 text-xs font-sans gap-1 text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800/60"
+                          >
+                            <Edit2 className="h-3 w-3" />
+                            <span>编辑</span>
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onPress={() => handleDeleteTarget(t.id)}
+                            className="h-7 w-7 p-0 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:text-rose-400 dark:hover:bg-rose-950/40"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+
+                  {pingTargets.length === 0 && (
+                    <div className="py-8 text-center text-xs text-slate-400 font-sans">
+                      暂无监测目标，请点击右上角「添加监测」
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -1112,7 +1207,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                   isBlueprint ? "bg-white border-slate-200/90 shadow-xs" : "bg-zinc-900/70 border-zinc-800"
                 }`}
               >
-                <div className="flex-1 min-w-[240px]">
+                <div className="flex-1 w-full min-w-0">
                   <Input
                     type="text"
                     placeholder="输入新 Token 标签备注 (如: 美国VPS专用)..."
@@ -1125,7 +1220,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                   variant="primary"
                   size="sm"
                   onPress={handleCreateToken}
-                  className="font-sans font-medium gap-1.5"
+                  className="w-full sm:w-auto font-sans font-medium gap-1.5 shrink-0"
                 >
                   <Plus className="h-4 w-4" />
                   <span>生成新 Token</span>
@@ -1138,7 +1233,8 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                   isBlueprint ? "bg-white border-slate-200/90 shadow-xs" : "bg-zinc-900/60 border-zinc-800"
                 }`}
               >
-                <div className="overflow-x-auto">
+                {/* Desktop Table View */}
+                <div className="hidden sm:block overflow-x-auto">
                   <table className="w-full text-left text-xs font-sans">
                     <thead
                       className={`border-b text-xs font-semibold ${
@@ -1196,6 +1292,49 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                       )}
                     </tbody>
                   </table>
+                </div>
+
+                {/* Mobile Responsive Tokens Cards View */}
+                <div className="block sm:hidden divide-y divide-slate-100 dark:divide-zinc-800/60">
+                  {tokens.map((t) => (
+                    <div
+                      key={t.token}
+                      className={cn(
+                        "p-3.5 space-y-2 transition-colors",
+                        isBlueprint ? "bg-white hover:bg-slate-50/50" : "bg-zinc-900/40 hover:bg-zinc-900/70"
+                      )}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className={cn("font-bold text-xs truncate", isBlueprint ? "text-slate-900" : "text-zinc-100")}>
+                          {t.label || "默认令牌"}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onPress={() => copyToClipboard(t.token, t.token)}
+                          className="h-7 px-2 text-xs font-sans gap-1 text-indigo-600 dark:text-indigo-400"
+                        >
+                          {copiedCmd === t.token ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+                          <span>{copiedCmd === t.token ? "已复制" : "复制"}</span>
+                        </Button>
+                      </div>
+                      <div className={cn(
+                        "p-2 rounded font-mono text-11 break-all border",
+                        isBlueprint ? "bg-slate-50 text-slate-800 border-slate-200" : "bg-zinc-950 text-emerald-400 border-zinc-800"
+                      )}>
+                        {t.token}
+                      </div>
+                      <div className={cn("text-10 font-mono", isBlueprint ? "text-slate-400" : "text-zinc-500")}>
+                        创建时间: {t.created_at ? new Date(t.created_at * 1000).toLocaleString() : "--"}
+                      </div>
+                    </div>
+                  ))}
+
+                  {tokens.length === 0 && (
+                    <div className="py-8 text-center text-xs text-slate-400 font-sans">
+                      暂无通信 Token，请在上方输入备注标签并生成
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -1903,7 +2042,8 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                   </div>
                 </div>
 
-                <div className="overflow-x-auto">
+                {/* Desktop Table View */}
+                <div className="hidden md:block overflow-x-auto">
                   <table className="w-full text-left font-sans text-xs">
                     <thead
                       className={`border-b text-xs font-semibold ${
@@ -1999,6 +2139,83 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                       )}
                     </tbody>
                   </table>
+                </div>
+
+                {/* Mobile Responsive Notification Logs View */}
+                <div className="block md:hidden divide-y divide-slate-100 dark:divide-zinc-800/60">
+                  {notificationLogs.map((logItem) => {
+                    let typeText = "通知";
+                    let typeClass = "bg-slate-100 text-slate-600 border-slate-200 dark:bg-zinc-800 dark:text-zinc-400";
+                    if (logItem.type === "offline") {
+                      typeClass = "bg-rose-50 text-rose-700 border-rose-200/80 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800/60";
+                      typeText = "节点离线";
+                    } else if (logItem.type === "recovery") {
+                      typeClass = "bg-emerald-50 text-emerald-700 border-emerald-200/80 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800/60";
+                      typeText = "上线恢复";
+                    } else if (logItem.type === "traffic") {
+                      typeClass = "bg-amber-50 text-amber-700 border-amber-200/80 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800/60";
+                      typeText = "流量预警";
+                    } else if (logItem.type === "daily_report") {
+                      typeClass = "bg-sky-50 text-sky-700 border-sky-200/80 dark:bg-sky-950/40 dark:text-sky-400 dark:border-sky-800/60";
+                      typeText = "每日简报";
+                    } else if (logItem.type === "test") {
+                      typeClass = "bg-indigo-50 text-indigo-700 border-indigo-200/80 dark:bg-indigo-950/40 dark:text-indigo-400 dark:border-indigo-800/60";
+                      typeText = "测试消息";
+                    }
+
+                    return (
+                      <div
+                        key={logItem.id}
+                        className={cn(
+                          "p-3.5 space-y-1.5 transition-colors",
+                          isBlueprint ? "bg-white hover:bg-slate-50/50" : "bg-zinc-900/40 hover:bg-zinc-900/70"
+                        )}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="px-2 py-0.5 rounded-full text-10 font-mono font-bold uppercase bg-indigo-50 text-indigo-600 border border-indigo-200/70 dark:bg-indigo-950/40 dark:text-indigo-400 dark:border-indigo-800/60">
+                              {logItem.channel}
+                            </span>
+                            <span className={`px-2 py-0.5 rounded-full text-10 font-medium border ${typeClass}`}>
+                              {typeText}
+                            </span>
+                          </div>
+                          {logItem.status === "success" ? (
+                            <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium text-xs shrink-0">
+                              <Check className="h-3.5 w-3.5" />
+                              <span>已送达</span>
+                            </span>
+                          ) : (
+                            <span
+                              className="inline-flex items-center gap-1 text-rose-500 font-medium text-xs shrink-0"
+                              title={logItem.error_msg || "投递失败"}
+                            >
+                              <AlertCircle className="h-3.5 w-3.5" />
+                              <span>失败</span>
+                            </span>
+                          )}
+                        </div>
+
+                        <div className={`font-medium text-xs ${isBlueprint ? "text-slate-900" : "text-zinc-200"}`}>
+                          {logItem.title}
+                        </div>
+                        <div className="text-11 text-slate-500 dark:text-zinc-400 break-words">
+                          {logItem.content}
+                        </div>
+                        <div className="text-10 font-mono text-slate-400 dark:text-zinc-500 pt-0.5">
+                          {new Date(logItem.timestamp * 1000).toLocaleString()}
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {notificationLogs.length === 0 && (
+                    <div className="py-8 text-center text-xs text-slate-400 font-sans">
+                      {logPage > 0
+                        ? "这一页没有记录了，可能刚被清空或已翻过末页。"
+                        : "暂无告警推送记录。当节点状态发生变化或点击测试通知时，将在此记录审计日志。"}
+                    </div>
+                  )}
                 </div>
 
                 {/* Pager. Hidden while everything fits on one page. */}

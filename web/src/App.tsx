@@ -226,6 +226,17 @@ export function App() {
     return Array.from(set).sort();
   }, [nodesList]);
 
+  // Compute host counts per region for badges
+  const regionCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    nodesList.forEach((n) => {
+      if (n.region) {
+        counts[n.region] = (counts[n.region] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [nodesList]);
+
   // Compute cluster summary
   const summary: SystemSummary = useMemo(() => {
     const total = nodesList.length;
@@ -366,6 +377,7 @@ export function App() {
             selectedRegion={selectedRegion}
             onRegionChange={setSelectedRegion}
             regions={regions}
+            regionCounts={regionCounts}
             viewMode={viewMode}
             onViewModeChange={setViewMode}
             onOpenAddModal={() => setIsAddModalOpen(true)}
@@ -380,10 +392,10 @@ export function App() {
           />
 
           {/* Main Content Area */}
-          <main className="flex-1 mx-auto max-w-[1600px] w-full px-4 py-8 sm:px-6 lg:px-8">
+          <main className="flex-1 mx-auto max-w-[1600px] w-full px-3.5 py-4 sm:px-6 sm:py-6 lg:px-8">
             {filteredNodes.length > 0 ? (
               viewMode === "grid" ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4 sm:gap-5">
                   {filteredNodes.map((node, i) => (
                     <BlurFade
                       key={node.node_id}

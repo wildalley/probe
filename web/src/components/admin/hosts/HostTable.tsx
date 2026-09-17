@@ -49,7 +49,8 @@ export const HostTable: React.FC<HostTableProps> = ({
         </span>
       </div>
 
-      <div className="overflow-x-auto">
+      {/* Desktop Table View */}
+      <div className="hidden md:block overflow-x-auto">
         <table className="w-full text-left text-xs">
           <thead
             className={cn(
@@ -212,6 +213,141 @@ export const HostTable: React.FC<HostTableProps> = ({
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Mobile Responsive Cards View */}
+      <div className="block md:hidden divide-y divide-slate-100 dark:divide-zinc-800/60">
+        {nodes.map((n) => {
+          const totalQuota = n.billing?.bandwidth_quota || 0;
+          const totalUsed =
+            n.billing?.bandwidth_used ||
+            (n.network.bytes_sent || 0) + (n.network.bytes_recv || 0);
+          const percent =
+            totalQuota > 0 ? Math.min(100, Math.round((totalUsed / totalQuota) * 100)) : 0;
+
+          return (
+            <div
+              key={n.node_id}
+              className={cn(
+                "p-3.5 space-y-2.5 transition-colors",
+                isBlueprint ? "bg-white hover:bg-slate-50/50" : "bg-zinc-900/40 hover:bg-zinc-900/70"
+              )}
+            >
+              {/* Row 1: Status, Flag, Host Name, and Actions */}
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span
+                    className={cn(
+                      "inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-10 font-medium border shrink-0",
+                      n.is_online
+                        ? isBlueprint
+                          ? "bg-emerald-50 text-emerald-700 border-emerald-200/80"
+                          : "bg-emerald-950/40 text-emerald-400 border-emerald-800/60"
+                        : isBlueprint
+                        ? "bg-rose-50 text-rose-700 border-rose-200/80"
+                        : "bg-rose-950/40 text-rose-400 border-rose-800/60"
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "h-1.5 w-1.5 rounded-full",
+                        n.is_online ? "bg-emerald-500" : "bg-rose-500"
+                      )}
+                    />
+                    {n.is_online ? "在线" : "离线"}
+                  </span>
+                  <span className="text-base leading-none shrink-0">{getRegionFlag(n.region)}</span>
+                  <div className={cn("font-bold text-xs truncate", isBlueprint ? "text-slate-900" : "text-zinc-100")}>
+                    {n.name}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1 shrink-0">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onPress={() => onEdit(n)}
+                    className="h-7 px-2 text-xs font-sans gap-1 text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800/60"
+                    aria-label={`配置主机 ${n.name}`}
+                  >
+                    <Sliders className="h-3 w-3" />
+                    <span>配置</span>
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onPress={() => onDelete(n.node_id)}
+                    className="h-7 w-7 p-0 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:text-rose-400 dark:hover:bg-rose-950/40"
+                    aria-label={`删除主机 ${n.name}`}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
+
+              {/* Row 2: Node ID, OS & IP */}
+              <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-11 font-mono">
+                <span className={cn(isBlueprint ? "text-slate-500" : "text-zinc-500")}>
+                  {n.node_id}
+                </span>
+                <span className={cn("flex items-center gap-1.5", isBlueprint ? "text-slate-600" : "text-zinc-400")}>
+                  <span>{n.system.os || "Linux"}</span>
+                  <span>·</span>
+                  <span>{n.system.public_ip || "127.0.0.1"}</span>
+                </span>
+              </div>
+
+              {/* Row 3: Pricing & Expiry */}
+              <div className={cn(
+                "grid grid-cols-2 gap-2 pt-2 border-t text-xs",
+                isBlueprint ? "border-slate-100" : "border-zinc-800/60"
+              )}>
+                <div>
+                  <span className={cn("text-10 block", isBlueprint ? "text-slate-400" : "text-zinc-500")}>成本定价</span>
+                  <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                    {n.billing?.currency || "$"}{n.billing?.price || n.billing?.price_per_month || 9.9}
+                    <span className="text-10 font-normal opacity-80"> / {getCycleLabel(n.billing?.billing_cycle)}</span>
+                  </span>
+                </div>
+                <div>
+                  <span className={cn("text-10 block", isBlueprint ? "text-slate-400" : "text-zinc-500")}>到期剩余</span>
+                  <span className={cn("font-medium", isBlueprint ? "text-slate-700" : "text-zinc-300")}>
+                    {n.billing?.remaining_days != null ? `${n.billing.remaining_days} 天后到期` : n.billing?.expiry_date || "未设到期"}
+                  </span>
+                </div>
+              </div>
+
+              {/* Row 4: Bandwidth Quota Progress */}
+              <div className="space-y-1">
+                <div className="flex items-center justify-between text-10 font-mono">
+                  <span className={cn(isBlueprint ? "text-slate-400" : "text-zinc-500")}>
+                    已用流量: {formatBytes(totalUsed)}
+                  </span>
+                  <span className={cn("font-semibold", isBlueprint ? "text-slate-600" : "text-zinc-300")}>
+                    {totalQuota > 0 ? `${percent}% / ${formatBytes(totalQuota)}` : "无限额度"}
+                  </span>
+                </div>
+                {totalQuota > 0 && (
+                  <div className={cn("h-1.5 w-full rounded-full overflow-hidden", isBlueprint ? "bg-slate-200/80" : "bg-zinc-800")}>
+                    <div
+                      className={cn(
+                        "h-full rounded-full transition-all duration-300",
+                        percent > 90 ? "bg-rose-500" : percent > 75 ? "bg-amber-500" : "bg-indigo-500"
+                      )}
+                      style={{ width: `${percent}%` }}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+
+        {nodes.length === 0 && (
+          <div className="py-8 text-center text-xs text-slate-400">
+            暂无主机，点击右上角「添加主机」获取一键部署命令
+          </div>
+        )}
       </div>
     </div>
   );

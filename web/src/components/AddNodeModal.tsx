@@ -70,13 +70,13 @@ export const AddNodeModal: React.FC<AddNodeModalProps> = ({ isOpen, onClose, the
   const binaryCmd = `./probe-agent --server "${wsUrl}" --token "${token}" --name "${nodeName}"`;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fade-in font-sans">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 lg:p-6 bg-black/75 backdrop-blur-sm animate-fade-in font-sans">
       <motion.div
         initial={{ opacity: 0, scale: 0.96, y: 12 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         transition={{ duration: 0.22, ease: [0.21, 0.47, 0.32, 0.98] }}
         className={cn(
-          "relative w-full max-w-2xl rounded-2xl border p-6 shadow-2xl backdrop-blur-xl",
+          "relative flex flex-col w-full max-w-2xl h-[100dvh] sm:h-auto sm:max-h-[90vh] rounded-none sm:rounded-2xl border p-4 sm:p-6 shadow-2xl backdrop-blur-xl overflow-y-auto",
           isBlueprint
             ? "bg-white border-slate-200/90 text-slate-900 shadow-slate-300/60"
             : "bg-zinc-900/95 border-zinc-800 text-zinc-100 shadow-black/80"
@@ -214,7 +214,7 @@ export const AddNodeModal: React.FC<AddNodeModalProps> = ({ isOpen, onClose, the
             </Button>
           </div>
           <pre
-            className={`p-3.5 rounded-xl border text-xs font-mono overflow-x-auto whitespace-pre-wrap select-all leading-relaxed ${
+            className={`p-3.5 rounded-xl border text-xs font-mono overflow-x-auto whitespace-pre-wrap break-all select-all leading-relaxed ${
               isBlueprint
                 ? "bg-slate-900 border-slate-800 text-emerald-400 font-semibold"
                 : "bg-zinc-950 border-zinc-800 text-emerald-300"
@@ -241,7 +241,7 @@ export const AddNodeModal: React.FC<AddNodeModalProps> = ({ isOpen, onClose, the
             </Button>
           </div>
           <pre
-            className={`p-3 rounded-xl border text-xs font-mono overflow-x-auto whitespace-pre-wrap select-all ${
+            className={`p-3 rounded-xl border text-xs font-mono overflow-x-auto whitespace-pre-wrap break-all select-all ${
               isBlueprint
                 ? "bg-slate-100 border-slate-200 text-slate-800"
                 : "bg-zinc-950 border-zinc-800 text-zinc-300"

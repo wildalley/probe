@@ -133,10 +133,10 @@ export const HostEditDialog: React.FC<HostEditDialogProps> = ({
   const labelCls = cn("block mb-1 font-medium", isBlueprint ? "text-slate-700" : "text-zinc-300");
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-3 sm:p-6 bg-black/75 backdrop-blur-sm animate-fade-in font-sans">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-0 sm:p-4 lg:p-6 bg-black/75 backdrop-blur-sm animate-fade-in font-sans">
       <div
         className={cn(
-          "relative flex flex-col w-full max-w-3xl max-h-[90vh] rounded-2xl border shadow-2xl overflow-hidden transition-colors",
+          "relative flex flex-col w-full max-w-3xl h-[100dvh] sm:h-auto sm:max-h-[90vh] rounded-none sm:rounded-2xl border-0 sm:border shadow-2xl overflow-hidden transition-colors",
           isBlueprint
             ? "bg-white border-slate-200/90 text-slate-900 shadow-slate-300/60"
             : "bg-zinc-900 border-zinc-800 text-zinc-100 shadow-black/80"
@@ -145,7 +145,7 @@ export const HostEditDialog: React.FC<HostEditDialogProps> = ({
         {/* Dialog header */}
         <div
           className={cn(
-            "flex items-center justify-between gap-3 px-6 py-4 border-b shrink-0",
+            "flex items-center justify-between gap-2.5 sm:gap-3 px-4 py-3 sm:px-6 sm:py-4 border-b shrink-0",
             isBlueprint ? "border-slate-200/80 bg-slate-50/70" : "border-zinc-800 bg-zinc-950/40"
           )}
         >
@@ -180,7 +180,7 @@ export const HostEditDialog: React.FC<HostEditDialogProps> = ({
         </div>
 
         {/* Scrollable body */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-4 text-xs">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 text-xs">
           {geoNotice && (
             <div className="alert alert-success py-2.5 px-3.5 text-xs flex items-center gap-2">
               <CheckCircle2 className="h-4 w-4 shrink-0" />
@@ -412,7 +412,7 @@ export const HostEditDialog: React.FC<HostEditDialogProps> = ({
         {/* Sticky footer actions */}
         <div
           className={cn(
-            "flex flex-wrap items-center justify-end gap-3 px-6 py-4 border-t shrink-0 text-xs",
+            "flex flex-wrap items-center justify-end gap-3 px-4 py-3 sm:px-6 sm:py-4 border-t shrink-0 text-xs",
             isBlueprint ? "border-slate-200/80 bg-slate-50/70" : "border-zinc-800 bg-zinc-950/40"
           )}
         >
