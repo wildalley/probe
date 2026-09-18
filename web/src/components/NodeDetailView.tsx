@@ -284,10 +284,8 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
   const prevNode = currentIndex > 0 ? nodesList[currentIndex - 1] : null;
   const nextNode = currentIndex < nodesList.length - 1 ? nodesList[currentIndex + 1] : null;
 
-  // Quota & traffic calculations prioritizing configured bandwidth_used
-  const usedTraffic = (node.billing?.bandwidth_used && node.billing.bandwidth_used > 0)
-    ? node.billing.bandwidth_used
-    : (node.network.bytes_sent + node.network.bytes_recv);
+  // 已用流量由服务端算好（校准基线 + 锚定后累计），缺省 0。
+  const usedTraffic = node.billing?.bandwidth_used || 0;
   const quotaBytes = node.billing?.bandwidth_quota || 0;
   const quotaPercent = quotaBytes > 0 ? Math.min(100, Math.max(0, (usedTraffic / quotaBytes) * 100)) : 0;
 
@@ -504,7 +502,7 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
 
             {/* Custom tags with distinct colors */}
             <div className="hidden sm:flex items-center gap-1.5 ml-2">
-              {(node.tags && node.tags.length > 0 ? node.tags : ["电信CN2", "1Gbps", "CU4837"]).map((tag) => (
+              {(node.tags || []).map((tag) => (
                 <span
                   key={tag}
                   className={`rounded-lg px-2.5 py-0.5 text-xs font-sans font-medium border transition-all ${getTagStyle(
@@ -660,8 +658,8 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
               }`}
             >
               <Network className="h-3.5 w-3.5 text-indigo-500" />
-              <span className="truncate max-w-[220px]" title={node.billing?.provider || "Zillion Network Inc."}>
-                {node.billing?.provider || "Zillion Network Inc."}
+              <span className="truncate max-w-[220px]" title={node.billing?.provider || "未上报运营商"}>
+                {node.billing?.provider || "未上报运营商"}
               </span>
             </div>
 
@@ -690,7 +688,7 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
             <div className={`mt-1 sm:mt-1.5 text-base sm:text-lg font-bold truncate ${isBlueprint ? "text-slate-900" : "text-zinc-100"}`}>
               {node.billing?.currency || "$"}
               <NumberTicker
-                value={node.billing?.price != null && node.billing.price > 0 ? node.billing.price : (node.billing?.price_per_month || 9.9)}
+                value={node.billing?.price != null && node.billing.price > 0 ? node.billing.price : (node.billing?.price_per_month || 0)}
                 decimals={2}
               />
               <span className={`text-xs font-normal ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}> / {getCycleLabel(node.billing?.billing_cycle)}</span>
@@ -704,7 +702,7 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
             </div>
             <div className={`mt-1 sm:mt-1.5 text-base sm:text-lg font-bold truncate ${isBlueprint ? "text-slate-900" : "text-zinc-100"}`}>
               {node.billing?.currency || "$"}
-              <NumberTicker value={node.billing?.price_per_month || 9.9} decimals={2} />
+              <NumberTicker value={node.billing?.price_per_month || 0} decimals={2} />
               <span className={`text-xs font-normal ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}> / 月</span>
             </div>
           </BlurFade>
@@ -716,8 +714,14 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
             </div>
             <div className="mt-1 sm:mt-1.5 flex items-baseline justify-between gap-1">
               <span className="text-base sm:text-lg font-bold text-emerald-600 dark:text-emerald-400">
-                <NumberTicker value={node.billing?.remaining_days != null ? node.billing.remaining_days : 27} />
-                <span className={`text-xs font-normal ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}> 天</span>
+                {node.billing?.expiry_date ? (
+                  <>
+                    <NumberTicker value={node.billing?.remaining_days || 0} />
+                    <span className={`text-xs font-normal ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}> 天</span>
+                  </>
+                ) : (
+                  <span className={isBlueprint ? "text-slate-400" : "text-zinc-500"}>--</span>
+                )}
               </span>
               {node.billing?.expiry_date ? (
                 <span className={`text-10 truncate max-w-[80px] sm:max-w-[90px] ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`} title={`到期日: ${node.billing.expiry_date}`}>
@@ -737,13 +741,13 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
             <div className="mt-1 sm:mt-1.5 flex items-baseline justify-between gap-1">
               <span className="text-base sm:text-lg font-bold text-cyan-600 dark:text-cyan-400">
                 <NumberTicker
-                  value={node.billing?.remaining_value != null ? node.billing.remaining_value : 59.84}
+                  value={node.billing?.remaining_value_native || 0}
                   decimals={2}
-                  prefix="¥"
+                  prefix={node.billing?.currency || "$"}
                 />
               </span>
               <span className={`text-10 font-mono ${isBlueprint ? "text-cyan-700" : "text-cyan-400/80"}`}>
-                实时折算
+                按剩余天数
               </span>
             </div>
           </BlurFade>
@@ -920,16 +924,18 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
                     </button>
                   </div>
                   <div className={`flex items-center gap-1 mt-0.5 font-semibold ${isBlueprint ? "text-slate-800" : "text-zinc-200"}`}>
-                    <span className="truncate" title={node.system.public_ip || "154.82.20.252"}>
-                      {maskIPString(node.system.public_ip || "154.82.20.252")}
+                    <span className="truncate" title={node.system.public_ip || "未上报"}>
+                      {maskIPString(node.system.public_ip)}
                     </span>
-                    <button
-                      onClick={() => copyText(node.system.public_ip || "154.82.20.252", "ip4")}
-                      className={`${isBlueprint ? "text-slate-400 hover:text-slate-700" : "text-zinc-500 hover:text-zinc-300"} shrink-0`}
-                      title="复制完整 IPv4"
-                    >
-                      {copiedField === "ip4" ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
-                    </button>
+                    {node.system.public_ip && (
+                      <button
+                        onClick={() => copyText(node.system.public_ip || "", "ip4")}
+                        className={`${isBlueprint ? "text-slate-400 hover:text-slate-700" : "text-zinc-500 hover:text-zinc-300"} shrink-0`}
+                        title="复制完整 IPv4"
+                      >
+                        {copiedField === "ip4" ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -939,16 +945,18 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
                     公网 IPv6
                   </div>
                   <div className={`flex items-center gap-1 mt-0.5 font-semibold ${isBlueprint ? "text-slate-800" : "text-zinc-200"}`}>
-                    <span className="truncate" title={node.system.public_ipv6 || "2400:3200::1"}>
-                      {maskIPString(node.system.public_ipv6 || "2400:3200::1")}
+                    <span className="truncate" title={node.system.public_ipv6 || "未上报"}>
+                      {maskIPString(node.system.public_ipv6)}
                     </span>
-                    <button
-                      onClick={() => copyText(node.system.public_ipv6 || "2400:3200::1", "ip6")}
-                      className={`${isBlueprint ? "text-slate-400 hover:text-slate-700" : "text-zinc-500 hover:text-zinc-300"} shrink-0`}
-                      title="复制完整 IPv6"
-                    >
-                      {copiedField === "ip6" ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
-                    </button>
+                    {node.system.public_ipv6 && (
+                      <button
+                        onClick={() => copyText(node.system.public_ipv6 || "", "ip6")}
+                        className={`${isBlueprint ? "text-slate-400 hover:text-slate-700" : "text-zinc-500 hover:text-zinc-300"} shrink-0`}
+                        title="复制完整 IPv6"
+                      >
+                        {copiedField === "ip6" ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -964,7 +972,7 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
                 <div>
                   <div className={`text-10 ${isBlueprint ? "text-slate-500 font-medium" : "text-zinc-400"}`}>虚拟化</div>
                   <div className={`mt-0.5 font-semibold uppercase ${isBlueprint ? "text-slate-800" : "text-zinc-200"}`}>
-                    {node.system.virtualization || "kvm"}
+                    {node.system.virtualization || "--"}
                   </div>
                 </div>
               </div>
@@ -989,7 +997,7 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
                     <OsIcon os={node.system.os} className="h-3.5 w-3.5" />
                   </span>
                   <span className={`font-semibold truncate text-xs ${isBlueprint ? "text-slate-800" : "text-zinc-200"}`} title={node.system.os}>
-                    {node.system.os || "Debian GNU/Linux 13 (trixie)"}
+                    {node.system.os || "--"}
                   </span>
                 </div>
               </div>
@@ -997,14 +1005,16 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
               <div>
                 <div className={`text-10 ${isBlueprint ? "text-slate-500 font-medium" : "text-zinc-400"}`}>内核版本</div>
                 <div className={`flex items-center gap-1 mt-1 font-semibold ${isBlueprint ? "text-slate-800" : "text-zinc-200"}`}>
-                  <span className="truncate text-xs" title={node.system.kernel}>{node.system.kernel || "6.12.43+deb13-amd64"}</span>
-                  <button
-                    onClick={() => copyText(node.system.kernel || "6.12.43+deb13-amd64", "kernel")}
-                    className={`${isBlueprint ? "text-slate-400 hover:text-slate-700 shrink-0" : "text-zinc-500 hover:text-zinc-300 shrink-0"}`}
-                    title="复制内核版本"
-                  >
-                    {copiedField === "kernel" ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
-                  </button>
+                  <span className="truncate text-xs" title={node.system.kernel}>{node.system.kernel || "--"}</span>
+                  {node.system.kernel && (
+                    <button
+                      onClick={() => copyText(node.system.kernel, "kernel")}
+                      className={`${isBlueprint ? "text-slate-400 hover:text-slate-700 shrink-0" : "text-zinc-500 hover:text-zinc-300 shrink-0"}`}
+                      title="复制内核版本"
+                    >
+                      {copiedField === "kernel" ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -1053,7 +1063,7 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
               <div>
                 <div className={`text-10 ${isBlueprint ? "text-slate-500 font-medium" : "text-zinc-400"}`}>厂商</div>
                 <div className={`mt-0.5 font-semibold truncate ${isBlueprint ? "text-slate-800" : "text-zinc-200"}`} title={node.billing?.provider}>
-                  {node.billing?.provider || "圣何塞 · Zillion Network Inc. · AS54801"}
+                  {node.billing?.provider || "--"}
                 </div>
               </div>
 

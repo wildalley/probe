@@ -106,11 +106,10 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
     ? `${node.system.load_1.toFixed(2)}, ${(node.system.load_5 || node.system.load_1).toFixed(2)}, ${(node.system.load_15 || node.system.load_1).toFixed(2)}`
     : "0.00, 0.00, 0.00";
 
-  // Bandwidth Quota calculation prioritizing configured bandwidth_used
-  const usedTraffic = (node.billing?.bandwidth_used && node.billing.bandwidth_used > 0)
-    ? node.billing.bandwidth_used
-    : (node.network.bytes_recv + node.network.bytes_sent);
-  const quotaBytes = node.billing?.bandwidth_quota || 2 * 1024 * 1024 * 1024 * 1024;
+  // 已用流量由服务端算好（校准基线 + 锚定后累计），前端不再自行拼实时值。
+  const usedTraffic = node.billing?.bandwidth_used || 0;
+  // 0 = 未设置额度，走「无限制」分支，不再编造 2TB 默认值。
+  const quotaBytes = node.billing?.bandwidth_quota || 0;
   const quotaPercent = quotaBytes > 0 ? Math.min(100, (usedTraffic / quotaBytes) * 100) : 0;
 
   // Pricing label
@@ -466,13 +465,19 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
           <div className="flex items-center gap-1 text-slate-700 dark:text-zinc-300 font-medium truncate">
             <Calendar className="h-3 w-3 text-amber-500 shrink-0" />
             <span className="truncate">
-              {node.billing?.remaining_days != null ? `剩 ${node.billing.remaining_days}天` : "未设到期"}
+              {node.billing?.remaining_days && node.billing.remaining_days > 0
+                ? `剩 ${node.billing.remaining_days}天`
+                : node.billing?.auto_renewal
+                  ? "自动续费"
+                  : "未设到期"}
             </span>
           </div>
           <div className="flex items-center gap-1 text-slate-700 dark:text-zinc-300 font-medium truncate mt-0.5">
             <Coins className="h-3 w-3 text-cyan-500 shrink-0" />
             <span className="truncate">
-              {node.billing?.remaining_value != null ? `${node.billing.currency || "$"}${node.billing.remaining_value.toFixed(1)}` : "--"}
+              {node.billing?.remaining_value_native && node.billing.remaining_value_native > 0
+                ? `${node.billing.currency || "$"}${node.billing.remaining_value_native.toFixed(2)}`
+                : "--"}
             </span>
           </div>
         </div>

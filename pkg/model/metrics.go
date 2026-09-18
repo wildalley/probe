@@ -27,18 +27,31 @@ type PingStat struct {
 
 // BillingInfo contains VPS billing cycle, pricing, and expiration telemetry.
 type BillingInfo struct {
-	Price          float64 `json:"price"`
-	PricePerMonth  float64 `json:"price_per_month"`
-	Currency       string  `json:"currency"`        // "$", "¥", "€", "£", "HK$"
-	BillingCycle   string  `json:"billing_cycle"`   // "month", "quarter", "half_year", "year", "two_year", "three_year"
-	ExpiryDate     string  `json:"expiry_date"`     // e.g. "2026-10-15"
-	RemainingDays  int     `json:"remaining_days"`  // e.g. 27
-	RemainingValue float64 `json:"remaining_value"` // e.g. 59.84
-	BandwidthQuota uint64  `json:"bandwidth_quota"` // Total allowed bytes (e.g. 2 * 1024^4 = 2TB)
-	BandwidthUsed  uint64  `json:"bandwidth_used"`  // Configured or live consumed bytes
-	Provider       string  `json:"provider"`        // e.g. "Zillion Network Inc. · AS54801"
-	AutoRenewal    bool    `json:"auto_renewal"`
-	Note           string  `json:"note,omitempty"`  // e.g. "续费折扣码: PROMO60"
+	Price         float64 `json:"price"`
+	PricePerMonth float64 `json:"price_per_month"`
+	Currency      string  `json:"currency"`      // "$", "¥", "€", "£", "HK$"
+	BillingCycle  string  `json:"billing_cycle"` // "month", "quarter", "half_year", "year", "two_year", "three_year"
+	ExpiryDate    string  `json:"expiry_date"`   // e.g. "2026-10-15"
+	// RemainingDays is 0 when no expiry date is configured — it is not a
+	// default cycle length. Read 0 as "未设到期", never as "30 days left".
+	RemainingDays int `json:"remaining_days"`
+	// RemainingValue is the unconsumed value converted to the base currency
+	// (CNY). Admin totals sum this field and only this field.
+	RemainingValue float64 `json:"remaining_value"`
+	// RemainingValueNative is the same quantity in the node's own Currency,
+	// which is what the per-node cards display.
+	RemainingValueNative float64 `json:"remaining_value_native"`
+	BandwidthQuota       uint64  `json:"bandwidth_quota"` // Total allowed bytes; 0 means unset/unlimited
+	// BandwidthUsed is the effective consumed bytes: the operator's calibration
+	// baseline plus everything the agent has counted since it was anchored.
+	BandwidthUsed uint64 `json:"bandwidth_used"`
+	// BandwidthLive is the raw interface counter (bytes since boot) behind
+	// BandwidthUsed. Exposed so the UI can offer "sync to live" and "clear
+	// calibration" without re-deriving it from the network block.
+	BandwidthLive uint64 `json:"bandwidth_live"`
+	Provider      string `json:"provider"` // e.g. "Zillion Network Inc. · AS54801"
+	AutoRenewal   bool   `json:"auto_renewal"`
+	Note          string `json:"note,omitempty"` // e.g. "续费折扣码: PROMO60"
 }
 
 // PingTargetConfig defines a ping target for network quality detection.
@@ -61,21 +74,33 @@ type PingTargetConfig struct {
 
 // NodeSettings contains user-configured billing details and overrides.
 type NodeSettings struct {
-	NodeID         string   `json:"node_id"`
-	Name           string   `json:"name,omitempty"`
-	Region         string   `json:"region,omitempty"`
-	Tags           []string `json:"tags,omitempty"`
-	Provider       string   `json:"provider,omitempty"`
-	PublicIP       string   `json:"public_ip,omitempty"`
-	Price          float64  `json:"price"`
-	Currency       string   `json:"currency"`
-	BillingCycle   string   `json:"billing_cycle"`
-	ExpiryDate     string   `json:"expiry_date"`
-	BandwidthQuota uint64   `json:"bandwidth_quota"` // Total allowed bytes
-	BandwidthUsed  uint64   `json:"bandwidth_used"`  // Used bytes override/calibration
-	AutoRenewal    bool     `json:"auto_renewal"`
-	Note           string   `json:"note,omitempty"`
-	UpdatedAt      int64    `json:"updated_at"`
+	NodeID   string   `json:"node_id"`
+	Name     string   `json:"name,omitempty"`
+	Region   string   `json:"region,omitempty"`
+	Tags     []string `json:"tags,omitempty"`
+	Provider string   `json:"provider,omitempty"`
+	// PublicIP / PublicIPv6 are the operator's authoritative correction of what
+	// the agent reported. When set they win over both the agent's own detection
+	// and the address the server saw the agent connect from.
+	PublicIP       string  `json:"public_ip,omitempty"`
+	PublicIPv6     string  `json:"public_ipv6,omitempty"`
+	Price          float64 `json:"price"`
+	Currency       string  `json:"currency"`
+	BillingCycle   string  `json:"billing_cycle"`
+	ExpiryDate     string  `json:"expiry_date"`
+	BandwidthQuota uint64  `json:"bandwidth_quota"` // Total allowed bytes; 0 means unset
+	// BandwidthUsed is the operator's calibration baseline, not a live reading:
+	// traffic counted after BandwidthBaseCounter was taken is added on top of
+	// it. 0 clears the calibration and reverts the node to its live counter.
+	BandwidthUsed uint64 `json:"bandwidth_used"`
+	// BandwidthBaseCounter is the interface counter reading that BandwidthUsed
+	// corresponds to. 0 means "not anchored yet" — the server anchors it to the
+	// first counter it sees, so a calibration saved while the node was offline
+	// still starts counting from the right place.
+	BandwidthBaseCounter uint64 `json:"bandwidth_base_counter"`
+	AutoRenewal          bool   `json:"auto_renewal"`
+	Note                 string `json:"note,omitempty"`
+	UpdatedAt            int64  `json:"updated_at"`
 }
 
 // SystemSettings contains exchange rates and currency configuration.
@@ -92,25 +117,31 @@ type SystemInfo struct {
 	// AgentVersion is the build version of the agent that produced this report.
 	// Empty means either the agent predates the field or the build carried no
 	// stamp, and the dashboard reads that absence as "unknown, probably old".
-	AgentVersion   string  `json:"agent_version,omitempty"`
-	Uptime         uint64  `json:"uptime"`
-	CPUModel       string  `json:"cpu_model"`
-	CPUMark        string  `json:"cpu_mark"`       // e.g. "中端服务器级"
-	Virtualization string  `json:"virtualization"` // e.g. "kvm", "docker"
-	PublicIP       string  `json:"public_ip"`
-	CPUPercent     float64 `json:"cpu_percent"`
-	CPUCount       int     `json:"cpu_count"`
-	MemUsed        uint64  `json:"mem_used"`
-	MemTotal       uint64  `json:"mem_total"`
-	SwapUsed       uint64  `json:"swap_used"`
-	SwapTotal      uint64  `json:"swap_total"`
-	DiskPercent    float64 `json:"disk_percent"`
-	DiskUsed       uint64  `json:"disk_used"`
-	DiskTotal      uint64  `json:"disk_total"`
-	Load1          float64 `json:"load_1"`
-	Load5          float64 `json:"load_5"`
-	Load15         float64 `json:"load_15"`
-	ProcessCount   int     `json:"process_count"`
+	AgentVersion   string `json:"agent_version,omitempty"`
+	Uptime         uint64 `json:"uptime"`
+	CPUModel       string `json:"cpu_model"`
+	CPUMark        string `json:"cpu_mark"`       // e.g. "中端服务器级"
+	Virtualization string `json:"virtualization"` // e.g. "kvm", "docker"
+	// PublicIP / PublicIPv6 are what the agent detected as its own egress
+	// address. Either may be empty — a host with no IPv6 connectivity reports
+	// none, and an agent that cannot reach a lookup service reports neither.
+	// The dashboard renders an empty value as unknown rather than substituting
+	// a placeholder.
+	PublicIP     string  `json:"public_ip"`
+	PublicIPv6   string  `json:"public_ipv6"`
+	CPUPercent   float64 `json:"cpu_percent"`
+	CPUCount     int     `json:"cpu_count"`
+	MemUsed      uint64  `json:"mem_used"`
+	MemTotal     uint64  `json:"mem_total"`
+	SwapUsed     uint64  `json:"swap_used"`
+	SwapTotal    uint64  `json:"swap_total"`
+	DiskPercent  float64 `json:"disk_percent"`
+	DiskUsed     uint64  `json:"disk_used"`
+	DiskTotal    uint64  `json:"disk_total"`
+	Load1        float64 `json:"load_1"`
+	Load5        float64 `json:"load_5"`
+	Load15       float64 `json:"load_15"`
+	ProcessCount int     `json:"process_count"`
 }
 
 // NetworkInfo contains egress/ingress bandwidth, connections, and monthly peaks.
@@ -184,6 +215,11 @@ type NodeMetadata struct {
 	Tags   string `json:"tags"` // JSON string
 	OS     string `json:"os"`
 	Kernel string `json:"kernel"`
+	// PublicIP / PublicIPv6 persist the last address the agent reported, so a
+	// node that is offline (or a server that just restarted) still shows the
+	// address it had instead of blanking the field.
+	PublicIP   string `json:"public_ip"`
+	PublicIPv6 string `json:"public_ipv6"`
 	// AgentVersion persists with the node so a restarted server can still show
 	// which build a host was last running, before that host reconnects.
 	AgentVersion string `json:"agent_version"`

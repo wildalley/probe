@@ -302,6 +302,8 @@ func NewHub(storage *Storage, downsampler *Downsampler) *Hub {
 				System: model.SystemInfo{
 					OS:           n.OS,
 					Kernel:       n.Kernel,
+					PublicIP:     n.PublicIP,
+					PublicIPv6:   n.PublicIPv6,
 					AgentVersion: n.AgentVersion,
 				},
 			}
@@ -447,8 +449,65 @@ func containsNodeID(ids []string, nodeID string) bool {
 	return false
 }
 
-// IngestReport processes an incoming metric payload from an Agent.
-func (h *Hub) IngestReport(report *model.NodeReport) {
+// pickPublicIP decides which address a node is known by, per family. Precedence:
+// the operator's correction, then what the agent detected for itself, then the
+// address the server saw the agent connect from.
+//
+// Every candidate has to look like a real public address. The socket address is
+// a proxy hop or a container bridge in most deployments, and displaying
+// 172.20.1.0 under a 公网 IP heading is worse than displaying nothing — so a
+// blocked address is dropped rather than shown. PROBE_ALLOW_PRIVATE_TARGETS
+// relaxes the check for deployments that are deliberately internal.
+func pickPublicIP(settings *model.NodeSettings, reportV4, reportV6, clientIP string) (string, string) {
+	allowPrivate := netguard.AllowPrivateTargets()
+
+	var v4, v6 string
+	pick := func(raw string) {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			return
+		}
+		parsed := net.ParseIP(raw)
+		if parsed == nil {
+			return
+		}
+		if !allowPrivate && netguard.IsBlockedIP(parsed) {
+			return
+		}
+		if parsed.To4() != nil {
+			if v4 == "" {
+				v4 = raw
+			}
+		} else if v6 == "" {
+			v6 = raw
+		}
+	}
+
+	if settings != nil {
+		pick(settings.PublicIP)
+		pick(settings.PublicIPv6)
+	}
+	// The agent's own view outranks the socket address: with a reverse proxy or
+	// DNAT in front, the socket address is the proxy, not the node.
+	pick(reportV4)
+	pick(reportV6)
+	pick(clientIP)
+
+	return v4, v6
+}
+
+// isLoopbackAddr reports whether an address is the local host. A server and an
+// agent on the same machine genuinely talk over loopback, which is worth
+// labelling as LOCAL even though the address itself is not a public one.
+func isLoopbackAddr(raw string) bool {
+	parsed := net.ParseIP(strings.TrimSpace(raw))
+	return parsed != nil && parsed.IsLoopback()
+}
+
+// IngestReport processes an incoming metric payload from an Agent. clientIP is
+// the address the report arrived from, used only as a last-resort guess at the
+// node's egress address.
+func (h *Hub) IngestReport(report *model.NodeReport, clientIP string) {
 	now := time.Now().Unix()
 
 	// Calculate memory percentage
@@ -464,17 +523,48 @@ func (h *Hub) IngestReport(report *model.NodeReport) {
 		name = report.NodeID
 	}
 	region := strings.TrimSpace(report.Region)
-	tags := report.Tags
-	billing := report.Billing
 
-	ip := strings.TrimSpace(report.System.PublicIP)
+	// Tags and billing are operator-configured and have never been settable on
+	// the agent side — there is no flag or config key for either. Anything
+	// arriving in these fields is the hardcoded demo payload from an agent built
+	// before that was removed, so it is dropped outright instead of being
+	// pattern-matched against the specific fake strings that build happened to
+	// use. A node running an old agent shows empty until it is configured, which
+	// is the truth, rather than showing $9.9 / 27 天 / 2TB as if they were real.
+	tags := []string(nil)
+	billing := model.BillingInfo{}
+
+	// Same story for CPUMark: nothing measures it, and the old agent stamped one
+	// fixed label onto every host regardless of hardware. Cleared here so the
+	// dashboard falls back to a label derived from the real core count.
+	report.System.CPUMark = ""
+
+	// Settings are resolved before the address is, because an operator's
+	// correction has to drive GeoIP, persistence and the dashboard alike.
+	h.settingsMu.RLock()
+	settings, hasSettings := h.nodeSettings[report.NodeID]
+	h.settingsMu.RUnlock()
+
+	ip, ipv6 := pickPublicIP(settings, report.System.PublicIP, report.System.PublicIPv6, clientIP)
+	report.System.PublicIP = ip
+	report.System.PublicIPv6 = ipv6
+
+	if ip == "" && ipv6 == "" && isLoopbackAddr(clientIP) {
+		region = "LOCAL"
+	}
+
+	// GeoIP keys off whichever address is actually trusted. IPv6 is a valid key
+	// for every provider queried, so a v6-only host still resolves.
+	geoKey := ip
+	if geoKey == "" {
+		geoKey = ipv6
+	}
+
 	var geoDetails *GeoIPDetails
-	if net.ParseIP(ip) != nil && ip != "127.0.0.1" && ip != "::1" {
-		if val, ok := geoIPCache.Load(ip); ok {
+	if geoKey != "" {
+		if val, ok := geoIPCache.Load(geoKey); ok {
 			geoDetails, _ = val.(*GeoIPDetails)
 		}
-	} else if ip == "127.0.0.1" || ip == "::1" {
-		region = "LOCAL"
 	}
 
 	// If cached geoDetails exists, apply immediately to region, provider and tags
@@ -484,23 +574,19 @@ func (h *Hub) IngestReport(report *model.NodeReport) {
 				region = geoDetails.CountryCode
 			}
 		}
-		if billing.Provider == "" || strings.Contains(billing.Provider, "Zillion Network") {
-			if geoDetails.Provider != "" {
-				billing.Provider = geoDetails.Provider
-			}
+		if billing.Provider == "" && geoDetails.Provider != "" {
+			billing.Provider = geoDetails.Provider
 		}
-		if len(tags) == 0 || (len(tags) == 3 && tags[0] == "电信CN2" && tags[2] == "CU4837") {
-			if geoDetails.LineTag != "" {
-				tags = []string{geoDetails.LineTag, "1Gbps", geoDetails.CountryCode}
-			}
+		if len(tags) == 0 && geoDetails.LineTag != "" {
+			tags = []string{geoDetails.LineTag, geoDetails.CountryCode}
 		}
-	} else if net.ParseIP(ip) != nil && ip != "127.0.0.1" && ip != "::1" {
+	} else if geoKey != "" {
 		// Launch background async resolution and push update when resolved
 		go func(nodeID, targetIP string) {
 			details := ResolveNodeGeoAndProvider(targetIP)
 			if details != nil && details.CountryCode != "" && details.CountryCode != "GLOBAL" {
 				h.mu.Lock()
-				if current, found := h.nodeStates[nodeID]; found && current.System.PublicIP == targetIP {
+				if current, found := h.nodeStates[nodeID]; found && (current.System.PublicIP == targetIP || current.System.PublicIPv6 == targetIP) {
 					st := cloneNodeState(current)
 					h.settingsMu.RLock()
 					customSettings := h.nodeSettings[nodeID]
@@ -512,14 +598,12 @@ func (h *Hub) IngestReport(report *model.NodeReport) {
 						st.Region = details.CountryCode
 						updated = true
 					}
-					if (customSettings == nil || customSettings.Provider == "") &&
-						(st.Billing.Provider == "" || strings.Contains(st.Billing.Provider, "Zillion Network")) {
+					if (customSettings == nil || customSettings.Provider == "") && st.Billing.Provider == "" {
 						st.Billing.Provider = details.Provider
 						updated = true
 					}
-					if (customSettings == nil || len(customSettings.Tags) == 0) &&
-						(len(st.Tags) == 0 || (len(st.Tags) == 3 && st.Tags[0] == "电信CN2" && st.Tags[2] == "CU4837")) {
-						st.Tags = []string{details.LineTag, "1Gbps", details.CountryCode}
+					if (customSettings == nil || len(customSettings.Tags) == 0) && len(st.Tags) == 0 {
+						st.Tags = []string{details.LineTag, details.CountryCode}
 						updated = true
 					}
 					if updated {
@@ -530,6 +614,8 @@ func (h *Hub) IngestReport(report *model.NodeReport) {
 							Region:       st.Region,
 							OS:           st.System.OS,
 							Kernel:       st.System.Kernel,
+							PublicIP:     st.System.PublicIP,
+							PublicIPv6:   st.System.PublicIPv6,
 							AgentVersion: st.System.AgentVersion,
 							IsOnline:     true,
 							LastSeen:     st.LastSeen,
@@ -543,14 +629,10 @@ func (h *Hub) IngestReport(report *model.NodeReport) {
 				}
 				h.mu.Unlock()
 			}
-		}(report.NodeID, ip)
+		}(report.NodeID, geoKey)
 	}
 
 	// Apply node settings overrides if configured
-	h.settingsMu.RLock()
-	settings, hasSettings := h.nodeSettings[report.NodeID]
-	h.settingsMu.RUnlock()
-
 	if hasSettings && settings != nil {
 		if settings.Name != "" {
 			name = settings.Name
@@ -579,15 +661,27 @@ func (h *Hub) IngestReport(report *model.NodeReport) {
 		if settings.BandwidthQuota > 0 {
 			billing.BandwidthQuota = settings.BandwidthQuota
 		}
-		if settings.BandwidthUsed > 0 {
-			billing.BandwidthUsed = settings.BandwidthUsed
-		}
 		billing.AutoRenewal = settings.AutoRenewal
 		billing.Note = settings.Note
 	}
 
-	if billing.BandwidthUsed == 0 {
-		billing.BandwidthUsed = report.Network.BytesSent + report.Network.BytesRecv
+	// 已用流量 follows the calibration model: the operator's number is a
+	// baseline, not a final value, and real traffic keeps accumulating on top of
+	// it. A correction therefore never freezes the counter.
+	live := report.Network.BytesSent + report.Network.BytesRecv
+	billing.BandwidthLive = live
+	if hasSettings && settings != nil && settings.BandwidthUsed > 0 {
+		anchor := settings.BandwidthBaseCounter
+		if anchor == 0 || live < anchor {
+			// First calibration, or the interface counter went backwards (OS
+			// restart, NIC rebuilt). Move the anchor to the current reading; the
+			// already-accumulated part survives on the baseline.
+			anchor = live
+			h.persistBandwidthAnchor(report.NodeID, anchor)
+		}
+		billing.BandwidthUsed = settings.BandwidthUsed + (live - anchor)
+	} else {
+		billing.BandwidthUsed = live
 	}
 
 	// Calculate Billing Details: PricePerMonth, RemainingDays, RemainingValue
@@ -646,6 +740,8 @@ func (h *Hub) IngestReport(report *model.NodeReport) {
 			Region:       region,
 			OS:           report.System.OS,
 			Kernel:       report.System.Kernel,
+			PublicIP:     report.System.PublicIP,
+			PublicIPv6:   report.System.PublicIPv6,
 			AgentVersion: report.System.AgentVersion,
 			IsOnline:     true,
 			LastSeen:     now,
@@ -666,6 +762,25 @@ func (h *Hub) IngestReport(report *model.NodeReport) {
 		Timestamp: now,
 		Data:      cloneNodeState(state),
 	})
+}
+
+// persistBandwidthAnchor records the interface counter that a calibration
+// baseline was taken at. It updates the in-memory settings too: without that,
+// the next report would find BandwidthBaseCounter == 0 again, re-anchor to its
+// own live value, and freeze 已用流量 exactly the way the old code did.
+//
+// A single node's reports are serialized by its WebSocket read loop, so the
+// map entry this touches is not being read concurrently for the same node.
+func (h *Hub) persistBandwidthAnchor(nodeID string, anchor uint64) {
+	h.settingsMu.Lock()
+	if s, ok := h.nodeSettings[nodeID]; ok {
+		s.BandwidthBaseCounter = anchor
+	}
+	h.settingsMu.Unlock()
+
+	if err := h.storage.UpdateBandwidthBaseCounter(nodeID, anchor); err != nil {
+		log.Printf("[Hub] Failed to persist bandwidth anchor for %s: %v", nodeID, err)
+	}
 }
 
 func (h *Hub) calculateBilling(billing *model.BillingInfo, rates map[string]float64) {
@@ -705,7 +820,9 @@ func (h *Hub) calculateBilling(billing *model.BillingInfo, rates map[string]floa
 
 	billing.PricePerMonth = math.Round((billing.Price/monthsInCycle)*100) / 100
 
-	// Calculate remaining days if ExpiryDate is set
+	// Remaining days come only from a configured expiry date. With no expiry
+	// set, the honest answer is "未设到期" — 0 — not a fabricated 30-day cycle.
+	billing.RemainingDays = 0
 	if billing.ExpiryDate != "" {
 		if t, err := time.Parse("2006-01-02", billing.ExpiryDate); err == nil {
 			now := time.Now()
@@ -713,12 +830,8 @@ func (h *Hub) calculateBilling(billing *model.BillingInfo, rates map[string]floa
 			diff := t.Sub(now)
 			if diff > 0 {
 				billing.RemainingDays = int(diff.Hours() / 24)
-			} else {
-				billing.RemainingDays = 0
 			}
 		}
-	} else if billing.RemainingDays == 0 {
-		billing.RemainingDays = 30
 	}
 
 	// Calculate remaining value in native currency
@@ -762,7 +875,11 @@ func (h *Hub) calculateBilling(billing *model.BillingInfo, rates map[string]floa
 		}
 	}
 
+	// RemainingValue is the base-currency (CNY) figure the admin totals sum;
+	// RemainingValueNative is the same amount in the node's own currency, which
+	// is what the per-node cards render. When there is no expiry both are 0.
 	billing.RemainingValue = math.Round(remainingNative*rate*100) / 100
+	billing.RemainingValueNative = math.Round(remainingNative*100) / 100
 }
 
 // checkOfflineNodes checks for nodes that haven't sent a heartbeat within the timeout.

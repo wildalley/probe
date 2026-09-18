@@ -588,12 +588,15 @@ export const AdminModal: React.FC<AdminModalProps> = ({
   let totalMonthlySpendCNY = 0;
   let totalRemainingValueCNY = 0;
   nodes.forEach((n) => {
-    const cur = n.billing?.currency || "$";
-    const rate = cur === "$" ? (systemSettings.exchange_rates["USD"] || 7.18) :
-                 cur === "€" ? (systemSettings.exchange_rates["EUR"] || 7.82) :
-                 cur === "HK$" ? (systemSettings.exchange_rates["HKD"] || 0.92) :
-                 cur === "£" ? (systemSettings.exchange_rates["GBP"] || 9.35) :
-                 cur === "JP¥" ? (systemSettings.exchange_rates["JPY"] || 0.048) : 1.0;
+    // The currency field stores whatever the operator picked, and the backend
+    // accepts both the symbol and the ISO code for each one. Match on both here
+    // so a host saved as "JPY" is not silently summed at rate 1.0 (i.e. as CNY).
+    const cur = (n.billing?.currency || "$").trim().toUpperCase();
+    const rate = cur === "$" || cur === "USD" ? (systemSettings.exchange_rates["USD"] || 7.18) :
+                 cur === "€" || cur === "EUR" ? (systemSettings.exchange_rates["EUR"] || 7.82) :
+                 cur === "HK$" || cur === "HKD" ? (systemSettings.exchange_rates["HKD"] || 0.92) :
+                 cur === "£" || cur === "GBP" ? (systemSettings.exchange_rates["GBP"] || 9.35) :
+                 cur === "JP¥" || cur === "JPY" ? (systemSettings.exchange_rates["JPY"] || 0.048) : 1.0;
 
     const monthlyCost = n.billing?.price_per_month || 0;
     totalMonthlySpendCNY += monthlyCost * rate;

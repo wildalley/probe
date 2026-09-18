@@ -5,7 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math"
+	"net"
 	"net/http"
 	"os"
 	"runtime"
@@ -33,6 +35,7 @@ type Collector struct {
 	regionMu       sync.RWMutex
 	region         string
 	publicIP       string
+	publicIPv6     string
 	rateTracker    *RateTracker
 	pinger         *Pinger
 	pingerCancel   context.CancelFunc
@@ -42,9 +45,20 @@ type Collector struct {
 	maxRateUp      float64
 }
 
-// detectPublicIPAndRegion queries external GeoIP endpoints to identify public IP and country.
-func detectPublicIPAndRegion() (string, string) {
-	client := &http.Client{Timeout: 2 * time.Second}
+// ipLookupTimeout bounds each individual lookup. Detection runs in the
+// background, so a slow endpoint delays the first report's IP, not the report.
+const ipLookupTimeout = 2 * time.Second
+
+// ipRefreshInterval is how often the egress address is re-checked. A VPS that
+// is rebuilt or re-homed keeps its node ID, so a one-shot lookup at startup
+// would pin a stale address for the lifetime of the process.
+const ipRefreshInterval = 10 * time.Minute
+
+// detectPublicIPv4AndRegion queries external GeoIP endpoints to identify the
+// public IPv4 address and country. Both come from the same response so they
+// cannot disagree.
+func detectPublicIPv4AndRegion() (string, string) {
+	client := &http.Client{Timeout: ipLookupTimeout}
 
 	// 1. Try Cloudflare trace (fast, SSL, worldwide CDN)
 	if resp, err := client.Get("https://cloudflare.com/cdn-cgi/trace"); err == nil {
@@ -95,6 +109,62 @@ func detectPublicIPAndRegion() (string, string) {
 	return "", "AUTO"
 }
 
+// detectPublicIPv6 asks IPv6-only endpoints for the egress address. There is no
+// fallback and no region: a host without IPv6 connectivity simply fails every
+// attempt, which is reported as "no IPv6" rather than as a guess.
+func detectPublicIPv6() string {
+	client := &http.Client{Timeout: ipLookupTimeout}
+	for _, endpoint := range []string{"https://api6.ipify.org", "https://v6.ident.me"} {
+		resp, err := client.Get(endpoint)
+		if err != nil {
+			continue
+		}
+		body, readErr := io.ReadAll(io.LimitReader(resp.Body, 128))
+		resp.Body.Close()
+		if readErr != nil {
+			continue
+		}
+		ip := strings.TrimSpace(string(body))
+		if parsed := net.ParseIP(ip); parsed != nil && parsed.To4() == nil {
+			return ip
+		}
+	}
+	return ""
+}
+
+// startIPDetection keeps the node's egress addresses current. It runs
+// regardless of whether the operator pinned a region: --region decides the
+// label on the dashboard, not whether the agent knows its own address.
+func (c *Collector) startIPDetection(autoRegion bool) {
+	go func() {
+		for {
+			ipv4, region := detectPublicIPv4AndRegion()
+			ipv6 := detectPublicIPv6()
+
+			c.regionMu.Lock()
+			if ipv4 != "" {
+				c.publicIP = ipv4
+			}
+			if ipv6 != "" {
+				c.publicIPv6 = ipv6
+			}
+			if autoRegion && region != "" && region != "AUTO" {
+				c.region = region
+			}
+			detected := ipv4 != ""
+			c.regionMu.Unlock()
+
+			// Keep retrying quickly until the first successful lookup, then
+			// settle into the refresh cadence.
+			if !detected {
+				time.Sleep(3 * time.Second)
+				continue
+			}
+			time.Sleep(ipRefreshInterval)
+		}
+	}()
+}
+
 // NewCollector instantiates a new metrics collector.
 func NewCollector(nodeID, name, token, region string) *Collector {
 	_, _ = cpu.Percent(0, false)
@@ -125,24 +195,10 @@ func NewCollector(nodeID, name, token, region string) *Collector {
 		virtualization: virt,
 	}
 
-	// Auto-detect IP and Region if not explicitly specified
-	if region == "" || strings.EqualFold(region, "auto") || strings.EqualFold(region, "default") {
-		go func() {
-			for attempt := 0; attempt < 6; attempt++ {
-				ip, reg := detectPublicIPAndRegion()
-				if reg != "" && reg != "AUTO" {
-					col.regionMu.Lock()
-					col.region = reg
-					if ip != "" {
-						col.publicIP = ip
-					}
-					col.regionMu.Unlock()
-					break
-				}
-				time.Sleep(3 * time.Second)
-			}
-		}()
-	}
+	// Always detect the egress address; only the region label is conditional.
+	autoRegion := region == "" || strings.EqualFold(region, "auto") ||
+		strings.EqualFold(region, "default") || strings.EqualFold(region, "global")
+	col.startIPDetection(autoRegion)
 
 	return col
 }
@@ -251,21 +307,16 @@ func (c *Collector) Collect() (*model.NodeReport, error) {
 	// 8. Ping Latency & Loss
 	pings := c.pinger.GetStats()
 
-	// Default demo billing details (customizable via flags/config)
-	billing := model.BillingInfo{
-		PricePerMonth:  9.9,
-		Currency:       "$",
-		RemainingDays:  27,
-		RemainingValue: 59.84,
-		BandwidthQuota: 2 * 1024 * 1024 * 1024 * 1024, // 2 TB
-		Provider:       "Zillion Network Inc. · AS54801",
-	}
-
-	tags := []string{"电信CN2", "1Gbps", "CU4837"}
+	// Billing is operator-configured, so the agent reports it empty and lets the
+	// server fill in whatever the dashboard has stored. The agent has no way to
+	// know a node's price, cycle or quota, and a placeholder here would show up
+	// as real data on the dashboard.
+	billing := model.BillingInfo{}
 
 	c.regionMu.RLock()
 	currentRegion := c.region
 	currentIP := c.publicIP
+	currentIPv6 := c.publicIPv6
 	c.regionMu.RUnlock()
 
 	report := &model.NodeReport{
@@ -274,16 +325,15 @@ func (c *Collector) Collect() (*model.NodeReport, error) {
 		Timestamp: timestamp,
 		Name:      c.name,
 		Region:    currentRegion,
-		Tags:      tags,
 		Billing:   billing,
 		System: model.SystemInfo{
 			OS:             osStr,
 			Kernel:         kernelStr,
 			AgentVersion:   version.Version,
 			PublicIP:       currentIP,
+			PublicIPv6:     currentIPv6,
 			Uptime:         uptime,
 			CPUModel:       c.cpuModel,
-			CPUMark:        "中端服务器级",
 			Virtualization: c.virtualization,
 			CPUPercent:     cpuPercent,
 			CPUCount:       cpuCount,

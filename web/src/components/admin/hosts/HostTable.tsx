@@ -74,9 +74,8 @@ export const HostTable: React.FC<HostTableProps> = ({
           <tbody className={cn("divide-y", isBlueprint ? "divide-slate-100" : "divide-zinc-800/60")}>
             {nodes.map((n) => {
               const totalQuota = n.billing?.bandwidth_quota || 0;
-              const totalUsed =
-                n.billing?.bandwidth_used ||
-                (n.network.bytes_sent || 0) + (n.network.bytes_recv || 0);
+              // 服务端已把校准基线和累计流量合成好，这里不再自己拼网卡值。
+              const totalUsed = n.billing?.bandwidth_used || 0;
               const percent =
                 totalQuota > 0 ? Math.min(100, Math.round((totalUsed / totalQuota) * 100)) : 0;
 
@@ -144,13 +143,13 @@ export const HostTable: React.FC<HostTableProps> = ({
                     <div
                       className={cn("text-11 font-mono", isBlueprint ? "text-slate-400" : "text-zinc-500")}
                     >
-                      {n.system.public_ip || "127.0.0.1"}
+                      {n.system.public_ip || "未上报"}
                     </div>
                   </td>
                   <td className="py-3.5 px-4 whitespace-nowrap font-mono">
                     <div className="font-semibold text-indigo-600 dark:text-indigo-400">
                       {n.billing?.currency || "$"}
-                      {n.billing?.price || n.billing?.price_per_month || 9.9}
+                      {n.billing?.price || n.billing?.price_per_month || 0}
                       <span
                         className={cn(
                           "text-11 font-normal",
@@ -177,7 +176,7 @@ export const HostTable: React.FC<HostTableProps> = ({
                   </td>
                   <td className="py-3.5 px-4 whitespace-nowrap">
                     <div className={cn("font-medium", isBlueprint ? "text-slate-800" : "text-zinc-200")}>
-                      {n.billing?.remaining_days != null ? `${n.billing.remaining_days} 天` : "--"}
+                      {n.billing?.expiry_date ? `${n.billing?.remaining_days ?? 0} 天` : "--"}
                     </div>
                     <div
                       className={cn("text-10 font-mono", isBlueprint ? "text-slate-400" : "text-zinc-500")}
@@ -228,9 +227,7 @@ export const HostTable: React.FC<HostTableProps> = ({
       <div className="block md:hidden divide-y divide-slate-100 dark:divide-zinc-800/60">
         {nodes.map((n) => {
           const totalQuota = n.billing?.bandwidth_quota || 0;
-          const totalUsed =
-            n.billing?.bandwidth_used ||
-            (n.network.bytes_sent || 0) + (n.network.bytes_recv || 0);
+          const totalUsed = n.billing?.bandwidth_used || 0;
           const percent =
             totalQuota > 0 ? Math.min(100, Math.round((totalUsed / totalQuota) * 100)) : 0;
 
@@ -314,14 +311,14 @@ export const HostTable: React.FC<HostTableProps> = ({
                 <div>
                   <span className={cn("text-10 block", isBlueprint ? "text-slate-400" : "text-zinc-500")}>成本定价</span>
                   <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">
-                    {n.billing?.currency || "$"}{n.billing?.price || n.billing?.price_per_month || 9.9}
+                    {n.billing?.currency || "$"}{n.billing?.price || n.billing?.price_per_month || 0}
                     <span className="text-10 font-normal opacity-80"> / {getCycleLabel(n.billing?.billing_cycle)}</span>
                   </span>
                 </div>
                 <div>
                   <span className={cn("text-10 block", isBlueprint ? "text-slate-400" : "text-zinc-500")}>到期剩余</span>
                   <span className={cn("font-medium", isBlueprint ? "text-slate-700" : "text-zinc-300")}>
-                    {n.billing?.remaining_days != null ? `${n.billing.remaining_days} 天后到期` : n.billing?.expiry_date || "未设到期"}
+                    {n.billing?.expiry_date ? `${n.billing?.remaining_days ?? 0} 天后到期` : "未设到期"}
                   </span>
                 </div>
               </div>

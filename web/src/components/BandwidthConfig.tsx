@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { RefreshCw, Infinity as InfinityIcon } from "lucide-react";
+import { RefreshCw, Infinity as InfinityIcon, XCircle } from "lucide-react";
 import { Input, ListBox, Select } from "@heroui/react";
 import { formatBytes } from "../utils/format";
 import { cn } from "../lib/utils";
@@ -42,14 +42,17 @@ export const BandwidthConfig: React.FC<BandwidthConfigProps> = ({
 
   const isUnlimited = quotaBytes <= 0;
 
-  // Quota state
-  const initialQuota = getBestUnit(quotaBytes > 0 ? quotaBytes : 2 * UNIT_MULTIPLIERS.TB);
+  // Quota state. No prefill: an unset quota means unlimited, and inventing a
+  // 2TB default here made every unconfigured host look like it had one.
+  const initialQuota = getBestUnit(quotaBytes);
   const [quotaVal, setQuotaVal] = useState<number>(initialQuota.value);
   const [quotaUnit, setQuotaUnit] = useState<Unit>(initialQuota.unit);
 
-  // Used state
-  const currentUsedBytes = usedBytes > 0 ? usedBytes : liveTotalBytes;
-  const initialUsed = getBestUnit(currentUsedBytes);
+  // Calibration baseline. This is the number the operator reads off their
+  // provider's panel; the server counts real traffic on top of it from the
+  // moment it is saved. Empty (0) means "no calibration, count from the
+  // interface counter", so it must not be seeded from the live counter.
+  const initialUsed = getBestUnit(usedBytes);
   const [usedVal, setUsedVal] = useState<number>(initialUsed.value);
   const [usedUnit, setUsedUnit] = useState<Unit>(initialUsed.unit);
 
@@ -233,18 +236,43 @@ export const BandwidthConfig: React.FC<BandwidthConfigProps> = ({
         >
           <div className="flex items-center justify-between mb-2">
             <span className={`font-semibold ${isBlueprint ? "text-slate-800" : "text-zinc-200"}`}>
-              已用流量 (Used)
+              已用流量校准基线
             </span>
+            <div className="flex items-center gap-2">
+              {totalCalcUsed > 0 && (
+                <button
+                  type="button"
+                  onClick={() => handleUsedChange(0, usedUnit)}
+                  className={cn(
+                    "flex items-center gap-1 text-11 transition-all cursor-pointer active:scale-95",
+                    isBlueprint ? "text-slate-500 hover:text-slate-800" : "text-zinc-500 hover:text-zinc-200"
+                  )}
+                  title="清空基线，改为直接按网卡累计值统计"
+                >
+                  <XCircle className="h-3 w-3" />
+                  <span>取消校准</span>
+                </button>
+              )}
+              {liveTotalBytes > 0 && (
+                <button
+                  type="button"
+                  onClick={handleSyncLive}
+                  className="flex items-center gap-1 text-11 text-indigo-500 hover:text-indigo-400 transition-all cursor-pointer active:scale-95"
+                  title={`填入当前网卡累计值: ${formatBytes(liveTotalBytes)}`}
+                >
+                  <RefreshCw className="h-3 w-3" />
+                  <span>填入网卡值</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className={`text-10 mb-2 ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}>
+            填入服务商面板上的已用量，保存后服务端会在此基线上继续累计真实流量。
             {liveTotalBytes > 0 && (
-              <button
-                type="button"
-                onClick={handleSyncLive}
-                className="flex items-center gap-1 text-11 text-indigo-500 hover:text-indigo-400 transition-all cursor-pointer active:scale-95"
-                title={`同步实时网卡流量: ${formatBytes(liveTotalBytes)}`}
-              >
-                <RefreshCw className="h-3 w-3" />
-                <span>同步实时网卡</span>
-              </button>
+              <span className="ml-1">
+                当前网卡累计 <strong className={isBlueprint ? "text-slate-700" : "text-zinc-300"}>{formatBytes(liveTotalBytes)}</strong>
+              </span>
             )}
           </div>
 

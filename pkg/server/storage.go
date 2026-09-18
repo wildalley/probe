@@ -53,6 +53,8 @@ func (s *Storage) initSchema() error {
 		tags TEXT,
 		os TEXT,
 		kernel TEXT,
+		public_ip TEXT DEFAULT '',
+		public_ipv6 TEXT DEFAULT '',
 		agent_version TEXT DEFAULT '',
 		is_online INTEGER DEFAULT 0,
 		last_seen INTEGER DEFAULT 0,
@@ -121,12 +123,14 @@ func (s *Storage) initSchema() error {
 		tags TEXT,
 		provider TEXT,
 		public_ip TEXT,
+		public_ipv6 TEXT,
 		price REAL DEFAULT 0,
 		currency TEXT DEFAULT '$',
 		billing_cycle TEXT DEFAULT 'month',
 		expiry_date TEXT,
 		bandwidth_quota INTEGER DEFAULT 0,
 		bandwidth_used INTEGER DEFAULT 0,
+		bandwidth_base_counter INTEGER DEFAULT 0,
 		auto_renewal INTEGER DEFAULT 0,
 		note TEXT DEFAULT '',
 		updated_at INTEGER NOT NULL
@@ -259,11 +263,15 @@ func (s *Storage) migrateTableColumns() {
 		"ALTER TABLE ping_targets ADD COLUMN auto_start INTEGER DEFAULT 1",
 		"ALTER TABLE ping_targets ADD COLUMN assigned_servers TEXT DEFAULT ''",
 		"ALTER TABLE node_settings ADD COLUMN bandwidth_used INTEGER DEFAULT 0",
+		"ALTER TABLE node_settings ADD COLUMN bandwidth_base_counter INTEGER DEFAULT 0",
+		"ALTER TABLE node_settings ADD COLUMN public_ipv6 TEXT DEFAULT ''",
 		"ALTER TABLE node_settings ADD COLUMN note TEXT DEFAULT ''",
 		// First entry against the nodes table. Re-running is harmless because the
 		// error from a duplicate column is swallowed below, which is what makes
 		// this whole slice idempotent.
 		"ALTER TABLE nodes ADD COLUMN agent_version TEXT DEFAULT ''",
+		"ALTER TABLE nodes ADD COLUMN public_ip TEXT DEFAULT ''",
+		"ALTER TABLE nodes ADD COLUMN public_ipv6 TEXT DEFAULT ''",
 	}
 	for _, sqlStmt := range cols {
 		_, _ = s.db.Exec(sqlStmt)
@@ -277,7 +285,11 @@ func (s *Storage) requireColumns() error {
 		col   string
 	}{
 		{"nodes", "agent_version"},
+		{"nodes", "public_ip"},
+		{"nodes", "public_ipv6"},
 		{"node_settings", "note"},
+		{"node_settings", "public_ipv6"},
+		{"node_settings", "bandwidth_base_counter"},
 	}
 	for _, req := range required {
 		found, err := s.columnExists(req.table, req.col)
@@ -411,20 +423,23 @@ func (s *Storage) UpsertNode(meta *model.NodeMetadata) error {
 	}
 
 	query := `
-	INSERT INTO nodes (node_id, name, token, region, os, kernel, agent_version, is_online, last_seen, created_at)
-	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	INSERT INTO nodes (node_id, name, token, region, os, kernel, public_ip, public_ipv6, agent_version, is_online, last_seen, created_at)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	ON CONFLICT(node_id) DO UPDATE SET
 		name = CASE WHEN excluded.name != '' THEN excluded.name ELSE nodes.name END,
 		token = CASE WHEN excluded.token != '' THEN excluded.token ELSE nodes.token END,
 		region = CASE WHEN excluded.region != '' THEN excluded.region ELSE nodes.region END,
 		os = CASE WHEN excluded.os != '' THEN excluded.os ELSE nodes.os END,
 		kernel = CASE WHEN excluded.kernel != '' THEN excluded.kernel ELSE nodes.kernel END,
+		public_ip = CASE WHEN excluded.public_ip != '' THEN excluded.public_ip ELSE nodes.public_ip END,
+		public_ipv6 = CASE WHEN excluded.public_ipv6 != '' THEN excluded.public_ipv6 ELSE nodes.public_ipv6 END,
 		agent_version = CASE WHEN excluded.agent_version != '' THEN excluded.agent_version ELSE nodes.agent_version END,
 		is_online = excluded.is_online,
 		last_seen = excluded.last_seen;
 	`
 	_, err := s.db.Exec(query,
-		meta.NodeID, meta.Name, meta.Token, meta.Region, meta.OS, meta.Kernel, meta.AgentVersion,
+		meta.NodeID, meta.Name, meta.Token, meta.Region, meta.OS, meta.Kernel,
+		meta.PublicIP, meta.PublicIPv6, meta.AgentVersion,
 		onlineInt, meta.LastSeen, now,
 	)
 	return err
@@ -435,7 +450,7 @@ func (s *Storage) GetAllNodes() ([]*model.NodeMetadata, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	rows, err := s.db.Query(`SELECT node_id, name, token, region, os, kernel, agent_version, is_online, last_seen, created_at FROM nodes`)
+	rows, err := s.db.Query(`SELECT node_id, name, token, region, os, kernel, public_ip, public_ipv6, agent_version, is_online, last_seen, created_at FROM nodes`)
 	if err != nil {
 		return nil, err
 	}
@@ -445,7 +460,7 @@ func (s *Storage) GetAllNodes() ([]*model.NodeMetadata, error) {
 	for rows.Next() {
 		var n model.NodeMetadata
 		var isOnline int
-		if err := rows.Scan(&n.NodeID, &n.Name, &n.Token, &n.Region, &n.OS, &n.Kernel, &n.AgentVersion, &isOnline, &n.LastSeen, &n.CreatedAt); err != nil {
+		if err := rows.Scan(&n.NodeID, &n.Name, &n.Token, &n.Region, &n.OS, &n.Kernel, &n.PublicIP, &n.PublicIPv6, &n.AgentVersion, &isOnline, &n.LastSeen, &n.CreatedAt); err != nil {
 			// Never silent: a scan failure drops the node from the fleet with no
 			// other trace, and a column-count mismatch is exactly how that happens.
 			log.Printf("[Storage] Skipping unreadable node row: %v", err)
@@ -755,13 +770,13 @@ func (s *Storage) GetNodeSettings(nodeID string) (*model.NodeSettings, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	row := s.db.QueryRow(`SELECT node_id, name, region, tags, provider, public_ip, price, currency, billing_cycle, expiry_date, bandwidth_quota, bandwidth_used, auto_renewal, note, updated_at
+	row := s.db.QueryRow(`SELECT node_id, name, region, tags, provider, public_ip, public_ipv6, price, currency, billing_cycle, expiry_date, bandwidth_quota, bandwidth_used, bandwidth_base_counter, auto_renewal, note, updated_at
 		FROM node_settings WHERE node_id = ?`, nodeID)
 
 	var ns model.NodeSettings
 	var tagsJSON string
 	var autoRenewInt int
-	err := row.Scan(&ns.NodeID, &ns.Name, &ns.Region, &tagsJSON, &ns.Provider, &ns.PublicIP, &ns.Price, &ns.Currency, &ns.BillingCycle, &ns.ExpiryDate, &ns.BandwidthQuota, &ns.BandwidthUsed, &autoRenewInt, &ns.Note, &ns.UpdatedAt)
+	err := row.Scan(&ns.NodeID, &ns.Name, &ns.Region, &tagsJSON, &ns.Provider, &ns.PublicIP, &ns.PublicIPv6, &ns.Price, &ns.Currency, &ns.BillingCycle, &ns.ExpiryDate, &ns.BandwidthQuota, &ns.BandwidthUsed, &ns.BandwidthBaseCounter, &autoRenewInt, &ns.Note, &ns.UpdatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -780,7 +795,7 @@ func (s *Storage) GetAllNodeSettings() (map[string]*model.NodeSettings, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	rows, err := s.db.Query(`SELECT node_id, name, region, tags, provider, public_ip, price, currency, billing_cycle, expiry_date, bandwidth_quota, bandwidth_used, auto_renewal, note, updated_at FROM node_settings`)
+	rows, err := s.db.Query(`SELECT node_id, name, region, tags, provider, public_ip, public_ipv6, price, currency, billing_cycle, expiry_date, bandwidth_quota, bandwidth_used, bandwidth_base_counter, auto_renewal, note, updated_at FROM node_settings`)
 	if err != nil {
 		return nil, err
 	}
@@ -791,7 +806,7 @@ func (s *Storage) GetAllNodeSettings() (map[string]*model.NodeSettings, error) {
 		var ns model.NodeSettings
 		var tagsJSON string
 		var autoRenewInt int
-		if err := rows.Scan(&ns.NodeID, &ns.Name, &ns.Region, &tagsJSON, &ns.Provider, &ns.PublicIP, &ns.Price, &ns.Currency, &ns.BillingCycle, &ns.ExpiryDate, &ns.BandwidthQuota, &ns.BandwidthUsed, &autoRenewInt, &ns.Note, &ns.UpdatedAt); err != nil {
+		if err := rows.Scan(&ns.NodeID, &ns.Name, &ns.Region, &tagsJSON, &ns.Provider, &ns.PublicIP, &ns.PublicIPv6, &ns.Price, &ns.Currency, &ns.BillingCycle, &ns.ExpiryDate, &ns.BandwidthQuota, &ns.BandwidthUsed, &ns.BandwidthBaseCounter, &autoRenewInt, &ns.Note, &ns.UpdatedAt); err != nil {
 			continue
 		}
 		ns.AutoRenewal = (autoRenewInt == 1)
@@ -817,24 +832,37 @@ func (s *Storage) SaveNodeSettings(ns *model.NodeSettings) error {
 	tagsBytes, _ := json.Marshal(ns.Tags)
 
 	_, err := s.db.Exec(`INSERT INTO node_settings (
-		node_id, name, region, tags, provider, public_ip, price, currency, billing_cycle, expiry_date, bandwidth_quota, bandwidth_used, auto_renewal, note, updated_at
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		node_id, name, region, tags, provider, public_ip, public_ipv6, price, currency, billing_cycle, expiry_date, bandwidth_quota, bandwidth_used, bandwidth_base_counter, auto_renewal, note, updated_at
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	ON CONFLICT(node_id) DO UPDATE SET
 		name = excluded.name,
 		region = excluded.region,
 		tags = excluded.tags,
 		provider = excluded.provider,
 		public_ip = excluded.public_ip,
+		public_ipv6 = excluded.public_ipv6,
 		price = excluded.price,
 		currency = excluded.currency,
 		billing_cycle = excluded.billing_cycle,
 		expiry_date = excluded.expiry_date,
 		bandwidth_quota = excluded.bandwidth_quota,
 		bandwidth_used = excluded.bandwidth_used,
+		bandwidth_base_counter = excluded.bandwidth_base_counter,
 		auto_renewal = excluded.auto_renewal,
 		note = excluded.note,
 		updated_at = excluded.updated_at`,
-		ns.NodeID, ns.Name, ns.Region, string(tagsBytes), ns.Provider, ns.PublicIP, ns.Price, ns.Currency, ns.BillingCycle, ns.ExpiryDate, ns.BandwidthQuota, ns.BandwidthUsed, autoRenewInt, ns.Note, now)
+		ns.NodeID, ns.Name, ns.Region, string(tagsBytes), ns.Provider, ns.PublicIP, ns.PublicIPv6, ns.Price, ns.Currency, ns.BillingCycle, ns.ExpiryDate, ns.BandwidthQuota, ns.BandwidthUsed, ns.BandwidthBaseCounter, autoRenewInt, ns.Note, now)
+	return err
+}
+
+// UpdateBandwidthBaseCounter writes only the calibration anchor. It is a narrow
+// UPDATE on purpose: anchoring happens from the ingest path, and a full row
+// upsert there would clobber any edit the operator is making at the same moment.
+func (s *Storage) UpdateBandwidthBaseCounter(nodeID string, counter uint64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	_, err := s.db.Exec(`UPDATE node_settings SET bandwidth_base_counter = ? WHERE node_id = ?`, counter, nodeID)
 	return err
 }
 

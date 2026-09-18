@@ -331,21 +331,17 @@ func (s *Server) handleAgentWS(c *gin.Context) {
 			if report.Token == "" {
 				report.Token = token
 			}
-			if report.System.PublicIP == "" {
-				clientIP := c.ClientIP()
-				if clientIP == "::1" || clientIP == "127.0.0.1" {
-					report.System.PublicIP = "127.0.0.1"
-				} else {
-					report.System.PublicIP = clientIP
-				}
-			}
 
 			if report.NodeID != "" {
 				s.hub.RegisterAgent(report.NodeID, agentQueue)
 				registeredIDs[report.NodeID] = struct{}{}
 			}
 
-			s.hub.IngestReport(&report)
+			// The hub decides the node's public address from the report, the
+			// operator override and — only as a last resort — this socket
+			// address; a container bridge or proxy hop is dropped rather than
+			// shown as a public IP.
+			s.hub.IngestReport(&report, c.ClientIP())
 		}
 	}
 }
@@ -892,13 +888,14 @@ func (s *Server) handleGetNodeSettings(c *gin.Context) {
 		return
 	}
 	if settings == nil {
+		// A node with no saved row is unconfigured, and the editor writes back
+		// whatever it loaded here. Inventing a price or quota would let one save
+		// pin numbers the operator never entered onto the host, so only the
+		// currency and cycle — pure display defaults — are filled in.
 		settings = &model.NodeSettings{
-			NodeID:         nodeID,
-			Price:          9.9,
-			Currency:       "$",
-			BillingCycle:   "month",
-			BandwidthQuota: 2 * 1024 * 1024 * 1024 * 1024,
-			AutoRenewal:    false,
+			NodeID:       nodeID,
+			Currency:     "$",
+			BillingCycle: "month",
 		}
 	}
 	c.JSON(http.StatusOK, settings)
@@ -924,6 +921,22 @@ func (s *Server) handleSaveNodeSettings(c *gin.Context) {
 	}
 	ns.NodeID = nodeID
 
+	// The calibration baseline is anchored to the node's live interface counter
+	// at save time, so real traffic accumulates on top of it instead of the
+	// baseline freezing the display. A node that has never reported anchors to 0
+	// and the hub anchors it lazily on the first report it sees.
+	state, hasState := s.hub.GetNodeState(nodeID)
+	liveCounter := uint64(0)
+	if hasState {
+		liveCounter = state.Network.BytesSent + state.Network.BytesRecv
+	}
+	if ns.BandwidthUsed > 0 {
+		ns.BandwidthBaseCounter = liveCounter
+	} else {
+		// 0 means "cancel calibration": no baseline, so no anchor to remember.
+		ns.BandwidthBaseCounter = 0
+	}
+
 	if err := s.storage.SaveNodeSettings(&ns); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -932,7 +945,7 @@ func (s *Server) handleSaveNodeSettings(c *gin.Context) {
 	s.hub.ReloadSettings()
 
 	// Update live in-memory state immediately if node exists
-	if state, found := s.hub.GetNodeState(nodeID); found {
+	if hasState {
 		if ns.Name != "" {
 			state.Name = ns.Name
 		}
@@ -960,9 +973,25 @@ func (s *Server) handleSaveNodeSettings(c *gin.Context) {
 		if ns.BandwidthQuota > 0 {
 			state.Billing.BandwidthQuota = ns.BandwidthQuota
 		}
+
+		// Mirror the accumulation model so the immediate broadcast matches what
+		// the next real report will compute: at t=save, live == anchor, so the
+		// effective value is exactly the baseline (or the live counter when the
+		// calibration was cleared).
+		state.Billing.BandwidthLive = liveCounter
 		if ns.BandwidthUsed > 0 {
 			state.Billing.BandwidthUsed = ns.BandwidthUsed
+		} else {
+			state.Billing.BandwidthUsed = liveCounter
 		}
+
+		// Apply the operator's IP corrections through the same precedence rule
+		// the ingest path uses, so a private or bogus value is dropped rather
+		// than shown as a public address.
+		ip, ipv6 := pickPublicIP(&ns, state.System.PublicIP, state.System.PublicIPv6, "")
+		state.System.PublicIP = ip
+		state.System.PublicIPv6 = ipv6
+
 		state.Billing.AutoRenewal = ns.AutoRenewal
 		state.Billing.Note = ns.Note
 

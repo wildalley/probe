@@ -15,9 +15,15 @@ export interface BillingInfo {
   billing_cycle?: string;
   expiry_date?: string;
   remaining_days: number;
+  /** 剩余价值（人民币基准，后台汇总用）。 */
   remaining_value: number;
+  /** 剩余价值（节点本币，卡片展示用）。 */
+  remaining_value_native?: number;
   bandwidth_quota: number;
+  /** 生效已用流量：校准基线 + 锚定后累计。缺省 0。 */
   bandwidth_used?: number;
+  /** 服务端下发的实时网卡累计（bytes since boot），供校准 UI 展示。 */
+  bandwidth_live?: number;
   provider: string;
   auto_renewal?: boolean;
   note?: string;
@@ -50,7 +56,10 @@ export interface NodeSettings {
   billing_cycle: string;
   expiry_date: string;
   bandwidth_quota: number;
+  /** 校准基线（0 = 取消校准，回到纯实时口径）。 */
   bandwidth_used?: number;
+  /** 校准基线对应的网卡累计快照，由服务端锚定，前端一般不填。 */
+  bandwidth_base_counter?: number;
   auto_renewal: boolean;
   note?: string;
   updated_at?: number;

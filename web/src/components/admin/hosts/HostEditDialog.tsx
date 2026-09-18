@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Check, CheckCircle2, Globe, Sliders, Ticket, X, Zap } from "lucide-react";
 import { Button, Chip, Input, ListBox, Select, Switch } from "@heroui/react";
 import { NodeSettings, NodeState } from "../../../types";
@@ -19,29 +19,31 @@ interface HostEditDialogProps {
 }
 
 /**
- * Derives the editable draft from a live node. Falls back to the metrics stream
- * for traffic already counted so a host that has never been configured starts
- * from its real usage rather than zero.
+ * Derives the editable draft from a live node.
+ *
+ * Nothing here invents a value the node never reported: an unconfigured host
+ * opens with empty/zero fields so a save cannot silently pin a made-up price,
+ * quota or traffic figure onto it. `bandwidth_used` is the operator's
+ * calibration baseline (0 = 未校准，直接按网卡累计), not the currently displayed
+ * usage, so reopening the dialog never re-pins the live counter.
  */
-const toDraft = (node: NodeState): NodeSettings => {
-  const liveTraffic = (node.network.bytes_sent || 0) + (node.network.bytes_recv || 0);
-  return {
-    node_id: node.node_id,
-    name: node.name,
-    region: node.region,
-    tags: node.tags || [],
-    provider: node.billing?.provider || "",
-    public_ip: node.system.public_ip || "",
-    price: node.billing?.price || node.billing?.price_per_month || 9.9,
-    currency: node.billing?.currency || "$",
-    billing_cycle: node.billing?.billing_cycle || "month",
-    expiry_date: node.billing?.expiry_date || "",
-    bandwidth_quota: node.billing?.bandwidth_quota || 2 * 1024 * 1024 * 1024 * 1024,
-    bandwidth_used: node.billing?.bandwidth_used || liveTraffic,
-    auto_renewal: node.billing?.auto_renewal || false,
-    note: node.billing?.note || "",
-  };
-};
+const toDraft = (node: NodeState): NodeSettings => ({
+  node_id: node.node_id,
+  name: node.name,
+  region: node.region,
+  tags: node.tags || [],
+  provider: node.billing?.provider || "",
+  public_ip: node.system.public_ip || "",
+  public_ipv6: node.system.public_ipv6 || "",
+  price: node.billing?.price || node.billing?.price_per_month || 0,
+  currency: node.billing?.currency || "$",
+  billing_cycle: node.billing?.billing_cycle || "month",
+  expiry_date: node.billing?.expiry_date || "",
+  bandwidth_quota: node.billing?.bandwidth_quota || 0,
+  bandwidth_used: 0,
+  auto_renewal: node.billing?.auto_renewal || false,
+  note: node.billing?.note || "",
+});
 
 export const HostEditDialog: React.FC<HostEditDialogProps> = ({
   node,
@@ -63,6 +65,35 @@ export const HostEditDialog: React.FC<HostEditDialogProps> = ({
   const patch = (fields: Partial<NodeSettings>) => setDraft((prev) => ({ ...prev, ...fields }));
 
   const liveTotalBytes = (node.network.bytes_sent || 0) + (node.network.bytes_recv || 0);
+
+  // The live node carries the *effective* usage (baseline + counted traffic), so
+  // it cannot tell us what baseline the operator saved. Read the persisted row so
+  // reopening the dialog shows the real calibration value instead of resetting it
+  // to 0 — a save would otherwise silently clear a calibration nobody touched.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/v1/nodes/${encodeURIComponent(node.node_id)}/settings`
+        );
+        if (!res.ok) return;
+        const saved = await res.json();
+        if (cancelled || !saved) return;
+        setDraft((prev) => ({
+          ...prev,
+          public_ip: saved.public_ip || prev.public_ip,
+          public_ipv6: saved.public_ipv6 || prev.public_ipv6,
+          bandwidth_used: saved.bandwidth_used || 0,
+        }));
+      } catch {
+        // Offline or transient failure: keep the draft derived from live state.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [node.node_id]);
 
   const handleAutoResolveGeo = async () => {
     const ip = draft.public_ip || node.system?.public_ip || "";
@@ -283,6 +314,35 @@ export const HostEditDialog: React.FC<HostEditDialogProps> = ({
                   className="w-full text-xs"
                 />
               </div>
+              <div>
+                <label className={labelCls} htmlFor="host-public-ip">
+                  公网 IPv4 (覆盖自动探测)
+                </label>
+                <Input
+                  id="host-public-ip"
+                  type="text"
+                  value={draft.public_ip || ""}
+                  onChange={(e) => patch({ public_ip: e.target.value })}
+                  placeholder={node.system.public_ip || "留空则用 Agent 探测结果"}
+                  className="w-full text-xs font-mono"
+                />
+              </div>
+              <div>
+                <label className={labelCls} htmlFor="host-public-ipv6">
+                  公网 IPv6 (覆盖自动探测)
+                </label>
+                <Input
+                  id="host-public-ipv6"
+                  type="text"
+                  value={draft.public_ipv6 || ""}
+                  onChange={(e) => patch({ public_ipv6: e.target.value })}
+                  placeholder={node.system.public_ipv6 || "留空则用 Agent 探测结果"}
+                  className="w-full text-xs font-mono"
+                />
+              </div>
+              <p className={cn("sm:col-span-2 text-10", isBlueprint ? "text-slate-500" : "text-zinc-500")}>
+                NAT/Docker 环境下 Agent 可能只看到内网地址。这两项一旦填写就以你填的为准，留空则回退到 Agent 探测值。
+              </p>
             </div>
           )}
 

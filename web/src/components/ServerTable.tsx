@@ -213,11 +213,11 @@ export const ServerTable: React.FC<ServerTableProps> = ({ nodes, onSelect, theme
                         {node.billing.currency || "$"}
                         {node.billing.price != null && node.billing.price > 0
                           ? node.billing.price
-                          : node.billing.price_per_month || 9.9}
+                          : node.billing.price_per_month || 0}
                         /{getCycleLabel(node.billing.billing_cycle)}
                       </span>
                       <span className={cn("text-10", isBlueprint ? "text-slate-400" : "text-zinc-500")}>
-                        {node.billing.remaining_days != null ? `剩 ${node.billing.remaining_days} 天` : ""}
+                        {node.billing.remaining_days ? `剩 ${node.billing.remaining_days} 天` : "未设到期"}
                       </span>
                     </div>
                   ) : (
