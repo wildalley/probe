@@ -2,12 +2,19 @@ import React, { useState } from "react";
 import { RefreshCw, Infinity as InfinityIcon, XCircle } from "lucide-react";
 import { Input, ListBox, Select } from "@heroui/react";
 import { formatBytes } from "../utils/format";
+import type { TrafficSplit } from "../utils/traffic";
 import { cn } from "../lib/utils";
 
 interface BandwidthConfigProps {
   quotaBytes: number;
   usedBytes: number;
   liveTotalBytes?: number;
+  /**
+   * 网卡累计的上下行明细，仅用于展示。校准基线本身是服务商面板上的单一合并
+   * 数字，方向占比无从得知，所以这里不提供按方向分别填入的入口——那会造出一个
+   * 操作者无法正确填写的字段。
+   */
+  liveSplit?: TrafficSplit | null;
   onChange: (quotaBytes: number, usedBytes: number) => void;
   theme?: "blueprint" | "dark";
 }
@@ -35,6 +42,7 @@ export const BandwidthConfig: React.FC<BandwidthConfigProps> = ({
   quotaBytes,
   usedBytes,
   liveTotalBytes = 0,
+  liveSplit = null,
   onChange,
   theme = "dark",
 }) => {
@@ -272,6 +280,11 @@ export const BandwidthConfig: React.FC<BandwidthConfigProps> = ({
             {liveTotalBytes > 0 && (
               <span className="ml-1">
                 当前网卡累计 <strong className={isBlueprint ? "text-slate-700" : "text-zinc-300"}>{formatBytes(liveTotalBytes)}</strong>
+                {liveSplit && (
+                  <span className="ml-1">
+                    （↑{formatBytes(liveSplit.up)} ↓{formatBytes(liveSplit.down)}）
+                  </span>
+                )}
               </span>
             )}
           </div>

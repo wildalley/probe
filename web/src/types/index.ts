@@ -22,8 +22,21 @@ export interface BillingInfo {
   bandwidth_quota: number;
   /** 生效已用流量：校准基线 + 锚定后累计。缺省 0。 */
   bandwidth_used?: number;
+  /**
+   * 已用流量的上行/下行拆分，两者之和恒等于 `bandwidth_used`，所以明细永远
+   * 不会和配额所依据的总量互相矛盾。配额本身仍是合并口径，这两个字段只用于
+   * 展示，不构成独立限额。
+   *
+   * 校准基线是服务商面板上的单一合并数字，其自身方向占比无法得知，由服务端
+   * 按锚定时刻的网卡上下行比例折算；锚定之后的流量则归属真实承载它的方向。
+   */
+  bandwidth_used_up?: number;
+  bandwidth_used_down?: number;
   /** 服务端下发的实时网卡累计（bytes since boot），供校准 UI 展示。 */
   bandwidth_live?: number;
+  /** 实时网卡累计的方向拆分，两者之和等于 `bandwidth_live`。 */
+  bandwidth_live_up?: number;
+  bandwidth_live_down?: number;
   provider: string;
   auto_renewal?: boolean;
   note?: string;
@@ -60,6 +73,12 @@ export interface NodeSettings {
   bandwidth_used?: number;
   /** 校准基线对应的网卡累计快照，由服务端锚定，前端一般不填。 */
   bandwidth_base_counter?: number;
+  /**
+   * 锚点的方向拆分，同样由服务端写入，前端不填。服务端保存时会把三个锚点一起
+   * 更新，用于把合并基线折算到上行/下行。
+   */
+  bandwidth_base_counter_up?: number;
+  bandwidth_base_counter_down?: number;
   auto_renewal: boolean;
   note?: string;
   updated_at?: number;

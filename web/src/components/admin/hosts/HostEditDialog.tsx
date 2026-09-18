@@ -65,6 +65,14 @@ export const HostEditDialog: React.FC<HostEditDialogProps> = ({
   const patch = (fields: Partial<NodeSettings>) => setDraft((prev) => ({ ...prev, ...fields }));
 
   const liveTotalBytes = (node.network.bytes_sent || 0) + (node.network.bytes_recv || 0);
+  // Split taken from the same two fields the total is summed from, so the
+  // ↑/↓ detail can never disagree with the total shown beside it. The
+  // billing.bandwidth_live_* pair carries the identical reading, but mixing the
+  // two sources would let them drift apart by one report.
+  const liveSplit = {
+    up: node.network.bytes_sent || 0,
+    down: node.network.bytes_recv || 0,
+  };
 
   // The live node carries the *effective* usage (baseline + counted traffic), so
   // it cannot tell us what baseline the operator saved. Read the persisted row so
@@ -435,6 +443,7 @@ export const HostEditDialog: React.FC<HostEditDialogProps> = ({
               quotaBytes={draft.bandwidth_quota}
               usedBytes={draft.bandwidth_used || 0}
               liveTotalBytes={liveTotalBytes}
+              liveSplit={liveSplit}
               onChange={(newQuota, newUsed) =>
                 patch({ bandwidth_quota: newQuota, bandwidth_used: newUsed })
               }

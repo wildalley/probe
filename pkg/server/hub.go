@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"math/bits"
 	"net"
 	"net/http"
 	"strings"
@@ -680,13 +681,20 @@ func (h *Hub) IngestReport(report *model.NodeReport, clientIP string) {
 		report.Network.BytesSent, report.Network.BytesRecv,
 	)
 	if reanchored {
+		// The anchors the calculation settled on, not the live counters. For a
+		// legacy row the recovery keeps the original combined anchor and only
+		// fills in its split, so substituting the live reading here would move
+		// the anchor to now and silently drop every byte counted since the
+		// operator calibrated.
 		h.persistBandwidthAnchor(report.NodeID,
-			usage.Live, report.Network.BytesSent, report.Network.BytesRecv)
+			usage.Anchor, usage.AnchorUp, usage.AnchorDown)
 	}
 	billing.BandwidthUsed = usage.Total
 	billing.BandwidthUsedUp = usage.Up
 	billing.BandwidthUsedDown = usage.Down
 	billing.BandwidthLive = usage.Live
+	billing.BandwidthLiveUp = usage.LiveUp
+	billing.BandwidthLiveDown = usage.LiveDown
 
 	// Calculate Billing Details: PricePerMonth, RemainingDays, RemainingValue
 	h.ratesMu.RLock()
@@ -796,7 +804,12 @@ type bandwidthUsage struct {
 	Total uint64
 	Up    uint64
 	Down  uint64
-	Live  uint64
+	// Live is the raw combined interface counter, with LiveUp / LiveDown its
+	// per-direction halves. They are passed through untouched by the calibration
+	// so the UI can show "what the NIC says" next to "what you are billed for".
+	Live     uint64
+	LiveUp   uint64
+	LiveDown uint64
 	// Anchor / AnchorUp / AnchorDown are the anchors this calculation actually
 	// used. When the second return value is true these are what must be
 	// persisted — the caller must not substitute the live counters, because the
@@ -818,7 +831,7 @@ type bandwidthUsage struct {
 // different answer.
 func computeBandwidthUsage(baseline, anchor, anchorUp, anchorDown, liveUp, liveDown uint64) (bandwidthUsage, bool) {
 	live := liveUp + liveDown
-	usage := bandwidthUsage{Live: live}
+	usage := bandwidthUsage{Live: live, LiveUp: liveUp, LiveDown: liveDown}
 
 	if baseline == 0 {
 		// No calibration in play, so the interface counters *are* the answer —
@@ -826,9 +839,6 @@ func computeBandwidthUsage(baseline, anchor, anchorUp, anchorDown, liveUp, liveD
 		usage.Total, usage.Up, usage.Down = live, liveUp, liveDown
 		return usage, false
 	}
-	defer func() {
-		usage.Anchor, usage.AnchorUp, usage.AnchorDown = anchor, anchorUp, anchorDown
-	}()
 
 	reanchor := false
 	switch {
@@ -853,14 +863,21 @@ func computeBandwidthUsage(baseline, anchor, anchorUp, anchorDown, liveUp, liveD
 		reanchor = true
 	}
 
-	// Rounding in the recovery above can leave a half a byte past its live
-	// counter; clamping keeps the subtractions below from wrapping.
+	// Defensive clamp. apportion is exact integer arithmetic, so a recovered half
+	// provably cannot exceed its own live counter; this only keeps the
+	// subtractions below from wrapping if that ever stops holding.
 	if anchorUp > liveUp {
 		anchorUp = liveUp
 	}
 	if anchorDown > liveDown {
 		anchorDown = liveDown
 	}
+
+	// Report the anchors this calculation actually used, so a caller persisting a
+	// re-anchor writes these rather than re-deriving them. Assigned to the value
+	// that is about to be returned — a deferred write would be lost, because
+	// returning a non-pointer struct copies it before deferred calls run.
+	usage.Anchor, usage.AnchorUp, usage.AnchorDown = anchor, anchorUp, anchorDown
 
 	// The total is the combined-only formula, unchanged: the split must not be
 	// able to alter the number the quota is measured against.
@@ -885,20 +902,26 @@ func computeBandwidthUsage(baseline, anchor, anchorUp, anchorDown, liveUp, liveD
 // second part so the two always sum back to total exactly. A zero denominator
 // carries no ratio to work from, so the split is even.
 //
-// The ratio is computed in float64: at petabyte scale that costs well under a
-// byte of precision, and this is an estimate of an unknowable split to begin
-// with. The exactness that matters — the parts summing to the total — comes
-// from deriving the second part by subtraction rather than from a second
-// multiply.
+// The ratio is evaluated as a 128-bit multiply followed by a 128/64 divide, so
+// total*num cannot overflow on the way through and the result is the exact floor
+// of total*num/den. Float64 would lose bits above 2^53 — a petabyte is 2^50, so
+// a multi-petabyte baseline is close enough to that ceiling to be worth avoiding
+// when exact arithmetic is this cheap. The first part is therefore always <=
+// total, which is what lets the callers treat that bound as an invariant rather
+// than re-clamping a rounding artifact.
 func apportion(total, num, den uint64) (uint64, uint64) {
 	if den == 0 {
 		half := total / 2
 		return half, total - half
 	}
-	first := uint64(float64(total) * (float64(num) / float64(den)))
-	if first > total {
-		first = total
+	// num > den would put the first part above total and, worse, overflow the
+	// divide below. Callers pass a part and its whole, so this is defensive.
+	if num > den {
+		num = den
 	}
+	hi, lo := bits.Mul64(total, num)
+	// hi < den holds because num <= den, which keeps Div64 from panicking.
+	first, _ := bits.Div64(hi, lo, den)
 	return first, total - first
 }
 

@@ -18,6 +18,7 @@ import { formatBytes, formatRate } from "../utils/format";
 import { getRegionFlag } from "../utils/flags";
 import { getTagStyle } from "../utils/tagColors";
 import { agentVersionOf } from "../utils/agentVersion";
+import { usedTrafficSplit } from "../utils/traffic";
 import { OsIcon } from "./OsIcon";
 import { AgentVersionMark } from "./AgentVersionMark";
 import { cn } from "../lib/utils";
@@ -111,6 +112,9 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
   // 0 = 未设置额度，走「无限制」分支，不再编造 2TB 默认值。
   const quotaBytes = node.billing?.bandwidth_quota || 0;
   const quotaPercent = quotaBytes > 0 ? Math.min(100, (usedTraffic / quotaBytes) * 100) : 0;
+  // 方向明细同样由服务端给出（up + down 恒等于 usedTraffic）；旧服务端不下发
+  // 这两个字段，此时为 null，只显示总量。
+  const usedSplit = usedTrafficSplit(node.billing);
 
   // Pricing label
   const priceText = node.billing
@@ -416,8 +420,22 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
               {quotaBytes > 0 ? <NumberTicker value={quotaPercent} decimals={1} suffix="%" /> : "0%"}
             </span>
           </div>
-          <div className={`text-10 truncate ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}>
-            {formatBytes(usedTraffic)} / {quotaBytes > 0 ? formatBytes(quotaBytes) : "无限制"}
+          <div className={`text-10 flex items-center gap-1.5 ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}>
+            <span className="truncate">
+              {formatBytes(usedTraffic)} / {quotaBytes > 0 ? formatBytes(quotaBytes) : "无限制"}
+            </span>
+            {usedSplit && (
+              <span className="ml-auto flex shrink-0 items-center gap-1.5 font-mono">
+                <span className="flex items-center gap-0.5 text-indigo-500">
+                  <ArrowUp className="h-2.5 w-2.5 shrink-0" />
+                  {formatBytes(usedSplit.up)}
+                </span>
+                <span className="flex items-center gap-0.5 text-cyan-500">
+                  <ArrowDown className="h-2.5 w-2.5 shrink-0" />
+                  {formatBytes(usedSplit.down)}
+                </span>
+              </span>
+            )}
           </div>
           <div className={`h-1.5 w-full rounded-full overflow-hidden ${isBlueprint ? "bg-slate-200" : "bg-zinc-800"}`}>
             <div

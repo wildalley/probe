@@ -38,6 +38,7 @@ import { HistoryPoint, NodeState, PingHistoryPoint, PingStat, PingTargetConfig }
 import { formatBytes, formatRate } from "../utils/format";
 import { getRegionFlag } from "../utils/flags";
 import { agentVersionOf, agentVersionStatus } from "../utils/agentVersion";
+import { usedTrafficSplit } from "../utils/traffic";
 import { getTagStyle } from "../utils/tagColors";
 import { OsIcon } from "./OsIcon";
 import { TimeSeriesChart, ChartSeries } from "./TimeSeriesChart";
@@ -288,6 +289,9 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
   const usedTraffic = node.billing?.bandwidth_used || 0;
   const quotaBytes = node.billing?.bandwidth_quota || 0;
   const quotaPercent = quotaBytes > 0 ? Math.min(100, Math.max(0, (usedTraffic / quotaBytes) * 100)) : 0;
+  // 方向明细由服务端折算（up + down 恒等于 usedTraffic）；旧服务端不下发这两个
+  // 字段，此时为 null，只显示总量。
+  const usedSplit = usedTrafficSplit(node.billing);
 
   // Prepare 6 charts time-series data
   const timestamps = useMemo(() => history.map((p) => p.timestamp), [history]);
@@ -760,6 +764,18 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
             <div className={`mt-1 sm:mt-1.5 text-base sm:text-lg font-bold ${isBlueprint ? "text-slate-900" : "text-zinc-100"}`}>
               {formatBytes(usedTraffic)}
             </div>
+            {usedSplit && (
+              <div className="mt-1 flex items-center gap-2.5 text-10 font-mono">
+                <span className="flex items-center gap-0.5 text-indigo-600 dark:text-indigo-400">
+                  <ArrowUp className="h-3 w-3 shrink-0" />
+                  <span>{formatBytes(usedSplit.up)}</span>
+                </span>
+                <span className="flex items-center gap-0.5 text-cyan-600 dark:text-cyan-400">
+                  <ArrowDown className="h-3 w-3 shrink-0" />
+                  <span>{formatBytes(usedSplit.down)}</span>
+                </span>
+              </div>
+            )}
           </BlurFade>
 
           <BlurFade delay={0.17} className={`rounded-xl border p-2.5 sm:p-3.5 ${statCardClass}`}>

@@ -995,6 +995,8 @@ func (s *Server) handleSaveNodeSettings(c *gin.Context) {
 		state.Billing.BandwidthUsedUp = usage.Up
 		state.Billing.BandwidthUsedDown = usage.Down
 		state.Billing.BandwidthLive = usage.Live
+		state.Billing.BandwidthLiveUp = usage.LiveUp
+		state.Billing.BandwidthLiveDown = usage.LiveDown
 
 		// Apply the operator's IP corrections through the same precedence rule
 		// the ingest path uses, so a private or bogus value is dropped rather

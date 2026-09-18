@@ -1,6 +1,7 @@
 package server
 
 import (
+	"math/big"
 	"path/filepath"
 	"testing"
 	"time"
@@ -360,5 +361,163 @@ func TestBandwidthDirectionalAnchorPersists(t *testing.T) {
 	}
 	if st.Billing.BandwidthUsedUp+st.Billing.BandwidthUsedDown != st.Billing.BandwidthUsed {
 		t.Fatal("published breakdown does not sum to published total")
+	}
+}
+
+// TestBandwidthUsageReportsAnchorsItUsed pins down the contract the caller relies
+// on to persist a re-anchor. These fields were previously assigned in a deferred
+// closure, which a non-pointer return copies before running — so every caller
+// read zeros and had to guess the anchors instead.
+func TestBandwidthUsageReportsAnchorsItUsed(t *testing.T) {
+	// Legacy row: combined anchor 1000, no split. The recovery must keep the
+	// original combined anchor and only fill in its halves.
+	got, reanchored := computeBandwidthUsage(4096, 1000, 0, 0, 700, 900)
+	if !reanchored {
+		t.Fatal("a legacy row with no split must report a re-anchor")
+	}
+	if got.Anchor != 1000 {
+		t.Fatalf("Anchor = %d, want the original 1000 kept (not advanced to live)", got.Anchor)
+	}
+	if got.AnchorUp+got.AnchorDown != got.Anchor {
+		t.Fatalf("recovered split %d/%d does not sum to anchor %d",
+			got.AnchorUp, got.AnchorDown, got.Anchor)
+	}
+	if got.AnchorUp > got.LiveUp || got.AnchorDown > got.LiveDown {
+		t.Fatalf("recovered anchor %d/%d exceeds live counters %d/%d",
+			got.AnchorUp, got.AnchorDown, got.LiveUp, got.LiveDown)
+	}
+}
+
+// TestBandwidthLegacyRowKeepsAccumulatedTraffic is the data-loss case. A row
+// written before the split existed has a combined anchor and zero halves. The
+// recovery fills in the halves but must not move the combined anchor: advancing
+// it to the live counter silently rebases the calibration to "now" and throws
+// away every byte counted since the operator set it.
+func TestBandwidthLegacyRowKeepsAccumulatedTraffic(t *testing.T) {
+	h := newBillingTestHub(t)
+	const nodeID = "node-legacy-anchor"
+
+	// Baseline 1000 anchored at a combined 1000, with no directional split —
+	// exactly what an upgraded database contains.
+	h.nodeSettings[nodeID] = &model.NodeSettings{
+		NodeID:               nodeID,
+		BandwidthUsed:        1000,
+		BandwidthBaseCounter: 1000,
+	}
+	if err := h.storage.SaveNodeSettings(h.nodeSettings[nodeID]); err != nil {
+		t.Fatal(err)
+	}
+
+	// The node has since carried 600 more bytes (live 1600 vs anchor 1000), so
+	// the effective total is 1000 + 600 = 1600.
+	h.IngestReport(&model.NodeReport{
+		NodeID:  nodeID,
+		Network: model.NetworkInfo{BytesSent: 700, BytesRecv: 900},
+	}, "203.0.113.12")
+
+	h.mu.RLock()
+	st := h.nodeStates[nodeID]
+	h.mu.RUnlock()
+	if st.Billing.BandwidthUsed != 1600 {
+		t.Fatalf("total = %d, want 1600 (baseline 1000 + 600 counted since anchor)",
+			st.Billing.BandwidthUsed)
+	}
+
+	// The persisted anchor must still be 1000. If it advanced to 1600, the next
+	// report would compute 1000 + 0 and the 600 would be gone for good.
+	ns, err := h.storage.GetNodeSettings(nodeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ns.BandwidthBaseCounter != 1000 {
+		t.Fatalf("persisted anchor = %d, want 1000 kept; advancing it discards accumulated traffic",
+			ns.BandwidthBaseCounter)
+	}
+	if ns.BandwidthBaseCounterUp+ns.BandwidthBaseCounterDown != ns.BandwidthBaseCounter {
+		t.Fatalf("persisted split %d/%d does not sum to anchor %d",
+			ns.BandwidthBaseCounterUp, ns.BandwidthBaseCounterDown, ns.BandwidthBaseCounter)
+	}
+
+	// A second identical report must reproduce the same total rather than drift.
+	h.IngestReport(&model.NodeReport{
+		NodeID:  nodeID,
+		Network: model.NetworkInfo{BytesSent: 700, BytesRecv: 900},
+	}, "203.0.113.12")
+
+	h.mu.RLock()
+	st = h.nodeStates[nodeID]
+	h.mu.RUnlock()
+	if st.Billing.BandwidthUsed != 1600 {
+		t.Fatalf("total drifted to %d on an unchanged counter, want a stable 1600",
+			st.Billing.BandwidthUsed)
+	}
+}
+
+// TestBandwidthLivePublishesDirectionalCounters covers the raw NIC counters the
+// calibration UI reads. bandwidth_live has always been published; its ↑/↓ halves
+// were declared in the API model but never actually assigned, so the dashboard
+// received zeros for both.
+func TestBandwidthLivePublishesDirectionalCounters(t *testing.T) {
+	h := newBillingTestHub(t)
+	const nodeID = "node-live-split"
+
+	h.IngestReport(&model.NodeReport{
+		NodeID:  nodeID,
+		Network: model.NetworkInfo{BytesSent: 300, BytesRecv: 400},
+	}, "203.0.113.13")
+
+	h.mu.RLock()
+	st := h.nodeStates[nodeID]
+	h.mu.RUnlock()
+
+	if st.Billing.BandwidthLiveUp != 300 || st.Billing.BandwidthLiveDown != 400 {
+		t.Fatalf("live split = %d↑/%d↓, want 300↑/400↓",
+			st.Billing.BandwidthLiveUp, st.Billing.BandwidthLiveDown)
+	}
+	if st.Billing.BandwidthLiveUp+st.Billing.BandwidthLiveDown != st.Billing.BandwidthLive {
+		t.Fatalf("live split does not sum to live total %d", st.Billing.BandwidthLive)
+	}
+}
+
+// TestApportionIsExactAtPetabyteScale guards the integer split. Float64 carries
+// 53 bits of mantissa and a petabyte is 2^50, so the old float path lost whole
+// kilobytes on large baselines — and could round the first part past the total,
+// which is what the callers' clamps were quietly absorbing.
+func TestApportionIsExactAtPetabyteScale(t *testing.T) {
+	const pb = uint64(1) << 50
+
+	cases := []struct{ total, num, den uint64 }{
+		{total: 8 * pb, num: 3 * pb, den: 8 * pb},
+		{total: 7*pb + 12345, num: pb + 1, den: 3*pb + 7},
+		{total: ^uint64(0) / 4, num: 1, den: 3},
+		{total: 1000, num: 0, den: 1000},   // all to the second part
+		{total: 1000, num: 1000, den: 1000}, // all to the first part
+		{total: 0, num: 5, den: 10},
+	}
+	for _, tc := range cases {
+		first, second := apportion(tc.total, tc.num, tc.den)
+		if first+second != tc.total {
+			t.Fatalf("apportion(%d,%d,%d) = %d+%d, does not sum to total",
+				tc.total, tc.num, tc.den, first, second)
+		}
+		if first > tc.total {
+			t.Fatalf("apportion(%d,%d,%d) first part %d exceeds total",
+				tc.total, tc.num, tc.den, first)
+		}
+		// Exact floor of total*num/den, computed independently via big.Int.
+		want := new(big.Int).Div(
+			new(big.Int).Mul(new(big.Int).SetUint64(tc.total), new(big.Int).SetUint64(tc.num)),
+			new(big.Int).SetUint64(tc.den),
+		)
+		if want.Uint64() != first {
+			t.Fatalf("apportion(%d,%d,%d) = %d, want exact floor %s",
+				tc.total, tc.num, tc.den, first, want)
+		}
+	}
+
+	// A zero denominator carries no ratio, so the split is even and still exact.
+	first, second := apportion(1001, 7, 0)
+	if first+second != 1001 || first != 500 {
+		t.Fatalf("zero-denominator split = %d/%d, want 500/501", first, second)
 	}
 }
