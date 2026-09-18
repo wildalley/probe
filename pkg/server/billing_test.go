@@ -232,3 +232,133 @@ func TestPickPublicIPPrecedence(t *testing.T) {
 		})
 	}
 }
+
+// TestBandwidthSplitSumsToTotal is the invariant that matters most: whatever the
+// breakdown says, it has to add up to the number the quota is measured against.
+// A ↑/↓ pair that disagreed with the total is exactly the class of bug this
+// split could reintroduce, so it is checked across the awkward cases —
+// no calibration, a fresh anchor, a counter reset, lopsided and zero traffic.
+func TestBandwidthSplitSumsToTotal(t *testing.T) {
+	cases := []struct {
+		name                         string
+		baseline, anchor, aUp, aDown uint64
+		liveUp, liveDown             uint64
+	}{
+		{name: "no calibration", liveUp: 585, liveDown: 654},
+		{name: "no calibration, nothing sent yet"},
+		{name: "anchored mid-life", baseline: 1000, anchor: 300, aUp: 100, aDown: 200, liveUp: 150, liveDown: 400},
+		{name: "unanchored baseline", baseline: 5000, liveUp: 585, liveDown: 654},
+		{name: "counter reset below anchor", baseline: 5000, anchor: 9000, aUp: 4000, aDown: 5000, liveUp: 10, liveDown: 20},
+		{name: "one direction reset only", baseline: 5000, anchor: 900, aUp: 400, aDown: 500, liveUp: 10, liveDown: 900},
+		{name: "download only", baseline: 2048, anchor: 100, aDown: 100, liveDown: 900},
+		{name: "upload only", baseline: 2048, anchor: 100, aUp: 100, liveUp: 900},
+		{name: "legacy row: combined anchor, no split", baseline: 4096, anchor: 1000, liveUp: 700, liveDown: 900},
+		{name: "baseline with zero counters", baseline: 777},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, _ := computeBandwidthUsage(tc.baseline, tc.anchor, tc.aUp, tc.aDown, tc.liveUp, tc.liveDown)
+			if got.Up+got.Down != got.Total {
+				t.Fatalf("breakdown does not sum to total: up=%d down=%d total=%d", got.Up, got.Down, got.Total)
+			}
+			if got.Live != tc.liveUp+tc.liveDown {
+				t.Fatalf("live counter = %d, want %d", got.Live, tc.liveUp+tc.liveDown)
+			}
+			if got.Total < tc.baseline {
+				t.Fatalf("total %d fell below the calibration baseline %d", got.Total, tc.baseline)
+			}
+		})
+	}
+}
+
+// TestBandwidthSplitAttributesRealTraffic checks the split is actually
+// meaningful, not just self-consistent: traffic counted after the anchor lands
+// on the direction that carried it, and the baseline's own (unknowable) split
+// follows the counter ratio at the anchor.
+func TestBandwidthSplitAttributesRealTraffic(t *testing.T) {
+	// Baseline 1000 anchored at 400↑/600↓ → baseline splits 40/60.
+	// Since then: +300↑, +100↓.
+	got, reanchored := computeBandwidthUsage(1000, 1000, 400, 600, 700, 700)
+	if reanchored {
+		t.Fatal("anchor moved even though both counters grew")
+	}
+	if got.Total != 1400 {
+		t.Fatalf("total = %d, want 1400 (baseline 1000 + 400 new)", got.Total)
+	}
+	// 40% of 1000 = 400, plus the 300 actually uploaded.
+	if got.Up != 700 {
+		t.Fatalf("up = %d, want 700 (400 apportioned + 300 counted)", got.Up)
+	}
+	// 60% of 1000 = 600, plus the 100 actually downloaded.
+	if got.Down != 700 {
+		t.Fatalf("down = %d, want 700 (600 apportioned + 100 counted)", got.Down)
+	}
+}
+
+// TestBandwidthNoCalibrationSplitIsExact covers the common case: with no
+// calibration there is nothing to estimate, so the breakdown is the raw
+// per-direction counters rather than an apportioned guess.
+func TestBandwidthNoCalibrationSplitIsExact(t *testing.T) {
+	got, reanchored := computeBandwidthUsage(0, 0, 0, 0, 585, 654)
+	if reanchored {
+		t.Fatal("no calibration should never need an anchor")
+	}
+	if got.Up != 585 || got.Down != 654 || got.Total != 1239 {
+		t.Fatalf("got up=%d down=%d total=%d, want 585/654/1239", got.Up, got.Down, got.Total)
+	}
+}
+
+// TestBandwidthDirectionalAnchorPersists verifies the per-direction anchors make
+// it to storage. If only the combined anchor were saved, every restart would
+// re-apportion the baseline from whatever ratio the counters happened to have,
+// and the breakdown would visibly drift.
+func TestBandwidthDirectionalAnchorPersists(t *testing.T) {
+	h := newBillingTestHub(t)
+	const nodeID = "node-split"
+
+	h.nodeSettings[nodeID] = &model.NodeSettings{
+		NodeID:        nodeID,
+		BandwidthUsed: 1000,
+	}
+	if err := h.storage.SaveNodeSettings(h.nodeSettings[nodeID]); err != nil {
+		t.Fatal(err)
+	}
+
+	// First report anchors lazily at 200↑/800↓.
+	h.IngestReport(&model.NodeReport{
+		NodeID:  nodeID,
+		Network: model.NetworkInfo{BytesSent: 200, BytesRecv: 800},
+	}, "203.0.113.11")
+
+	ns, err := h.storage.GetNodeSettings(nodeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ns.BandwidthBaseCounter != 1000 || ns.BandwidthBaseCounterUp != 200 || ns.BandwidthBaseCounterDown != 800 {
+		t.Fatalf("anchors not persisted per direction: combined=%d up=%d down=%d",
+			ns.BandwidthBaseCounter, ns.BandwidthBaseCounterUp, ns.BandwidthBaseCounterDown)
+	}
+
+	// Second report: +100↑ only. The baseline splits 20/80 from the anchor.
+	h.IngestReport(&model.NodeReport{
+		NodeID:  nodeID,
+		Network: model.NetworkInfo{BytesSent: 300, BytesRecv: 800},
+	}, "203.0.113.11")
+
+	h.mu.RLock()
+	st := h.nodeStates[nodeID]
+	h.mu.RUnlock()
+
+	if st.Billing.BandwidthUsed != 1100 {
+		t.Fatalf("total = %d, want 1100", st.Billing.BandwidthUsed)
+	}
+	if st.Billing.BandwidthUsedUp != 300 {
+		t.Fatalf("up = %d, want 300 (200 apportioned + 100 counted)", st.Billing.BandwidthUsedUp)
+	}
+	if st.Billing.BandwidthUsedDown != 800 {
+		t.Fatalf("down = %d, want 800 (800 apportioned + 0 counted)", st.Billing.BandwidthUsedDown)
+	}
+	if st.Billing.BandwidthUsedUp+st.Billing.BandwidthUsedDown != st.Billing.BandwidthUsed {
+		t.Fatal("published breakdown does not sum to published total")
+	}
+}
