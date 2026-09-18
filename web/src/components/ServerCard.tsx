@@ -21,6 +21,7 @@ import { agentVersionOf } from "../utils/agentVersion";
 import { usedTrafficSplit } from "../utils/traffic";
 import { OsIcon } from "./OsIcon";
 import { AgentVersionMark } from "./AgentVersionMark";
+import { PingTracker } from "./PingTracker";
 import { cn } from "../lib/utils";
 import { NumberTicker } from "./ui/NumberTicker";
 import { BorderBeam } from "./ui/BorderBeam";
@@ -33,8 +34,6 @@ interface ServerCardProps {
   latestAgentVersion?: string;
 }
 
-
-
 const getCycleLabel = (cycle?: string) => {
   switch (cycle) {
     case "quarter": return "季";
@@ -46,14 +45,6 @@ const getCycleLabel = (cycle?: string) => {
     default: return "月";
   }
 };
-
-const WAVE_PATTERNS = [
-  [40, 65, 90, 100, 75, 90, 100, 70, 55, 40],
-  [55, 85, 100, 70, 60, 95, 80, 100, 65, 45],
-  [45, 70, 80, 100, 85, 65, 95, 80, 60, 40],
-  [60, 90, 75, 85, 100, 90, 70, 85, 60, 50],
-  [50, 75, 95, 80, 65, 100, 85, 75, 90, 45],
-];
 
 export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion }: ServerCardProps) {
   const divRef = useRef<HTMLDivElement>(null);
@@ -128,39 +119,8 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
   // target, so there is no time series here to draw.
   const pings = node.pings && node.pings.length > 0 ? node.pings : [];
 
-  // The agent only writes `latency_ms` on a successful probe, so a target that
-  // has never answered sits at 0 forever. Averaging those in drags latency down
-  // and pushes loss up; they get their own tick instead.
-  const reachable = useMemo(() => pings.filter((p) => p.latency_ms > 0), [pings]);
-
-  const avgLatency = reachable.length > 0
-    ? reachable.reduce((sum, p) => sum + p.latency_ms, 0) / reachable.length
-    : null;
-  const avgLoss = reachable.length > 0
-    ? reachable.reduce((sum, p) => sum + p.packet_loss, 0) / reachable.length
-    : null;
-
-  const latencyQuality = useMemo(() => {
-    if (!node.is_online || avgLatency === null) {
-      return { label: "离线", color: "text-zinc-500", dot: "bg-zinc-500", badge: "bg-zinc-500/10 border-zinc-500/20 text-zinc-500" };
-    }
-    if (avgLatency < 50) {
-      return { label: "极速", color: "text-emerald-500 dark:text-emerald-400", dot: "bg-emerald-500", badge: "bg-emerald-500/10 border-emerald-500/25 text-emerald-600 dark:text-emerald-400" };
-    }
-    if (avgLatency < 100) {
-      return { label: "优良", color: "text-teal-500 dark:text-teal-400", dot: "bg-teal-500", badge: "bg-teal-500/10 border-teal-500/25 text-teal-600 dark:text-teal-400" };
-    }
-    if (avgLatency < 180) {
-      return { label: "良好", color: "text-sky-500 dark:text-sky-400", dot: "bg-sky-500", badge: "bg-sky-500/10 border-sky-500/25 text-sky-600 dark:text-sky-400" };
-    }
-    if (avgLatency < 260) {
-      return { label: "稍慢", color: "text-amber-500 dark:text-amber-400", dot: "bg-amber-500", badge: "bg-amber-500/10 border-amber-500/25 text-amber-600 dark:text-amber-400" };
-    }
-    return { label: "拥堵", color: "text-rose-500 dark:text-rose-400", dot: "bg-rose-500", badge: "bg-rose-500/10 border-rose-500/25 text-rose-600 dark:text-rose-400" };
-  }, [node.is_online, avgLatency]);
-
   const [expandedPings, setExpandedPings] = useState(false);
-  const displayedPings = pings.length <= 5 || expandedPings ? pings : pings.slice(0, 5);
+  const displayedPings = pings.length <= 4 || expandedPings ? pings : pings.slice(0, 4);
 
 
   // Progress Bar Semantic Colors
@@ -501,54 +461,10 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
         </div>
       </div>
 
-      {/* 5. Latency & Packet Loss Section (Per-target segmented chart) */}
-      <div className={`mt-3.5 pt-3 border-t font-mono text-xs ${
+      {/* 5. Latency & Packet Loss Section (PingTracker 40-slot uptime bar) */}
+      <div className={`mt-3.5 pt-3 border-t ${
         isBlueprint ? "border-slate-100" : "border-zinc-800/60"
       }`}>
-        {/* Summary Header */}
-        <div className="grid grid-cols-2 gap-3 mb-2.5">
-          {/* Latency Summary */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5">
-              <span className={isBlueprint ? "text-slate-600 font-medium" : "text-zinc-400"}>延迟</span>
-              {node.is_online && avgLatency !== null && (
-                <span className={cn("inline-flex items-center gap-1 px-1.5 py-0.2 rounded-full text-[10px] font-sans font-medium border", latencyQuality.badge)}>
-                  <span className={cn("h-1.5 w-1.5 rounded-full", latencyQuality.dot)} />
-                  <span>{latencyQuality.label}</span>
-                </span>
-              )}
-            </div>
-            <span className={cn("font-bold font-mono", latencyQuality.color)}>
-              {node.is_online && avgLatency !== null ? `${avgLatency.toFixed(0)} ms` : "--"}
-            </span>
-          </div>
-
-          {/* Packet Loss Summary */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5">
-              <span className={isBlueprint ? "text-slate-600 font-medium" : "text-zinc-400"}>丢包</span>
-              {node.is_online && (avgLoss === 0 || avgLoss === null) && (
-                <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[10px] font-sans font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                  零丢包
-                </span>
-              )}
-              {node.is_online && avgLoss !== null && avgLoss > 0 && (
-                <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[10px] font-sans font-medium bg-rose-500/10 text-rose-500 border border-rose-500/20 animate-pulse">
-                  丢包中
-                </span>
-              )}
-            </div>
-            <span className={`font-bold font-mono ${
-              avgLoss !== null && avgLoss > 0
-                ? "text-rose-500 dark:text-rose-400"
-                : isBlueprint ? "text-slate-900" : "text-zinc-100"
-            }`}>
-              {node.is_online && avgLoss !== null ? `${avgLoss.toFixed(1)}%` : "--"}
-            </span>
-          </div>
-        </div>
-
-        {/* Dedicated Target Rows with Equalizer Spectrum Wave */}
         {pings.length === 0 ? (
           <div className={cn(
             "text-[11px] py-2 text-center rounded-lg border border-dashed font-sans",
@@ -557,143 +473,18 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
             暂未配置监测目标
           </div>
         ) : (
-          <div className="space-y-0.5">
-            {displayedPings.map((p, idx) => {
-              const isOnline = node.is_online && p.latency_ms > 0;
-              const hasLoss = node.is_online && p.packet_loss > 0;
-              const latVal = isOnline ? (p.latency_ms < 10 ? `${p.latency_ms.toFixed(1)} ms` : `${p.latency_ms.toFixed(0)} ms`) : "--";
+          <div className="space-y-2">
+            {displayedPings.map((p, idx) => (
+              <PingTracker
+                key={p.target || idx}
+                ping={p}
+                nodeIsOnline={node.is_online}
+                isBlueprint={isBlueprint}
+                nodeId={node.node_id}
+              />
+            ))}
 
-              let baseColor = "bg-emerald-500 hover:bg-emerald-400";
-              let latColor = "text-emerald-600 dark:text-emerald-400";
-              let grade = "极速 (优)";
-
-              if (!isOnline) {
-                baseColor = isBlueprint ? "bg-slate-300" : "bg-zinc-800";
-                latColor = "text-zinc-500";
-                grade = !node.is_online ? "节点离线" : "无响应";
-              } else if (p.latency_ms >= 260) {
-                baseColor = "bg-rose-500 hover:bg-rose-400";
-                latColor = "text-rose-500 dark:text-rose-400";
-                grade = "拥堵 (高延迟)";
-              } else if (p.latency_ms >= 180) {
-                baseColor = "bg-amber-400 hover:bg-amber-300";
-                latColor = "text-amber-500 dark:text-amber-400";
-                grade = "稍慢 (跨洋)";
-              } else if (p.latency_ms >= 100) {
-                baseColor = "bg-sky-400 hover:bg-sky-300";
-                latColor = "text-sky-600 dark:text-sky-400";
-                grade = "良好 (可)";
-              } else if (p.latency_ms >= 50) {
-                baseColor = "bg-teal-400 hover:bg-teal-300";
-                latColor = "text-teal-600 dark:text-teal-400";
-                grade = "平稳 (良)";
-              }
-
-              const TOTAL_SEGMENTS = 10;
-              const lossBlocks = hasLoss
-                ? Math.min(TOTAL_SEGMENTS, Math.max(1, Math.round((p.packet_loss / 100) * TOTAL_SEGMENTS)))
-                : 0;
-
-              const pattern = WAVE_PATTERNS[idx % WAVE_PATTERNS.length];
-
-              const segments = Array.from({ length: TOTAL_SEGMENTS }).map((_, sIdx) => {
-                if (!isOnline) {
-                  return {
-                    color: isBlueprint ? "bg-slate-300" : "bg-zinc-800",
-                    grade: !node.is_online ? "节点离线" : "无响应",
-                  };
-                }
-                if (hasLoss && sIdx >= TOTAL_SEGMENTS - lossBlocks) {
-                  return {
-                    color: "bg-rose-500 hover:bg-rose-400 animate-pulse",
-                    grade: `丢包 ${p.packet_loss.toFixed(1)}%`,
-                  };
-                }
-                return {
-                  color: baseColor,
-                  grade,
-                };
-              });
-
-              return (
-                <div
-                  key={p.target || idx}
-                  className={cn(
-                    "flex items-center justify-between gap-2 px-1.5 py-1 rounded-md text-xs transition-colors duration-150",
-                    isBlueprint
-                      ? "hover:bg-slate-100/70 text-slate-800"
-                      : "hover:bg-white/[0.04] text-zinc-200"
-                  )}
-                >
-                  {/* Target Identity */}
-                  <div className="flex items-center gap-1.5 min-w-[65px] max-w-[85px] sm:max-w-[105px] shrink-0">
-                    <span
-                      className={cn(
-                        "h-2 w-2 rounded-full shrink-0 shadow-2xs transition-all",
-                        hasLoss ? "ring-2 ring-rose-500/20" : isOnline ? "ring-2 ring-emerald-500/20" : ""
-                      )}
-                      style={{
-                        backgroundColor: !node.is_online
-                          ? "#71717a"
-                          : hasLoss
-                          ? "#f43f5e"
-                          : (p.color || (isOnline ? "#10b981" : "#71717a")),
-                      }}
-                    />
-                    <span className="truncate font-sans font-medium text-xs text-slate-800 dark:text-zinc-200" title={p.label}>
-                      {p.label}
-                    </span>
-                  </div>
-
-                  {/* Equalizer Spectrum Wave */}
-                  <div
-                    className="flex-1 flex items-end h-3.5 gap-[3px] px-1.5 min-w-0"
-                    title={`${p.label}: ${latVal} (${grade}) · ${hasLoss ? `丢包 ${p.packet_loss.toFixed(1)}%` : "0%丢包"}${p.jitter > 0 ? ` · 抖动 ${p.jitter.toFixed(1)}ms` : ""}`}
-                  >
-                    {segments.map((seg, sIdx) => (
-                      <div
-                        key={sIdx}
-                        className={cn(
-                          "flex-1 rounded-t-[1.5px] rounded-b-[0.5px] cursor-pointer transition-all duration-150 ease-out origin-bottom hover:scale-y-125 hover:brightness-125",
-                          seg.color
-                        )}
-                        style={{
-                          height: isOnline ? `${pattern[sIdx]}%` : "20%",
-                        }}
-                        title={`${p.label}: ${latVal} (${seg.grade}) · ${hasLoss ? `丢包 ${p.packet_loss.toFixed(1)}%` : "0%丢包"}`}
-                      />
-                    ))}
-                  </div>
-
-                  {/* Latency & De-cluttered Loss Indicator */}
-                  <div className="flex items-center justify-end gap-2 shrink-0 font-mono">
-                    <span className={cn("font-bold text-xs min-w-[44px] text-right", latColor)}>
-                      {latVal}
-                    </span>
-
-                    <div className="min-w-[42px] text-right">
-                      {!isOnline ? (
-                        <span className="text-[10px] text-zinc-500">--</span>
-                      ) : hasLoss ? (
-                        <span className="inline-flex items-center gap-0.5 text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-full border bg-rose-500/15 border-rose-500/30 text-rose-500 animate-pulse">
-                          <span className="h-1 w-1 rounded-full bg-rose-500 shrink-0" />
-                          失{p.packet_loss.toFixed(0)}%
-                        </span>
-                      ) : (
-                        <span className={cn(
-                          "text-[10px] font-mono font-medium opacity-80",
-                          isBlueprint ? "text-emerald-700" : "text-emerald-400"
-                        )}>
-                          0%
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-
-            {pings.length > 5 && (
+            {pings.length > 4 && (
               <button
                 type="button"
                 onClick={(e) => {
@@ -707,7 +498,7 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
                     : "text-indigo-400 hover:text-indigo-300 hover:bg-white/[0.04]"
                 )}
               >
-                {expandedPings ? "收起监测目标 ▴" : `展开其余 ${pings.length - 5} 个监测目标 ▾`}
+                {expandedPings ? "收起监测目标 ▴" : `展开其余 ${pings.length - 4} 个监测目标 ▾`}
               </button>
             )}
           </div>
