@@ -668,21 +668,25 @@ func (h *Hub) IngestReport(report *model.NodeReport, clientIP string) {
 	// 已用流量 follows the calibration model: the operator's number is a
 	// baseline, not a final value, and real traffic keeps accumulating on top of
 	// it. A correction therefore never freezes the counter.
-	live := report.Network.BytesSent + report.Network.BytesRecv
-	billing.BandwidthLive = live
-	if hasSettings && settings != nil && settings.BandwidthUsed > 0 {
-		anchor := settings.BandwidthBaseCounter
-		if anchor == 0 || live < anchor {
-			// First calibration, or the interface counter went backwards (OS
-			// restart, NIC rebuilt). Move the anchor to the current reading; the
-			// already-accumulated part survives on the baseline.
-			anchor = live
-			h.persistBandwidthAnchor(report.NodeID, anchor)
-		}
-		billing.BandwidthUsed = settings.BandwidthUsed + (live - anchor)
-	} else {
-		billing.BandwidthUsed = live
+	var baseline, anchor, anchorUp, anchorDown uint64
+	if hasSettings && settings != nil {
+		baseline = settings.BandwidthUsed
+		anchor = settings.BandwidthBaseCounter
+		anchorUp = settings.BandwidthBaseCounterUp
+		anchorDown = settings.BandwidthBaseCounterDown
 	}
+	usage, reanchored := computeBandwidthUsage(
+		baseline, anchor, anchorUp, anchorDown,
+		report.Network.BytesSent, report.Network.BytesRecv,
+	)
+	if reanchored {
+		h.persistBandwidthAnchor(report.NodeID,
+			usage.Live, report.Network.BytesSent, report.Network.BytesRecv)
+	}
+	billing.BandwidthUsed = usage.Total
+	billing.BandwidthUsedUp = usage.Up
+	billing.BandwidthUsedDown = usage.Down
+	billing.BandwidthLive = usage.Live
 
 	// Calculate Billing Details: PricePerMonth, RemainingDays, RemainingValue
 	h.ratesMu.RLock()
@@ -764,23 +768,138 @@ func (h *Hub) IngestReport(report *model.NodeReport, clientIP string) {
 	})
 }
 
-// persistBandwidthAnchor records the interface counter that a calibration
+// persistBandwidthAnchor records the interface counters that a calibration
 // baseline was taken at. It updates the in-memory settings too: without that,
 // the next report would find BandwidthBaseCounter == 0 again, re-anchor to its
 // own live value, and freeze 已用流量 exactly the way the old code did.
 //
 // A single node's reports are serialized by its WebSocket read loop, so the
 // map entry this touches is not being read concurrently for the same node.
-func (h *Hub) persistBandwidthAnchor(nodeID string, anchor uint64) {
+func (h *Hub) persistBandwidthAnchor(nodeID string, anchor, anchorUp, anchorDown uint64) {
 	h.settingsMu.Lock()
 	if s, ok := h.nodeSettings[nodeID]; ok {
 		s.BandwidthBaseCounter = anchor
+		s.BandwidthBaseCounterUp = anchorUp
+		s.BandwidthBaseCounterDown = anchorDown
 	}
 	h.settingsMu.Unlock()
 
-	if err := h.storage.UpdateBandwidthBaseCounter(nodeID, anchor); err != nil {
+	if err := h.storage.UpdateBandwidthBaseCounter(nodeID, anchor, anchorUp, anchorDown); err != nil {
 		log.Printf("[Hub] Failed to persist bandwidth anchor for %s: %v", nodeID, err)
 	}
+}
+
+// bandwidthUsage is the effective 已用流量 together with its directional
+// breakdown. Up + Down == Total always holds, so the 内訳 on the dashboard can
+// never contradict the number the quota is measured against.
+type bandwidthUsage struct {
+	Total uint64
+	Up    uint64
+	Down  uint64
+	Live  uint64
+	// Anchor / AnchorUp / AnchorDown are the anchors this calculation actually
+	// used. When the second return value is true these are what must be
+	// persisted — the caller must not substitute the live counters, because the
+	// legacy-row recovery keeps the original combined anchor and only fills in
+	// its split. Moving that anchor forward would discard everything counted
+	// since the calibration.
+	Anchor     uint64
+	AnchorUp   uint64
+	AnchorDown uint64
+}
+
+// computeBandwidthUsage applies the calibration model: the operator's baseline
+// is a starting point, and traffic counted since the anchor accumulates on top.
+// The second return value reports whether the anchor had to move, which the
+// caller must persist.
+//
+// The total is exactly what the combined-only version produced
+// (baseline + live - anchor); the split is additional information, never a
+// different answer.
+func computeBandwidthUsage(baseline, anchor, anchorUp, anchorDown, liveUp, liveDown uint64) (bandwidthUsage, bool) {
+	live := liveUp + liveDown
+	usage := bandwidthUsage{Live: live}
+
+	if baseline == 0 {
+		// No calibration in play, so the interface counters *are* the answer —
+		// and they are already per-direction, no estimation involved.
+		usage.Total, usage.Up, usage.Down = live, liveUp, liveDown
+		return usage, false
+	}
+	defer func() {
+		usage.Anchor, usage.AnchorUp, usage.AnchorDown = anchor, anchorUp, anchorDown
+	}()
+
+	reanchor := false
+	switch {
+	case anchor == 0 || live < anchor:
+		// Never anchored, or the counters restarted (reboot, NIC rebuilt). The
+		// already-accumulated part survives on the baseline.
+		anchor, anchorUp, anchorDown = live, liveUp, liveDown
+		reanchor = true
+
+	case anchorUp+anchorDown != anchor:
+		// The halves do not add up to the combined anchor, which is what a row
+		// written before the split existed looks like (both halves zero). Taking
+		// them at face value would count every byte from before the calibration
+		// as new traffic, so a split is recovered from the current ratio instead
+		// and persisted — the same evidence used to apportion the baseline.
+		anchorUp, anchorDown = apportion(anchor, liveUp, live)
+		reanchor = true
+
+	case liveUp < anchorUp || liveDown < anchorDown:
+		// One direction alone went backwards while the combined total did not.
+		anchor, anchorUp, anchorDown = live, liveUp, liveDown
+		reanchor = true
+	}
+
+	// Rounding in the recovery above can leave a half a byte past its live
+	// counter; clamping keeps the subtractions below from wrapping.
+	if anchorUp > liveUp {
+		anchorUp = liveUp
+	}
+	if anchorDown > liveDown {
+		anchorDown = liveDown
+	}
+
+	// The total is the combined-only formula, unchanged: the split must not be
+	// able to alter the number the quota is measured against.
+	usage.Total = baseline + (live - anchor)
+
+	// The baseline arrived from a provider panel as one combined figure, so its
+	// own split is unknowable and gets apportioned by the counter ratio at the
+	// anchor — the closest thing to evidence available. Traffic since the anchor
+	// is attributed to the direction that actually carried it. Down is derived by
+	// subtraction so the two halves sum to Total by construction.
+	baseUp, _ := apportion(baseline, anchorUp, anchor)
+	up := baseUp + (liveUp - anchorUp)
+	if up > usage.Total {
+		up = usage.Total
+	}
+	usage.Up = up
+	usage.Down = usage.Total - up
+	return usage, reanchor
+}
+
+// apportion splits total in the ratio num/den, giving the remainder to the
+// second part so the two always sum back to total exactly. A zero denominator
+// carries no ratio to work from, so the split is even.
+//
+// The ratio is computed in float64: at petabyte scale that costs well under a
+// byte of precision, and this is an estimate of an unknowable split to begin
+// with. The exactness that matters — the parts summing to the total — comes
+// from deriving the second part by subtraction rather than from a second
+// multiply.
+func apportion(total, num, den uint64) (uint64, uint64) {
+	if den == 0 {
+		half := total / 2
+		return half, total - half
+	}
+	first := uint64(float64(total) * (float64(num) / float64(den)))
+	if first > total {
+		first = total
+	}
+	return first, total - first
 }
 
 func (h *Hub) calculateBilling(billing *model.BillingInfo, rates map[string]float64) {

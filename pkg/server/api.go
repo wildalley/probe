@@ -921,20 +921,27 @@ func (s *Server) handleSaveNodeSettings(c *gin.Context) {
 	}
 	ns.NodeID = nodeID
 
-	// The calibration baseline is anchored to the node's live interface counter
+	// The calibration baseline is anchored to the node's live interface counters
 	// at save time, so real traffic accumulates on top of it instead of the
 	// baseline freezing the display. A node that has never reported anchors to 0
-	// and the hub anchors it lazily on the first report it sees.
+	// and the hub anchors it lazily on the first report it sees. All three
+	// anchors move together — the per-direction pair is what apportions the
+	// baseline across ↑/↓, so a stale pair would skew the breakdown.
 	state, hasState := s.hub.GetNodeState(nodeID)
-	liveCounter := uint64(0)
+	var liveUp, liveDown uint64
 	if hasState {
-		liveCounter = state.Network.BytesSent + state.Network.BytesRecv
+		liveUp, liveDown = state.Network.BytesSent, state.Network.BytesRecv
 	}
+	liveCounter := liveUp + liveDown
 	if ns.BandwidthUsed > 0 {
 		ns.BandwidthBaseCounter = liveCounter
+		ns.BandwidthBaseCounterUp = liveUp
+		ns.BandwidthBaseCounterDown = liveDown
 	} else {
 		// 0 means "cancel calibration": no baseline, so no anchor to remember.
 		ns.BandwidthBaseCounter = 0
+		ns.BandwidthBaseCounterUp = 0
+		ns.BandwidthBaseCounterDown = 0
 	}
 
 	if err := s.storage.SaveNodeSettings(&ns); err != nil {
@@ -974,16 +981,20 @@ func (s *Server) handleSaveNodeSettings(c *gin.Context) {
 			state.Billing.BandwidthQuota = ns.BandwidthQuota
 		}
 
-		// Mirror the accumulation model so the immediate broadcast matches what
-		// the next real report will compute: at t=save, live == anchor, so the
-		// effective value is exactly the baseline (or the live counter when the
-		// calibration was cleared).
-		state.Billing.BandwidthLive = liveCounter
-		if ns.BandwidthUsed > 0 {
-			state.Billing.BandwidthUsed = ns.BandwidthUsed
-		} else {
-			state.Billing.BandwidthUsed = liveCounter
-		}
+		// The immediate broadcast goes through the very same function the ingest
+		// path uses, rather than re-deriving the numbers here. At t=save the
+		// counters equal the anchors just written, so it yields exactly the
+		// baseline (or the raw counters when the calibration was cleared) — and it
+		// cannot drift away from the real computation later.
+		usage, _ := computeBandwidthUsage(
+			ns.BandwidthUsed, ns.BandwidthBaseCounter,
+			ns.BandwidthBaseCounterUp, ns.BandwidthBaseCounterDown,
+			liveUp, liveDown,
+		)
+		state.Billing.BandwidthUsed = usage.Total
+		state.Billing.BandwidthUsedUp = usage.Up
+		state.Billing.BandwidthUsedDown = usage.Down
+		state.Billing.BandwidthLive = usage.Live
 
 		// Apply the operator's IP corrections through the same precedence rule
 		// the ingest path uses, so a private or bogus value is dropped rather

@@ -45,13 +45,28 @@ type BillingInfo struct {
 	// BandwidthUsed is the effective consumed bytes: the operator's calibration
 	// baseline plus everything the agent has counted since it was anchored.
 	BandwidthUsed uint64 `json:"bandwidth_used"`
+	// BandwidthUsedUp / BandwidthUsedDown break BandwidthUsed down by direction
+	// and always sum to it exactly, so the displayed 内訳 can never disagree
+	// with the total the quota is measured against. The quota itself stays
+	// combined: these are for display, not for separate limits.
+	//
+	// The calibration baseline is a single combined number, so its share of
+	// each direction is apportioned by the up/down ratio of the interface
+	// counters at the moment the baseline was anchored. Everything counted
+	// since then is attributed to the direction that actually carried it.
+	BandwidthUsedUp   uint64 `json:"bandwidth_used_up"`
+	BandwidthUsedDown uint64 `json:"bandwidth_used_down"`
 	// BandwidthLive is the raw interface counter (bytes since boot) behind
 	// BandwidthUsed. Exposed so the UI can offer "sync to live" and "clear
 	// calibration" without re-deriving it from the network block.
 	BandwidthLive uint64 `json:"bandwidth_live"`
-	Provider      string `json:"provider"` // e.g. "Zillion Network Inc. · AS54801"
-	AutoRenewal   bool   `json:"auto_renewal"`
-	Note          string `json:"note,omitempty"` // e.g. "续费折扣码: PROMO60"
+	// BandwidthLiveUp / BandwidthLiveDown are the same raw counter split by
+	// direction, summing to BandwidthLive.
+	BandwidthLiveUp   uint64 `json:"bandwidth_live_up"`
+	BandwidthLiveDown uint64 `json:"bandwidth_live_down"`
+	Provider          string `json:"provider"` // e.g. "Zillion Network Inc. · AS54801"
+	AutoRenewal       bool   `json:"auto_renewal"`
+	Note              string `json:"note,omitempty"` // e.g. "续费折扣码: PROMO60"
 }
 
 // PingTargetConfig defines a ping target for network quality detection.
@@ -98,9 +113,16 @@ type NodeSettings struct {
 	// first counter it sees, so a calibration saved while the node was offline
 	// still starts counting from the right place.
 	BandwidthBaseCounter uint64 `json:"bandwidth_base_counter"`
-	AutoRenewal          bool   `json:"auto_renewal"`
-	Note                 string `json:"note,omitempty"`
-	UpdatedAt            int64  `json:"updated_at"`
+	// BandwidthBaseCounterUp / ...Down are the same anchor split by direction,
+	// needed to attribute post-anchor traffic to the direction that carried it.
+	// They sum to BandwidthBaseCounter; when they do not (a row written before
+	// this split existed), the server recovers a split from the current up/down
+	// ratio once and persists it, so the breakdown settles instead of drifting.
+	BandwidthBaseCounterUp   uint64 `json:"bandwidth_base_counter_up"`
+	BandwidthBaseCounterDown uint64 `json:"bandwidth_base_counter_down"`
+	AutoRenewal              bool   `json:"auto_renewal"`
+	Note                     string `json:"note,omitempty"`
+	UpdatedAt                int64  `json:"updated_at"`
 }
 
 // SystemSettings contains exchange rates and currency configuration.
