@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { motion } from "framer-motion";
 import { ArrowDown, ArrowUp, Activity, Clock, Server, Star } from "lucide-react";
-import { NodeState } from "../types";
+import { NodeState, ThemeMode } from "../types";
 import { formatBytes, splitRate, getSemanticColor } from "../utils/format";
 import { getRegionFlag } from "../utils/flags";
 import { agentVersionOf } from "../utils/agentVersion";
@@ -13,7 +13,7 @@ import { NumberTicker } from "./ui/NumberTicker";
 interface ServerTableProps {
   nodes: NodeState[];
   onSelect: (node: NodeState) => void;
-  theme?: "blueprint" | "dark";
+  theme?: ThemeMode;
   /** 服务端会下发的 Agent 版本，用作比较基准；缺省则不做版本判断。 */
   latestAgentVersion?: string;
 }
@@ -46,28 +46,66 @@ const RateCell: React.FC<{ bytesPerSec: number; className?: string }> = ({ bytes
 };
 
 /** Percentage + bar cell, shared by the CPU / RAM / DISK columns. */
-const MetricCell: React.FC<{ percent: number; isBlueprint: boolean }> = ({ percent, isBlueprint }) => {
+const MetricCell: React.FC<{ percent: number; isBlueprint: boolean; isBtop?: boolean }> = ({ percent, isBlueprint, isBtop }) => {
   const colors = getSemanticColor(percent);
+  const safeVal = Math.min(100, Math.max(0, percent));
   return (
     <div className="flex items-center gap-2">
       <NumberTicker
         value={percent}
         decimals={1}
         suffix="%"
-        className={cn("w-12 font-semibold", colors.text)}
+        className={cn(
+          "w-12 font-semibold font-mono",
+          isBtop
+            ? percent >= 85
+              ? "text-rose-400"
+              : percent >= 70
+              ? "text-amber-400"
+              : "text-cyan-400"
+            : colors.text
+        )}
       />
-      <div className={cn("h-1.5 w-16 overflow-hidden rounded-full", isBlueprint ? "bg-slate-200" : "bg-zinc-800")}>
+      {isBtop ? (
+        <div className="flex items-center gap-[2px] w-20 py-0.5 select-none" title={`${safeVal.toFixed(1)}%`}>
+          {Array.from({ length: 10 }).map((_, i) => {
+            const active = safeVal >= (i + 1) * 10 - 5;
+            const blockColor =
+              i >= 8
+                ? "bg-rose-500 shadow-[0_0_4px_rgba(244,63,94,0.7)]"
+                : i >= 6
+                ? "bg-amber-400 shadow-[0_0_4px_rgba(251,191,36,0.6)]"
+                : "bg-cyan-400 shadow-[0_0_4px_rgba(0,240,255,0.6)]";
+            return (
+              <div
+                key={i}
+                className={`h-2 flex-1 rounded-none transition-all duration-150 ${
+                  active ? blockColor : "bg-[#0d1424] border border-[#1b253b]/80"
+                }`}
+              />
+            );
+          })}
+        </div>
+      ) : (
         <div
-          className={cn("h-full rounded-full transition-all duration-500", colors.bar)}
-          style={{ width: `${Math.min(100, Math.max(0, percent))}%` }}
-        />
-      </div>
+          className={cn(
+            "h-1.5 w-16 overflow-hidden rounded-full",
+            isBlueprint ? "bg-slate-200" : "bg-zinc-800"
+          )}
+        >
+          <div
+            className={cn("h-full rounded-full transition-all duration-500", colors.bar)}
+            style={{ width: `${safeVal}%` }}
+          />
+        </div>
+      )}
     </div>
   );
 };
 
 export const ServerTable: React.FC<ServerTableProps> = ({ nodes, onSelect, theme = "dark", latestAgentVersion }) => {
   const isBlueprint = theme === "blueprint";
+  const isBtop = theme === "btop";
   const [, setStarTrigger] = useState(0);
 
   const toggleStar = (e: React.MouseEvent, nodeId: string) => {
@@ -85,6 +123,8 @@ export const ServerTable: React.FC<ServerTableProps> = ({ nodes, onSelect, theme
         "overflow-x-auto rounded-xl border transition-colors",
         isBlueprint
           ? "border-slate-200/90 bg-white shadow-sm"
+          : isBtop
+          ? "border-[#1b253b] bg-[#070b14]/90 shadow-[0_4px_20px_rgba(0,0,0,0.5)] font-mono"
           : "border-zinc-800 bg-zinc-900/60 backdrop-blur-md"
       )}
     >
@@ -95,24 +135,26 @@ export const ServerTable: React.FC<ServerTableProps> = ({ nodes, onSelect, theme
             "border-b text-xs",
             isBlueprint
               ? "border-slate-200 bg-slate-50/90 font-semibold text-slate-700"
+              : isBtop
+              ? "border-[#1b253b] bg-[#0b101c] text-cyan-400 font-bold"
               : "border-zinc-800 bg-zinc-950/60 text-zinc-400"
           )}
         >
           <tr>
-            <th className="px-4 py-3">STATUS</th>
-            <th className="px-4 py-3">NODE / REGION</th>
-            <th className="px-4 py-3">OS / KERNEL</th>
-            <th className="px-4 py-3">PRICING</th>
-            <th className="px-4 py-3">CPU</th>
-            <th className="px-4 py-3">RAM</th>
-            <th className="px-4 py-3">DISK</th>
-            <th className="px-4 py-3">DOWN / UP RATE</th>
-            <th className="px-4 py-3">TOTAL TRANSFER</th>
-            <th className="px-4 py-3">TCP</th>
-            <th className="px-4 py-3">UPTIME</th>
+            <th className="px-4 py-3">{isBtop ? "[ STATUS ]" : "STATUS"}</th>
+            <th className="px-4 py-3">{isBtop ? "[ NODE / REGION ]" : "NODE / REGION"}</th>
+            <th className="px-4 py-3">{isBtop ? "[ OS / KERNEL ]" : "OS / KERNEL"}</th>
+            <th className="px-4 py-3">{isBtop ? "[ PRICING ]" : "PRICING"}</th>
+            <th className="px-4 py-3">{isBtop ? "[ CPU ]" : "CPU"}</th>
+            <th className="px-4 py-3">{isBtop ? "[ RAM ]" : "RAM"}</th>
+            <th className="px-4 py-3">{isBtop ? "[ DISK ]" : "DISK"}</th>
+            <th className="px-4 py-3">{isBtop ? "[ DOWN / UP ]" : "DOWN / UP RATE"}</th>
+            <th className="px-4 py-3">{isBtop ? "[ TRANSFER ]" : "TOTAL TRANSFER"}</th>
+            <th className="px-4 py-3">{isBtop ? "[ TCP ]" : "TCP"}</th>
+            <th className="px-4 py-3">{isBtop ? "[ UPTIME ]" : "UPTIME"}</th>
           </tr>
         </thead>
-        <tbody className={cn("divide-y", isBlueprint ? "divide-slate-100" : "divide-zinc-800/60")}>
+        <tbody className={cn("divide-y", isBlueprint ? "divide-slate-100" : isBtop ? "divide-[#1b253b]/50" : "divide-zinc-800/60")}>
           {nodes.map((node, idx) => {
             let isStarred = false;
             try {
@@ -129,7 +171,7 @@ export const ServerTable: React.FC<ServerTableProps> = ({ nodes, onSelect, theme
                 onClick={() => onSelect(node)}
                 className={cn(
                   "cursor-pointer transition-colors",
-                  isBlueprint ? "hover:bg-slate-50/80" : "hover:bg-zinc-800/40"
+                  isBlueprint ? "hover:bg-slate-50/80" : isBtop ? "hover:bg-[#121927]" : "hover:bg-zinc-800/40"
                 )}
               >
                 {/* Status Beacon & Star */}
@@ -226,23 +268,23 @@ export const ServerTable: React.FC<ServerTableProps> = ({ nodes, onSelect, theme
                 </td>
 
                 <td className="whitespace-nowrap px-4 py-3">
-                  <MetricCell percent={node.cpu} isBlueprint={isBlueprint} />
+                  <MetricCell percent={node.cpu} isBlueprint={isBlueprint} isBtop={isBtop} />
                 </td>
                 <td className="whitespace-nowrap px-4 py-3">
-                  <MetricCell percent={node.mem} isBlueprint={isBlueprint} />
+                  <MetricCell percent={node.mem} isBlueprint={isBlueprint} isBtop={isBtop} />
                 </td>
                 <td className="whitespace-nowrap px-4 py-3">
-                  <MetricCell percent={node.disk} isBlueprint={isBlueprint} />
+                  <MetricCell percent={node.disk} isBlueprint={isBlueprint} isBtop={isBtop} />
                 </td>
 
                 {/* Ingress / Egress Rates with Icons */}
                 <td className="whitespace-nowrap px-4 py-3">
                   <div className="flex flex-col gap-0.5">
-                    <div className="flex items-center gap-1 text-cyan-500">
+                    <div className={cn("flex items-center gap-1", isBtop ? "text-cyan-400" : "text-cyan-500")}>
                       <ArrowDown className="h-3 w-3 shrink-0" />
                       <RateCell bytesPerSec={node.rate_down} />
                     </div>
-                    <div className="flex items-center gap-1 text-indigo-500">
+                    <div className={cn("flex items-center gap-1", isBtop ? "text-pink-400" : "text-indigo-500")}>
                       <ArrowUp className="h-3 w-3 shrink-0" />
                       <RateCell bytesPerSec={node.rate_up} />
                     </div>

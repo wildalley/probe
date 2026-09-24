@@ -4,11 +4,11 @@
   <img src="https://img.shields.io/badge/Agent%20RAM-5~10MB-emerald?style=flat-square&logo=go" alt="Agent RAM" />
   <img src="https://img.shields.io/badge/Agent%20CPU-~0%25-blue?style=flat-square&logo=linux" alt="Agent CPU" />
   <img src="https://img.shields.io/badge/UI%20Engine-uPlot%20%2B%20React%2019-violet?style=flat-square&logo=react" alt="Frontend" />
-  <img src="https://img.shields.io/badge/Themes-Cyber%20Dark%20%7C%20Blueprint-indigo?style=flat-square" alt="Themes" />
+  <img src="https://img.shields.io/badge/Themes-Cyber%20Dark%20%7C%20btop%2B%2B%20%7C%20Blueprint-indigo?style=flat-square" alt="Themes" />
   <img src="https://img.shields.io/badge/License-MIT-gray?style=flat-square" alt="License" />
 </p>
 
-> **全端深度响应式适配 · 极简轻量 Agent · 纯内存事件分发 Hub · 双主题赛博/蓝图看板 · 财务汇率与网络质量图表**  
+> **全端深度响应式适配 · 极简轻量 Agent · 纯内存事件分发 Hub · 三套主题赛博/btop++/蓝图看板 · 财务汇率与网络质量图表**  
 > 一款专为极客、运维与 VPS 玩家打造的高性能、低开销自研服务器探针系统。
 
 ---
@@ -31,7 +31,10 @@
 
 ### 3. 极客视觉与交互系统 (Web Dashboard)
 - **现代前端技术栈与移动端深度适配**：基于 React 19、Tailwind CSS 4 与 HeroUI 构建。重构了移动端全屏响应式体验：导航顶栏自适应紧凑折叠与抽屉菜单彻底杜绝内容遮挡，地区支持横向平滑滚动筛选；管理后台全面采用移动端全屏抽屉排版防溢出，详情页主机切换下拉采用居中防越界浮层与毛玻璃遮罩。
-- **双主题支持**：**赛博暗黑（Cyber Dark）** 与 **蓝图工程（Geek Blueprint）**，全面优化强对比度与视觉层次，一键平滑切换。
+- **三套独立完整主题与即时切换**：全面适配不同场景视觉偏好，支持未登录界面与看板内一键平滑轮换并持久化存储：
+  - **赛博暗黑（Cyber Dark）**：经典科技暗黑，高对比度与网格微光纹理；
+  - **极客终端（btop++ Terminal）**：深度还原经典终端工具 btop++ 拟真体验。全界面纯直角硬朗形态（`rounded-none`）、全局等宽字符网格对齐（`font-mono`）、18 格与 10 格离散分段式霓虹发光量表（Discrete Segmented Meters）、网络吞吐实时 ASCII/Unicode 动态跳动火花线（` ▂▃▄▅▆▇█`）、Unicode 字符画窗口框（`┌─ ... ─┐` / `└─ ... ─┘`）与拟物终端登录控制台；
+  - **蓝图工程（Geek Blueprint）**：清爽高对比度浅色蓝图网格风格。
 - **uPlot 毫秒级时序图**：体积仅 30KB，微秒级渲染上万点数据；全功能 **Hover 垂直标尺 + 毛玻璃浮动指示气泡**，实时展示精确时间与数值。
 - **主机卡片双列网络遥测图表**：双列高密度分段动态柱状图，实时呈现延迟与丢包分布，支持 Hover 悬浮浮动气泡（精确至 0.1ms 与网络评级）及底部独立探测微型胶囊。
 - **网络质量监测系统 (Network Probes)**：支持 ICMP / TCP / HTTP 探测（Google、电信、YouTube、ChatGPT、Claude 等），按目标展示实时延迟，并用最近 100 次探测的滑动窗口计算丢包率。
@@ -58,6 +61,18 @@
 ---
 
 ## 📝 开发记录与后续计划
+
+### 2026-09-24 · btop++ 完整极客终端主题重构
+
+- **全新终端主题支持**：前端引入 `ThemeMode = "dark" | "btop" | "blueprint"` 三主题架构，主题状态跨会话持久化存储，支持登录页与看板内随时即时切换。
+- **登录控制台拟真化 (`LoginScreen`)**：
+  - 新增免登录右上角即时主题切换器，未登录访客也能无缝体验三套主题。
+  - `btop++` 模式重塑为 CRT 拟物终端窗口（终端三色点控制、`[ USERNAME ] ❯` / `[ PASSWORD ] ❯` 命令行提示符、荧光高亮按钮 `[ ↵ EXECUTE LOGIN (ENTER) ]` 与状态行）。
+- **界面架构与视觉范式深度改造**：
+  - **排版与形态**：全局强制注入等宽字体（`font-mono`），卡片与弹窗采用纯直角硬朗形态（`rounded-none`），全面引入 Unicode 字符画窗口框（`┌─ ... ─┐`、`└─ ... ─┘`）。
+  - **离散分段式霓虹量表**：彻底替换现代平滑进度条为 18 格与 10 格分段式霓虹发光仪表条（青蓝 $\rightarrow$ 翠绿 $\rightarrow$ 橙黄 $\rightarrow$ 霓虹粉红）。
+  - **实时火花线**：上行与下行网速集成 6 阶动态微型 ASCII/Unicode 柱状图（` ▂▃▄▅▆▇█`）。
+  - **终端方括号风格**：主机标签、地区筛选芯片（`[ ALL ]`、`[ HK ]`）、详情页统计面板与弹窗全面 terminal-bracket 字符化。
 
 ### 2026-09-18 · 已用流量上/下行拆分（后端阶段）
 
@@ -101,7 +116,7 @@
   ┌────────────────────────────────────────────────────────┐
   │    Web Dashboard (React 19 + Tailwind 4 + HeroUI)     │
   │                                                        │
-  │  • 赛博暗黑 / 蓝图工程双主题，高对比度与网格微光纹理       │
+  │  • 赛博暗黑 / btop++ 终端 / 蓝图工程三套主题，即时平滑切换 │
   │  • uPlot 极速时序图 (带垂直光标指示与毛玻璃 Hover Tooltip)│
   │  • 网站延迟丢包质量监测 (Google / Cloudflare / 电信等)  │
   │  • 财务汇率月度总览、剩余价值折算、流量配额进度计算       │

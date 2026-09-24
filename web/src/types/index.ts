@@ -1,3 +1,5 @@
+export type ThemeMode = "dark" | "btop" | "blueprint";
+
 export interface PingStat {
   id?: number;
   target: string;

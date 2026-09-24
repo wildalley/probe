@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo, useRef } from "react";
-import { NodeState, SystemSummary, WSEvent } from "./types";
+import { NodeState, SystemSummary, ThemeMode, WSEvent } from "./types";
 import { Header } from "./components/Header";
 import { ServerCard } from "./components/ServerCard";
 import { ServerTable } from "./components/ServerTable";
@@ -16,28 +16,31 @@ import { Ripple } from "./components/ui/Ripple";
 import { AnimatedShinyText } from "./components/ui/AnimatedShinyText";
 
 export function App() {
-  const [theme, setTheme] = useState<"blueprint" | "dark">(() => {
+  const [theme, setTheme] = useState<ThemeMode>(() => {
     const saved = localStorage.getItem("cyber_probe_theme");
-    return saved === "blueprint" || saved === "dark" ? saved : "dark";
+    return saved === "blueprint" || saved === "dark" || saved === "btop" ? saved : "dark";
   });
 
   const isBlueprint = theme === "blueprint";
+  const isBtop = theme === "btop";
 
   useEffect(() => {
     localStorage.setItem("cyber_probe_theme", theme);
+    document.documentElement.classList.remove("dark", "blueprint", "btop");
     if (theme === "dark") {
       document.documentElement.classList.add("dark");
-      document.documentElement.classList.remove("blueprint");
       document.documentElement.setAttribute("data-theme", "dark");
+    } else if (theme === "btop") {
+      document.documentElement.classList.add("dark", "btop");
+      document.documentElement.setAttribute("data-theme", "btop");
     } else {
-      document.documentElement.classList.remove("dark");
       document.documentElement.classList.add("blueprint");
       document.documentElement.setAttribute("data-theme", "light");
     }
   }, [theme]);
 
   const toggleTheme = () => {
-    setTheme((prev) => (prev === "dark" ? "blueprint" : "dark"));
+    setTheme((prev) => (prev === "dark" ? "btop" : prev === "btop" ? "blueprint" : "dark"));
   };
 
   const auth = useAuth();
@@ -337,11 +340,17 @@ export function App() {
   if (showLogin) {
     return (
       <div className={`min-h-screen ${
-        isBlueprint ? "blueprint-grid bg-slate-100/50" : "cyber-grid bg-zinc-950"
+        isBlueprint
+          ? "blueprint-grid bg-slate-100/50"
+          : isBtop
+          ? "btop-grid bg-[#06080d]"
+          : "cyber-grid bg-zinc-950"
       }`}>
         <LoginScreen
           onLogin={auth.login}
           theme={theme}
+          onSelectTheme={setTheme}
+          onToggleTheme={toggleTheme}
           allowPublicView={auth.publicView}
           onContinueAsGuest={() => setGuestMode(true)}
         />
@@ -353,6 +362,8 @@ export function App() {
     <div className={`min-h-screen flex flex-col transition-colors duration-200 ${
       isBlueprint
         ? "blueprint-grid text-slate-800 bg-slate-100/50 selection:bg-indigo-500/20 selection:text-indigo-900"
+        : isBtop
+        ? "btop-grid text-slate-100 bg-[#06080d] selection:bg-cyan-500/30 selection:text-cyan-200"
         : "cyber-grid text-zinc-100 bg-zinc-950 selection:bg-indigo-500/30 selection:text-indigo-200"
     }`}>
       {selectedNode ? (
@@ -364,6 +375,7 @@ export function App() {
           onSelectNode={setSelectedNode}
           theme={theme}
           onToggleTheme={toggleTheme}
+          onSelectTheme={setTheme}
           latestAgentVersion={latestAgentVersion}
         />
       ) : (
@@ -384,6 +396,7 @@ export function App() {
             onOpenAdminModal={() => setIsAdminModalOpen(true)}
             theme={theme}
             onToggleTheme={toggleTheme}
+            onSelectTheme={setTheme}
             canManage={canManage}
             username={auth.username}
             onLogout={auth.logout}
@@ -423,7 +436,11 @@ export function App() {
               )
             ) : (
               <div className={`relative flex flex-col items-center justify-center overflow-hidden rounded-2xl border border-dashed p-12 text-center ${
-                isBlueprint ? "border-slate-200/90 bg-white/70 text-slate-600 shadow-sm" : "border-zinc-800 bg-zinc-900/30 text-zinc-200"
+                isBlueprint
+                  ? "border-slate-200/90 bg-white/70 text-slate-600 shadow-sm"
+                  : isBtop
+                  ? "border-[#1b253b] bg-[#0b101c]/60 text-slate-300"
+                  : "border-zinc-800 bg-zinc-900/30 text-zinc-200"
               }`}>
                 {/* Breathing rings hint that the hub is listening for agents */}
                 <Ripple className="opacity-70" />
@@ -474,7 +491,11 @@ export function App() {
 
       {/* Footer */}
       <footer className={`border-t py-6 text-center text-xs font-mono mt-auto transition-colors ${
-        isBlueprint ? "border-slate-200 bg-white/80 text-slate-500" : "border-zinc-900 bg-zinc-950 text-zinc-400"
+        isBlueprint
+          ? "border-slate-200 bg-white/80 text-slate-500"
+          : isBtop
+          ? "border-[#1b253b] bg-[#06080d]/90 text-slate-400"
+          : "border-zinc-900 bg-zinc-950 text-zinc-400"
       }`}>
         <div className="mx-auto max-w-[1600px] px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
           <div>

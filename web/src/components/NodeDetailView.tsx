@@ -27,6 +27,7 @@ import {
   Star,
   Sun,
   Moon,
+  Terminal,
   ChevronDown,
   Server,
   Eye,
@@ -34,7 +35,7 @@ import {
   Ticket,
 } from "lucide-react";
 import { Tabs } from "@heroui/react";
-import { HistoryPoint, NodeState, PingHistoryPoint, PingStat, PingTargetConfig } from "../types";
+import { HistoryPoint, NodeState, PingHistoryPoint, PingStat, PingTargetConfig, ThemeMode } from "../types";
 import { formatBytes, formatRate } from "../utils/format";
 import { getRegionFlag } from "../utils/flags";
 import { agentVersionOf, agentVersionStatus } from "../utils/agentVersion";
@@ -50,8 +51,9 @@ interface NodeDetailViewProps {
   nodesList: NodeState[];
   onBack: () => void;
   onSelectNode: (node: NodeState) => void;
-  theme?: "blueprint" | "dark";
+  theme?: ThemeMode;
   onToggleTheme?: () => void;
+  onSelectTheme?: (theme: ThemeMode) => void;
   /** 服务端会下发的 Agent 版本，用作比较基准；缺省则不做版本判断。 */
   latestAgentVersion?: string;
 }
@@ -82,11 +84,13 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
   onSelectNode,
   theme: propsTheme,
   onToggleTheme,
+  onSelectTheme,
   latestAgentVersion,
 }) => {
-  const [localTheme, setLocalTheme] = useState<"blueprint" | "dark">("blueprint");
+  const [localTheme, setLocalTheme] = useState<ThemeMode>("dark");
   const theme = propsTheme || localTheme;
   const isBlueprint = theme === "blueprint";
+  const isBtop = theme === "btop";
 
   // 三个状态都不共用文案：旧 Agent 根本不发版本字段，把这个「缺失」渲染成
   // 任何版本号都会毁掉整条升级信号的唯一来源。
@@ -94,10 +98,13 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
   const versionStatus = agentVersionStatus(nodeAgentVersion, latestAgentVersion);
 
   const toggleTheme = () => {
-    if (onToggleTheme) {
+    if (onSelectTheme) {
+      const nextTheme: ThemeMode = theme === "dark" ? "btop" : theme === "btop" ? "blueprint" : "dark";
+      onSelectTheme(nextTheme);
+    } else if (onToggleTheme) {
       onToggleTheme();
     } else {
-      setLocalTheme((prev) => (prev === "blueprint" ? "dark" : "blueprint"));
+      setLocalTheme((prev) => (prev === "dark" ? "btop" : prev === "btop" ? "blueprint" : "dark"));
     }
   };
 
@@ -296,103 +303,127 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
     {
       label: "CPU",
       values: history.map((p) => p.cpu_percent),
-      color: "#f97316",
-      fill: isBlueprint ? "rgba(249, 115, 22, 0.06)" : "rgba(249, 115, 22, 0.1)",
+      color: isBtop ? "#00f0ff" : "#f97316",
+      fill: isBtop
+        ? "rgba(0, 240, 255, 0.12)"
+        : isBlueprint
+        ? "rgba(249, 115, 22, 0.06)"
+        : "rgba(249, 115, 22, 0.1)",
       unit: "%",
     },
     {
       label: "负载",
       values: history.map((p) => p.load_1 || 0),
-      color: "#06b6d4",
+      color: isBtop ? "#bd93f9" : "#06b6d4",
       unit: "",
     },
-  ], [history, isBlueprint]);
+  ], [history, isBlueprint, isBtop]);
 
   const memChartSeries: ChartSeries[] = useMemo(() => [
     {
       label: "RAM",
       values: history.map((p) => (p.mem_used || 0) / (1024 * 1024)),
-      color: "#ef4444",
-      fill: isBlueprint ? "rgba(239, 68, 68, 0.05)" : "rgba(239, 68, 68, 0.08)",
+      color: isBtop ? "#f43f5e" : "#ef4444",
+      fill: isBtop
+        ? "rgba(244, 63, 94, 0.12)"
+        : isBlueprint
+        ? "rgba(239, 68, 68, 0.05)"
+        : "rgba(239, 68, 68, 0.08)",
       unit: "MB",
     },
     {
       label: "RAM 总量",
       values: history.map((p) => (p.mem_total || node.system.mem_total || 0) / (1024 * 1024)),
-      color: "#3b82f6",
+      color: isBtop ? "#38bdf8" : "#3b82f6",
       unit: "MB",
     },
     {
       label: "Swap",
       values: history.map((p) => (p.swap_used || 0) / (1024 * 1024)),
-      color: "#f59e0b",
+      color: isBtop ? "#f1fa8c" : "#f59e0b",
       unit: "MB",
     },
     {
       label: "Swap 总量",
       values: history.map((p) => (p.swap_total || node.system.swap_total || 0) / (1024 * 1024)),
-      color: "#a855f7",
+      color: isBtop ? "#d946ef" : "#a855f7",
       unit: "MB",
     },
-  ], [history, node.system, isBlueprint]);
+  ], [history, node.system, isBlueprint, isBtop]);
 
   const diskChartSeries: ChartSeries[] = useMemo(() => [
     {
       label: "磁盘已用",
       values: history.map((p) => (p.disk_used || 0) / (1024 * 1024 * 1024)),
-      color: "#10b981",
-      fill: isBlueprint ? "rgba(16, 185, 129, 0.05)" : "rgba(16, 185, 129, 0.08)",
+      color: isBtop ? "#50fa7b" : "#10b981",
+      fill: isBtop
+        ? "rgba(80, 250, 123, 0.12)"
+        : isBlueprint
+        ? "rgba(16, 185, 129, 0.05)"
+        : "rgba(16, 185, 129, 0.08)",
       unit: "GB",
     },
     {
       label: "磁盘总量",
       values: history.map((p) => (p.disk_total || node.system.disk_total || 0) / (1024 * 1024 * 1024)),
-      color: "#06b6d4",
+      color: isBtop ? "#00f0ff" : "#06b6d4",
       unit: "GB",
     },
-  ], [history, node.system, isBlueprint]);
+  ], [history, node.system, isBlueprint, isBtop]);
 
   const netChartSeries: ChartSeries[] = useMemo(() => [
     {
       label: "下载",
       values: history.map((p) => p.rate_download),
-      color: "#3b82f6",
-      fill: isBlueprint ? "rgba(59, 130, 246, 0.05)" : "rgba(59, 130, 246, 0.08)",
+      color: isBtop ? "#00f0ff" : "#3b82f6",
+      fill: isBtop
+        ? "rgba(0, 240, 255, 0.12)"
+        : isBlueprint
+        ? "rgba(59, 130, 246, 0.05)"
+        : "rgba(59, 130, 246, 0.08)",
       format: (v) => formatRate(v),
     },
     {
       label: "上传",
       values: history.map((p) => p.rate_upload),
-      color: "#a855f7",
-      fill: isBlueprint ? "rgba(168, 85, 247, 0.05)" : "rgba(168, 85, 247, 0.08)",
+      color: isBtop ? "#f43f5e" : "#a855f7",
+      fill: isBtop
+        ? "rgba(244, 63, 94, 0.12)"
+        : isBlueprint
+        ? "rgba(168, 85, 247, 0.05)"
+        : "rgba(168, 85, 247, 0.08)",
       format: (v) => formatRate(v),
     },
-  ], [history, isBlueprint]);
+  ], [history, isBlueprint, isBtop]);
 
   const connChartSeries: ChartSeries[] = useMemo(() => [
     {
       label: "TCP",
       values: history.map((p) => p.tcp_count || 0),
-      color: "#ef4444",
+      color: isBtop ? "#f43f5e" : "#ef4444",
       unit: "",
     },
     {
       label: "UDP",
       values: history.map((p) => p.udp_count || 4),
-      color: "#10b981",
+      color: isBtop ? "#50fa7b" : "#10b981",
       unit: "",
     },
-  ], [history]);
+  ], [history, isBtop]);
 
   const procChartSeries: ChartSeries[] = useMemo(() => [
     {
       label: "进程",
       values: history.map((p) => p.process_count || 87),
-      color: "#8b5cf6",
-      fill: isBlueprint ? "rgba(139, 92, 246, 0.05)" : "rgba(139, 92, 246, 0.08)",
+      color: isBtop ? "#bd93f9" : "#8b5cf6",
+      fill: isBtop
+        ? "rgba(189, 147, 249, 0.12)"
+        : isBlueprint
+        ? "rgba(139, 92, 246, 0.05)"
+        : "rgba(139, 92, 246, 0.08)",
       unit: "",
     },
-  ], [history, isBlueprint]);
+  ], [history, isBlueprint, isBtop]);
 
   // Prepare Ping Chart series
   const pingTimestamps = useMemo(() => {
@@ -444,32 +475,40 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
   // Card theme classes
   const cardBgClass = isBlueprint
     ? "bg-white border-slate-200/80 text-slate-800 shadow-sm"
+    : isBtop
+    ? "bg-[#0b101c]/90 border-[#1b253b] text-slate-100 shadow-[0_0_15px_rgba(0,0,0,0.5)]"
     : "bg-zinc-900/60 border-zinc-800/80 text-zinc-100 shadow-inner";
 
   const statCardClass = isBlueprint
     ? "bg-white border-slate-200/80 shadow-sm text-slate-800"
+    : isBtop
+    ? "bg-[#0b101c]/90 border-[#1b253b] text-slate-100 shadow-[0_0_10px_rgba(0,0,0,0.3)]"
     : "bg-zinc-900/50 border-zinc-800/80 shadow-inner text-zinc-100";
 
   // Shared label row for the 8 summary stat cards.
   const statLabelClass = cn(
     "flex items-center justify-between text-xs",
-    isBlueprint ? "text-slate-600 font-medium" : "text-zinc-400"
+    isBlueprint ? "text-slate-600 font-medium" : isBtop ? "text-cyan-400 font-mono font-medium" : "text-zinc-400"
   );
 
   // Tab list background; HeroUI's Tabs supplies the selected/unselected states.
-  const tabsClass = isBlueprint ? "bg-slate-100" : "bg-zinc-900/70";
+  const tabsClass = isBlueprint ? "bg-slate-100" : isBtop ? "bg-[#070b14] border border-[#1b253b]" : "bg-zinc-900/70";
 
   return (
     <div
       className={`min-h-screen font-sans transition-colors duration-200 ${
-        isBlueprint ? "blueprint-grid text-slate-800" : "cyber-grid text-zinc-100 bg-zinc-950"
+        isBlueprint
+          ? "blueprint-grid text-slate-800"
+          : isBtop
+          ? "btop-grid text-slate-100 bg-[#06080d]"
+          : "cyber-grid text-zinc-100 bg-zinc-950"
       }`}
     >
       <div className="mx-auto max-w-[1600px] px-3.5 py-4 sm:px-6 sm:py-6 lg:px-8 animate-fade-in">
         {/* 1. Top Navigation Bar */}
         <div
           className={`flex flex-wrap items-center justify-between gap-2.5 sm:gap-4 border-b pb-3 sm:pb-4 ${
-            isBlueprint ? "border-slate-200" : "border-zinc-800/80"
+            isBlueprint ? "border-slate-200" : isBtop ? "border-[#1b253b]" : "border-zinc-800/80"
           }`}
         >
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
@@ -478,6 +517,8 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
               className={`flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-xl border transition-colors ${
                 isBlueprint
                   ? "bg-white border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900 shadow-sm"
+                  : isBtop
+                  ? "bg-[#0b101c] border-[#1b253b] text-cyan-400 hover:border-cyan-500/50 hover:text-cyan-300 shadow-[0_0_10px_rgba(0,240,255,0.1)]"
                   : "bg-zinc-900/80 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-100"
               }`}
               title="返回节点列表"
@@ -669,74 +710,88 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
               className={`flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-lg sm:rounded-xl border transition-all cursor-pointer active:scale-95 ${
                 isBlueprint
                   ? "bg-white border-slate-200 text-slate-600 hover:text-slate-900 hover:border-slate-300 shadow-sm"
+                  : isBtop
+                  ? "bg-[#0b101c] border-[#1b253b] text-cyan-400 hover:text-cyan-300 hover:border-cyan-500/50 shadow-[0_0_10px_rgba(0,240,255,0.15)]"
                   : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-700"
               }`}
-              title={isBlueprint ? "切换到暗黑模式" : "切换到 Blueprint 模式"}
+              title={
+                isBlueprint
+                  ? "当前: 蓝图浅色 (点击切换到暗黑)"
+                  : isBtop
+                  ? "当前: btop++ 终端 (点击切换到蓝图)"
+                  : "当前: 默认暗黑 (点击切换到 btop++)"
+              }
             >
-              {isBlueprint ? <Moon className="h-4 w-4 text-slate-600" /> : <Sun className="h-4 w-4 text-amber-400" />}
+              {isBlueprint ? (
+                <Sun className="h-4 w-4 text-amber-500" />
+              ) : isBtop ? (
+                <Terminal className="h-4 w-4 text-cyan-400" />
+              ) : (
+                <Moon className="h-4 w-4 text-indigo-400" />
+              )}
             </button>
           </div>
         </div>
 
         {/* 2. Top 8 Summary Stat Cards (4x2 grid) */}
         <div className="mt-4 sm:mt-5 grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 font-mono">
-          <BlurFade delay={0.02} className={`rounded-xl border p-2.5 sm:p-3.5 ${statCardClass}`}>
+          <BlurFade delay={0.02} className={cn(isBtop ? "rounded-none" : "rounded-xl", "border p-2.5 sm:p-3.5", statCardClass)}>
             <div className={statLabelClass}>
-              <span>节点定价</span>
-              <CreditCard className={`h-3.5 w-3.5 ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`} />
+              <span>{isBtop ? "[ 节点定价 ]" : "节点定价"}</span>
+              <CreditCard className={`h-3.5 w-3.5 ${isBlueprint ? "text-slate-500" : isBtop ? "text-cyan-400" : "text-zinc-400"}`} />
             </div>
-            <div className={`mt-1 sm:mt-1.5 text-base sm:text-lg font-bold truncate ${isBlueprint ? "text-slate-900" : "text-zinc-100"}`}>
+            <div className={`mt-1 sm:mt-1.5 text-base sm:text-lg font-bold truncate ${isBlueprint ? "text-slate-900" : isBtop ? "text-cyan-200" : "text-zinc-100"}`}>
               {node.billing?.currency || "$"}
               <NumberTicker
                 value={node.billing?.price != null && node.billing.price > 0 ? node.billing.price : (node.billing?.price_per_month || 0)}
                 decimals={2}
               />
-              <span className={`text-xs font-normal ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}> / {getCycleLabel(node.billing?.billing_cycle)}</span>
+              <span className={`text-xs font-normal ${isBlueprint ? "text-slate-500" : isBtop ? "text-cyan-400/70" : "text-zinc-400"}`}> / {getCycleLabel(node.billing?.billing_cycle)}</span>
             </div>
           </BlurFade>
 
-          <BlurFade delay={0.05} className={`rounded-xl border p-2.5 sm:p-3.5 ${statCardClass}`}>
+          <BlurFade delay={0.05} className={cn(isBtop ? "rounded-none" : "rounded-xl", "border p-2.5 sm:p-3.5", statCardClass)}>
             <div className={statLabelClass}>
-              <span>月均支出</span>
-              <DollarSign className={`h-3.5 w-3.5 ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`} />
+              <span>{isBtop ? "[ 月均支出 ]" : "月均支出"}</span>
+              <DollarSign className={`h-3.5 w-3.5 ${isBlueprint ? "text-slate-500" : isBtop ? "text-cyan-400" : "text-zinc-400"}`} />
             </div>
-            <div className={`mt-1 sm:mt-1.5 text-base sm:text-lg font-bold truncate ${isBlueprint ? "text-slate-900" : "text-zinc-100"}`}>
+            <div className={`mt-1 sm:mt-1.5 text-base sm:text-lg font-bold truncate ${isBlueprint ? "text-slate-900" : isBtop ? "text-cyan-200" : "text-zinc-100"}`}>
               {node.billing?.currency || "$"}
               <NumberTicker value={node.billing?.price_per_month || 0} decimals={2} />
-              <span className={`text-xs font-normal ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}> / 月</span>
+              <span className={`text-xs font-normal ${isBlueprint ? "text-slate-500" : isBtop ? "text-cyan-400/70" : "text-zinc-400"}`}> / 月</span>
             </div>
           </BlurFade>
 
-          <BlurFade delay={0.08} className={`rounded-xl border p-2.5 sm:p-3.5 ${statCardClass}`}>
+          <BlurFade delay={0.08} className={cn(isBtop ? "rounded-none" : "rounded-xl", "border p-2.5 sm:p-3.5", statCardClass)}>
             <div className={statLabelClass}>
-              <span>剩余时间</span>
-              <Calendar className={`h-3.5 w-3.5 ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`} />
+              <span>{isBtop ? "[ 剩余时间 ]" : "剩余时间"}</span>
+              <Calendar className={`h-3.5 w-3.5 ${isBlueprint ? "text-slate-500" : isBtop ? "text-cyan-400" : "text-zinc-400"}`} />
             </div>
             <div className="mt-1 sm:mt-1.5 flex items-baseline justify-between gap-1">
               <span className="text-base sm:text-lg font-bold text-emerald-600 dark:text-emerald-400">
                 {node.billing?.expiry_date ? (
                   <>
                     <NumberTicker value={node.billing?.remaining_days || 0} />
-                    <span className={`text-xs font-normal ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}> 天</span>
+                    <span className={`text-xs font-normal ${isBlueprint ? "text-slate-500" : isBtop ? "text-cyan-400/70" : "text-zinc-400"}`}> 天</span>
                   </>
                 ) : (
                   <span className={isBlueprint ? "text-slate-400" : "text-zinc-500"}>--</span>
                 )}
               </span>
               {node.billing?.expiry_date ? (
-                <span className={`text-10 truncate max-w-[80px] sm:max-w-[90px] ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`} title={`到期日: ${node.billing.expiry_date}`}>
+                <span className={`text-10 truncate max-w-[80px] sm:max-w-[90px] ${isBlueprint ? "text-slate-500" : isBtop ? "text-cyan-400/70" : "text-zinc-400"}`} title={`到期日: ${node.billing.expiry_date}`}>
                   {node.billing.expiry_date}
                 </span>
               ) : (
-                <span className={`text-10 ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}>自动续费</span>
+                <span className={`text-10 ${isBlueprint ? "text-slate-500" : isBtop ? "text-cyan-400/70" : "text-zinc-400"}`}>自动续费</span>
               )}
             </div>
           </BlurFade>
 
-          <BlurFade delay={0.11} className={`rounded-xl border p-2.5 sm:p-3.5 ${statCardClass}`}>
+          <BlurFade delay={0.11} className={cn(isBtop ? "rounded-none" : "rounded-xl", "border p-2.5 sm:p-3.5", statCardClass)}>
             <div className={statLabelClass}>
-              <span>剩余价值</span>
-              <Coins className={`h-3.5 w-3.5 ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`} />
+              <span>{isBtop ? "[ 剩余价值 ]" : "剩余价值"}</span>
+              <Coins className={`h-3.5 w-3.5 ${isBlueprint ? "text-slate-500" : isBtop ? "text-cyan-400" : "text-zinc-400"}`} />
             </div>
             <div className="mt-1 sm:mt-1.5 flex items-baseline justify-between gap-1">
               <span className="text-base sm:text-lg font-bold text-cyan-600 dark:text-cyan-400">
@@ -752,26 +807,26 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
             </div>
           </BlurFade>
 
-          <BlurFade delay={0.14} className={`rounded-xl border p-2.5 sm:p-3.5 ${statCardClass}`}>
+          <BlurFade delay={0.14} className={cn(isBtop ? "rounded-none" : "rounded-xl", "border p-2.5 sm:p-3.5", statCardClass)}>
             <div className={statLabelClass}>
-              <span>已用流量</span>
-              <ArrowUpDown className={`h-3.5 w-3.5 ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`} />
+              <span>{isBtop ? "[ 已用流量 ]" : "已用流量"}</span>
+              <ArrowUpDown className={`h-3.5 w-3.5 ${isBlueprint ? "text-slate-500" : isBtop ? "text-cyan-400" : "text-zinc-400"}`} />
             </div>
-            <div className={`mt-1 sm:mt-1.5 text-base sm:text-lg font-bold ${isBlueprint ? "text-slate-900" : "text-zinc-100"}`}>
+            <div className={`mt-1 sm:mt-1.5 text-base sm:text-lg font-bold ${isBlueprint ? "text-slate-900" : isBtop ? "text-cyan-200" : "text-zinc-100"}`}>
               {formatBytes(usedTraffic)}
             </div>
           </BlurFade>
 
-          <BlurFade delay={0.17} className={`rounded-xl border p-2.5 sm:p-3.5 ${statCardClass}`}>
+          <BlurFade delay={0.17} className={cn(isBtop ? "rounded-none" : "rounded-xl", "border p-2.5 sm:p-3.5", statCardClass)}>
             <div className={statLabelClass}>
-              <span>流量配额</span>
-              <PieChart className={`h-3.5 w-3.5 ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`} />
+              <span>{isBtop ? "[ 流量配额 ]" : "流量配额"}</span>
+              <PieChart className={`h-3.5 w-3.5 ${isBlueprint ? "text-slate-500" : isBtop ? "text-cyan-400" : "text-zinc-400"}`} />
             </div>
             <div className="mt-1 sm:mt-1.5 text-base sm:text-lg font-bold text-blue-600 dark:text-blue-400 flex items-baseline gap-1">
               {quotaBytes > 0 ? (
                 <>
                   <NumberTicker value={quotaPercent} decimals={1} suffix="%" />
-                  <span className={`text-xs font-normal ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}>/ {formatBytes(quotaBytes)}</span>
+                  <span className={`text-xs font-normal ${isBlueprint ? "text-slate-500" : isBtop ? "text-cyan-400/70" : "text-zinc-400"}`}>/ {formatBytes(quotaBytes)}</span>
                 </>
               ) : (
                 <span className={`text-xs sm:text-sm font-semibold ${isBlueprint ? "text-slate-700" : "text-zinc-300"}`}>无限制</span>
@@ -779,22 +834,22 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
             </div>
           </BlurFade>
 
-          <BlurFade delay={0.2} className={`rounded-xl border p-2.5 sm:p-3.5 ${statCardClass}`}>
+          <BlurFade delay={0.2} className={cn(isBtop ? "rounded-none" : "rounded-xl", "border p-2.5 sm:p-3.5", statCardClass)}>
             <div className={statLabelClass}>
-              <span>运行时间</span>
-              <Clock className={`h-3.5 w-3.5 ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`} />
+              <span>{isBtop ? "[ 运行时间 ]" : "运行时间"}</span>
+              <Clock className={`h-3.5 w-3.5 ${isBlueprint ? "text-slate-500" : isBtop ? "text-cyan-400" : "text-zinc-400"}`} />
             </div>
-            <div className={`mt-1 sm:mt-1.5 text-xs sm:text-sm font-bold truncate ${isBlueprint ? "text-slate-900" : "text-zinc-100"}`} title={node.uptime_str}>
+            <div className={`mt-1 sm:mt-1.5 text-xs sm:text-sm font-bold truncate ${isBlueprint ? "text-slate-900" : isBtop ? "text-cyan-200" : "text-zinc-100"}`} title={node.uptime_str}>
               {node.uptime_str}
             </div>
           </BlurFade>
 
-          <BlurFade delay={0.23} className={`rounded-xl border p-2.5 sm:p-3.5 ${statCardClass}`}>
+          <BlurFade delay={0.23} className={cn(isBtop ? "rounded-none" : "rounded-xl", "border p-2.5 sm:p-3.5", statCardClass)}>
             <div className={statLabelClass}>
-              <span>连接数</span>
-              <LinkIcon className={`h-3.5 w-3.5 ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`} />
+              <span>{isBtop ? "[ 连接数 ]" : "连接数"}</span>
+              <LinkIcon className={`h-3.5 w-3.5 ${isBlueprint ? "text-slate-500" : isBtop ? "text-cyan-400" : "text-zinc-400"}`} />
             </div>
-            <div className={`mt-1 sm:mt-1.5 text-base sm:text-lg font-bold ${isBlueprint ? "text-slate-900" : "text-zinc-100"}`}>
+            <div className={`mt-1 sm:mt-1.5 text-base sm:text-lg font-bold ${isBlueprint ? "text-slate-900" : isBtop ? "text-cyan-200" : "text-zinc-100"}`}>
               <NumberTicker value={node.network.tcp_established + (node.network.udp_established || 4)} />
             </div>
           </BlurFade>
@@ -856,12 +911,13 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
         {/* 3. 4 Information Cards (2x2 Grid) */}
         <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3.5 font-sans text-xs">
           {/* Hardware Info */}
-          <BlurFade delay={0.04} className={`rounded-xl border p-4 ${cardBgClass}`}>
-            <div className={`flex items-center justify-between border-b pb-2.5 font-bold ${isBlueprint ? "border-slate-100 text-slate-900" : "border-zinc-800/70 text-zinc-100"}`}>
+          <BlurFade delay={0.04} className={cn(isBtop ? "rounded-none" : "rounded-xl", "border p-4", cardBgClass)}>
+            <div className={`flex items-center justify-between border-b pb-2.5 font-bold ${isBlueprint ? "border-slate-100 text-slate-900" : isBtop ? "border-[#1b253b] text-cyan-300 font-mono" : "border-zinc-800/70 text-zinc-100"}`}>
               <span className="flex items-center gap-2">
-                <Cpu className="h-4 w-4 text-indigo-500" />
-                硬件信息
+                <Cpu className={`h-4 w-4 ${isBtop ? "text-cyan-400" : "text-indigo-500"}`} />
+                {isBtop ? "┌─ [ BOX HARDWARE ]" : "硬件信息"}
               </span>
+              {isBtop && <span className="text-cyan-500 font-mono text-xs select-none">─┐</span>}
             </div>
             <div className="mt-3 space-y-2.5">
               <div>
@@ -980,12 +1036,13 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
           </BlurFade>
 
           {/* System Info */}
-          <BlurFade delay={0.08} className={`rounded-xl border p-4 ${cardBgClass}`}>
-            <div className={`flex items-center justify-between border-b pb-2.5 font-bold ${isBlueprint ? "border-slate-100 text-slate-900" : "border-zinc-800/70 text-zinc-100"}`}>
+          <BlurFade delay={0.08} className={cn(isBtop ? "rounded-none" : "rounded-xl", "border p-4", cardBgClass)}>
+            <div className={`flex items-center justify-between border-b pb-2.5 font-bold ${isBlueprint ? "border-slate-100 text-slate-900" : isBtop ? "border-[#1b253b] text-cyan-300 font-mono" : "border-zinc-800/70 text-zinc-100"}`}>
               <span className="flex items-center gap-2">
-                <ShieldCheck className="h-4 w-4 text-cyan-600" />
-                系统信息
+                <ShieldCheck className={`h-4 w-4 ${isBtop ? "text-cyan-400" : "text-cyan-600"}`} />
+                {isBtop ? "┌─ [ BOX SYSTEM ]" : "系统信息"}
               </span>
+              {isBtop && <span className="text-cyan-500 font-mono text-xs select-none">─┐</span>}
             </div>
             <div className="mt-3 grid grid-cols-2 gap-y-3 gap-x-4">
               <div>
@@ -1099,12 +1156,13 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
           </BlurFade>
 
           {/* Storage Info */}
-          <BlurFade delay={0.11} className={`rounded-xl border p-4 ${cardBgClass}`}>
-            <div className={`flex items-center justify-between border-b pb-2.5 font-bold ${isBlueprint ? "border-slate-100 text-slate-900" : "border-zinc-800/70 text-zinc-100"}`}>
+          <BlurFade delay={0.11} className={cn(isBtop ? "rounded-none" : "rounded-xl", "border p-4", cardBgClass)}>
+            <div className={`flex items-center justify-between border-b pb-2.5 font-bold ${isBlueprint ? "border-slate-100 text-slate-900" : isBtop ? "border-[#1b253b] text-cyan-300 font-mono" : "border-zinc-800/70 text-zinc-100"}`}>
               <span className="flex items-center gap-2">
-                <HardDrive className="h-4 w-4 text-amber-500" />
-                存储信息
+                <HardDrive className={`h-4 w-4 ${isBtop ? "text-cyan-400" : "text-amber-500"}`} />
+                {isBtop ? "┌─ [ BOX STORAGE ]" : "存储信息"}
               </span>
+              {isBtop && <span className="text-cyan-500 font-mono text-xs select-none">─┐</span>}
             </div>
             <div className="mt-3 grid grid-cols-3 gap-2">
               <div>
@@ -1140,12 +1198,13 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
           </BlurFade>
 
           {/* Network Info */}
-          <BlurFade delay={0.15} className={`rounded-xl border p-4 ${cardBgClass}`}>
-            <div className={`flex items-center justify-between border-b pb-2.5 font-bold ${isBlueprint ? "border-slate-100 text-slate-900" : "border-zinc-800/70 text-zinc-100"}`}>
+          <BlurFade delay={0.15} className={cn(isBtop ? "rounded-none" : "rounded-xl", "border p-4", cardBgClass)}>
+            <div className={`flex items-center justify-between border-b pb-2.5 font-bold ${isBlueprint ? "border-slate-100 text-slate-900" : isBtop ? "border-[#1b253b] text-cyan-300 font-mono" : "border-zinc-800/70 text-zinc-100"}`}>
               <span className="flex items-center gap-2">
-                <Network className="h-4 w-4 text-emerald-500" />
-                网络信息
+                <Network className={`h-4 w-4 ${isBtop ? "text-cyan-400" : "text-emerald-500"}`} />
+                {isBtop ? "┌─ [ BOX NETWORK ]" : "网络信息"}
               </span>
+              {isBtop && <span className="text-cyan-500 font-mono text-xs select-none">─┐</span>}
             </div>
             <div className="mt-3 grid grid-cols-2 gap-4">
               <div>
@@ -1285,15 +1344,15 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
         </div>
 
         {/* 5. Latency & Packet Loss Section (延迟 / 丢包) */}
-        <div className={`mt-6 sm:mt-8 rounded-2xl border p-3.5 sm:p-5 ${cardBgClass}`}>
-          <div className={`flex flex-wrap items-center justify-between gap-3 border-b pb-3 font-sans ${isBlueprint ? "border-slate-100" : "border-zinc-800/80"}`}>
+        <div className={cn(isBtop ? "rounded-none" : "rounded-2xl", "mt-6 sm:mt-8 border p-3.5 sm:p-5", cardBgClass)}>
+          <div className={`flex flex-wrap items-center justify-between gap-3 border-b pb-3 font-sans ${isBlueprint ? "border-slate-100" : isBtop ? "border-[#1b253b]" : "border-zinc-800/80"}`}>
             {/* Time range buttons */}
             <Tabs
               selectedKey={pingRange}
               onSelectionChange={(key) => setPingRange(key as typeof pingRange)}
               aria-label="延迟统计时间范围"
             >
-              <Tabs.List className={cn("rounded-xl p-1", tabsClass)}>
+              <Tabs.List className={cn(isBtop ? "rounded-none" : "rounded-xl", "p-1", tabsClass)}>
                 {(["1h", "6h", "12h", "1d"] as const).map((r) => (
                   <Tabs.Tab key={r} id={r} className="text-xs">
                     {r === "1h" ? "1 小时" : r === "6h" ? "6 小时" : r === "12h" ? "12 小时" : "1 天"}
@@ -1304,20 +1363,22 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
 
             {/* Target filter hint */}
             <div className="flex items-center gap-2 text-xs">
-              <span className={`text-11 ${isBlueprint ? "text-slate-600" : "text-zinc-500"}`}>
-                点击下方节点可单选/多选对比
+              <span className={`text-11 ${isBlueprint ? "text-slate-600" : isBtop ? "text-cyan-400/80 font-mono" : "text-zinc-500"}`}>
+                {isBtop ? "[ PING TARGET FILTER ]" : "点击下方节点可单选/多选对比"}
               </span>
               {hiddenTargets.size > 0 && (
                 <button
                   type="button"
                   onClick={showAllTargets}
                   className={`text-11 font-semibold px-2 py-0.5 rounded-md border transition-all cursor-pointer active:scale-95 ${
-                    isBlueprint
+                    isBtop
+                      ? "bg-cyan-500/15 text-cyan-300 border-cyan-500/40 hover:bg-cyan-500/25 rounded-none font-mono"
+                      : isBlueprint
                       ? "bg-indigo-50 text-indigo-600 border-indigo-200 hover:bg-indigo-100"
                       : "bg-indigo-950/50 text-indigo-400 border-indigo-800/60 hover:bg-indigo-900/50"
                   }`}
                 >
-                  恢复全部显示 ({displayPings.length - hiddenTargets.size}/{displayPings.length})
+                  {isBtop ? `[ RESET: ${displayPings.length - hiddenTargets.size}/${displayPings.length} ]` : `恢复全部显示 (${displayPings.length - hiddenTargets.size}/${displayPings.length})`}
                 </button>
               )}
             </div>
@@ -1331,15 +1392,21 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
                 <div
                   key={target.label}
                   onClick={() => toggleTarget(target.label)}
-                  className={`cursor-pointer rounded-xl border p-3 transition-all relative overflow-hidden select-none active:scale-[0.98] ${
-                    isBlueprint
-                      ? isSelected
+                  className={cn(
+                    isBtop ? "rounded-none font-mono" : "rounded-xl",
+                    "cursor-pointer border p-3 transition-all relative overflow-hidden select-none active:scale-[0.98]",
+                    isSelected
+                      ? isBtop
+                        ? "border-cyan-500/60 bg-[#0c1424] shadow-[0_0_12px_rgba(0,240,255,0.15)] ring-1 ring-cyan-500/40 text-cyan-200"
+                        : isBlueprint
                         ? "border-slate-200/90 bg-white shadow-sm ring-1 ring-slate-100"
-                        : "border-slate-200/60 bg-slate-100/60 opacity-45 hover:opacity-80"
-                      : isSelected
-                      ? "border-zinc-700 bg-zinc-950/80 shadow-md shadow-indigo-500/5 ring-1 ring-zinc-700/50"
+                        : "border-zinc-700 bg-zinc-950/80 shadow-md shadow-indigo-500/5 ring-1 ring-zinc-700/50"
+                      : isBtop
+                      ? "border-[#1b253b] bg-[#070b14]/60 opacity-40 hover:opacity-80 text-slate-400"
+                      : isBlueprint
+                      ? "border-slate-200/60 bg-slate-100/60 opacity-45 hover:opacity-80"
                       : "border-zinc-800/60 bg-zinc-950/30 opacity-45 hover:opacity-80"
-                  }`}
+                  )}
                   title={isSelected ? `点击隐藏 ${target.label} 对比` : `点击显示 ${target.label} 对比`}
                 >
                   <div
@@ -1425,9 +1492,9 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
         </div>
 
         {/* 6. Footer */}
-        <div className={`mt-8 flex items-center justify-between text-xs font-mono pb-6 ${isBlueprint ? "text-slate-500" : "text-zinc-500"}`}>
+        <div className={`mt-8 flex items-center justify-between text-xs font-mono pb-6 ${isBlueprint ? "text-slate-500" : isBtop ? "text-slate-400" : "text-zinc-500"}`}>
           <div>CYBER PROBE · 高性能极简探针系统</div>
-          <div>Theme: {isBlueprint ? "Blueprint (架构图风格)" : "Cyber Dark (极客暗黑)"}</div>
+          <div>Theme: {isBlueprint ? "Blueprint (架构图风格)" : isBtop ? "btop++ (终端极客风格)" : "Cyber Dark (极客暗黑)"}</div>
         </div>
       </div>
     </div>

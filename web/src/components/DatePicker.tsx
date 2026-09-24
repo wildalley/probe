@@ -3,13 +3,14 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Calendar as CalendarIcon, Clock, X } from "lucide-react";
 import { Button, Calendar, DatePicker as HeroDatePicker } from "@heroui/react";
 import { parseDate, type DateValue } from "@internationalized/date";
+import { ThemeMode } from "../types";
 import { cn } from "../lib/utils";
 import { NumberTicker } from "./ui/NumberTicker";
 
 interface DatePickerProps {
   value: string;
   onChange: (val: string) => void;
-  theme?: "blueprint" | "dark";
+  theme?: ThemeMode;
 }
 
 export const DatePicker: React.FC<DatePickerProps> = ({ value, onChange, theme = "dark" }) => {

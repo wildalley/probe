@@ -2,13 +2,14 @@ import React, { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { X, Plus, Tag as TagIcon } from "lucide-react";
 import { Button, Chip } from "@heroui/react";
+import { ThemeMode } from "../types";
 import { getTagStyle } from "../utils/tagColors";
 import { cn } from "../lib/utils";
 
 interface TagInputProps {
   tags: string[];
   onChange: (tags: string[]) => void;
-  theme?: "blueprint" | "dark";
+  theme?: ThemeMode;
 }
 
 const PRESET_TAGS = [

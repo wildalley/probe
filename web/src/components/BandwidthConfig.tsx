@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { RefreshCw, Infinity as InfinityIcon, XCircle } from "lucide-react";
 import { Input, ListBox, Select } from "@heroui/react";
+import { ThemeMode } from "../types";
 import { formatBytes } from "../utils/format";
 import { cn } from "../lib/utils";
 
@@ -9,7 +10,7 @@ interface BandwidthConfigProps {
   usedBytes: number;
   liveTotalBytes?: number;
   onChange: (quotaBytes: number, usedBytes: number) => void;
-  theme?: "blueprint" | "dark";
+  theme?: ThemeMode;
 }
 
 type Unit = "MB" | "GB" | "TB";

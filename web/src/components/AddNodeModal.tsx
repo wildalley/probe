@@ -2,13 +2,14 @@ import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { X, Copy, Check, Terminal, RefreshCw, Globe, ShieldCheck, Zap } from "lucide-react";
 import { Button, Chip, Input } from "@heroui/react";
+import { ThemeMode } from "../types";
 import { cn } from "../lib/utils";
 import { BorderBeam } from "./ui/BorderBeam";
 
 interface AddNodeModalProps {
   isOpen: boolean;
   onClose: () => void;
-  theme?: "blueprint" | "dark";
+  theme?: ThemeMode;
 }
 
 export const AddNodeModal: React.FC<AddNodeModalProps> = ({ isOpen, onClose, theme = "dark" }) => {

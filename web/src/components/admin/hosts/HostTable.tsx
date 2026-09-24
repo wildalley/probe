@@ -1,7 +1,7 @@
 import React from "react";
 import { Server, Sliders, Ticket, Trash2 } from "lucide-react";
 import { Button } from "@heroui/react";
-import { NodeState } from "../../../types";
+import { NodeState, ThemeMode } from "../../../types";
 import { getRegionFlag } from "../../../utils/flags";
 import { formatBytes } from "../../../utils/format";
 import { cn } from "../../../lib/utils";
@@ -9,7 +9,7 @@ import { getCycleLabel } from "./billingOptions";
 
 interface HostTableProps {
   nodes: NodeState[];
-  theme?: "blueprint" | "dark";
+  theme?: ThemeMode;
   onEdit: (node: NodeState) => void;
   onDelete: (nodeID: string) => void;
 }

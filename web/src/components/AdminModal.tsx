@@ -40,6 +40,7 @@ import {
   TokenItem,
   NotificationSettings,
   NotificationLog,
+  ThemeMode,
 } from "../types";
 import { Button, Chip, Input, ListBox, Select, Switch, Tabs } from "@heroui/react";
 import { cn } from "../lib/utils";
@@ -56,7 +57,7 @@ interface AdminModalProps {
   isOpen: boolean;
   onClose: () => void;
   nodes: NodeState[];
-  theme?: "blueprint" | "dark";
+  theme?: ThemeMode;
   onRefreshNodes?: () => void;
 }
 

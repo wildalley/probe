@@ -19,8 +19,9 @@ import {
   X,
   Radio,
   Layers,
+  Terminal,
 } from "lucide-react";
-import { SystemSummary } from "../types";
+import { SystemSummary, ThemeMode } from "../types";
 import { splitRate } from "../utils/format";
 import { getRegionFlag } from "../utils/flags";
 import { cn } from "../lib/utils";
@@ -41,8 +42,9 @@ interface HeaderProps {
   onViewModeChange: (m: "grid" | "table") => void;
   onOpenAddModal: () => void;
   onOpenAdminModal?: () => void;
-  theme?: "blueprint" | "dark";
+  theme?: ThemeMode;
   onToggleTheme?: () => void;
+  onSelectTheme?: (theme: ThemeMode) => void;
   /** True when the viewer holds an admin session. Hides write actions when false. */
   canManage?: boolean;
   username?: string | null;
@@ -86,6 +88,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenAdminModal,
   theme = "dark",
   onToggleTheme,
+  onSelectTheme,
   canManage = false,
   username,
   onLogout,
@@ -93,22 +96,28 @@ export const Header: React.FC<HeaderProps> = ({
   onRequestLogin,
 }) => {
   const isBlueprint = theme === "blueprint";
+  const isBtop = theme === "btop";
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [mobileUserMenuOpen, setMobileUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
+  const [themeMenuOpen, setThemeMenuOpen] = useState(false);
+  const themeMenuRef = useRef<HTMLDivElement>(null);
 
-  // Close mobile user menu on click outside
+  // Close mobile user menu and theme menu on click outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
         setMobileUserMenuOpen(false);
       }
+      if (themeMenuRef.current && !themeMenuRef.current.contains(e.target as Node)) {
+        setThemeMenuOpen(false);
+      }
     };
-    if (mobileUserMenuOpen) {
+    if (mobileUserMenuOpen || themeMenuOpen) {
       document.addEventListener("mousedown", handleClickOutside);
       return () => document.removeEventListener("mousedown", handleClickOutside);
     }
-  }, [mobileUserMenuOpen]);
+  }, [mobileUserMenuOpen, themeMenuOpen]);
 
   // Global hotkey: Ctrl+K, Cmd+K, or "/" to focus search input
   useEffect(() => {
@@ -129,15 +138,17 @@ export const Header: React.FC<HeaderProps> = ({
   const onlinePercent = summary.total_nodes > 0 ? (summary.online_nodes / summary.total_nodes) * 100 : 0;
 
   const statCardClass = cn(
-    "group relative overflow-hidden rounded-2xl border p-2.5 sm:p-3.5 transition-all duration-300",
+    "group relative overflow-hidden border p-2.5 sm:p-3.5 transition-all duration-300",
     isBlueprint
-      ? "bg-white/90 border-slate-200/90 text-slate-800 shadow-xs hover:border-slate-300 hover:shadow-md backdrop-blur-md"
-      : "border-white/[0.07] bg-zinc-900/55 text-zinc-100 backdrop-blur-md hover:border-white/[0.14] hover:bg-zinc-900/80 shadow-[0_4px_20px_rgba(0,0,0,0.25)]"
+      ? "rounded-2xl bg-white/90 border-slate-200/90 text-slate-800 shadow-xs hover:border-slate-300 hover:shadow-md backdrop-blur-md"
+      : isBtop
+      ? "rounded-none border-[#1b253b] bg-[#070b14] text-slate-100 hover:border-cyan-500/50 hover:bg-[#0c1220] shadow-[0_4px_20px_rgba(0,0,0,0.5)] font-mono"
+      : "rounded-2xl border-white/[0.07] bg-zinc-900/55 text-zinc-100 backdrop-blur-md hover:border-white/[0.14] hover:bg-zinc-900/80 shadow-[0_4px_20px_rgba(0,0,0,0.25)]"
   );
 
   const statLabelClass = cn(
     "text-[10px] sm:text-11 flex items-center justify-between font-mono uppercase tracking-wider font-semibold",
-    isBlueprint ? "text-slate-500" : "text-zinc-400"
+    isBlueprint ? "text-slate-500" : isBtop ? "text-cyan-400 font-bold" : "text-zinc-400"
   );
 
   return (
@@ -147,6 +158,8 @@ export const Header: React.FC<HeaderProps> = ({
         className={`sticky top-0 z-40 border-b backdrop-blur-2xl transition-colors duration-200 ${
           isBlueprint
             ? "border-slate-200/80 bg-white/85 text-slate-800 shadow-[0_2px_12px_rgba(0,0,0,0.03)]"
+            : isBtop
+            ? "border-[#1b253b] bg-[#06080d]/90 text-slate-100 shadow-[0_4px_25px_rgba(0,0,0,0.7)]"
             : "border-white/[0.08] bg-zinc-950/85 text-zinc-100 shadow-[0_8px_32px_rgba(0,0,0,0.45)]"
         }`}
       >
@@ -160,10 +173,16 @@ export const Header: React.FC<HeaderProps> = ({
                   className={`relative flex h-8 w-8 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-xl transition-all duration-300 ${
                     isBlueprint
                       ? "bg-gradient-to-br from-indigo-50 to-indigo-100/60 border border-indigo-200 shadow-sm"
+                      : isBtop
+                      ? "bg-gradient-to-br from-cyan-500/20 via-blue-600/10 to-emerald-500/15 border border-cyan-500/40 shadow-[0_0_16px_rgba(0,240,255,0.25)]"
                       : "bg-gradient-to-br from-indigo-500/20 via-indigo-600/10 to-cyan-500/15 border border-indigo-500/40 shadow-[0_0_16px_rgba(99,102,241,0.25)]"
                   }`}
                 >
-                  <Server className="h-4 w-4 sm:h-5 sm:w-5 text-indigo-500 transition-transform duration-300 group-hover:scale-110" />
+                  {isBtop ? (
+                    <Terminal className="h-4 w-4 sm:h-5 sm:w-5 text-cyan-400 transition-transform duration-300 group-hover:scale-110" />
+                  ) : (
+                    <Server className="h-4 w-4 sm:h-5 sm:w-5 text-indigo-500 transition-transform duration-300 group-hover:scale-110" />
+                  )}
                   {/* Live beacon ping */}
                   <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5 sm:h-3 sm:w-3">
                     <span
@@ -186,10 +205,12 @@ export const Header: React.FC<HeaderProps> = ({
                     <AnimatedGradientText
                       className={cn(
                         "bg-[linear-gradient(110deg,#6366f1,45%,#22d3ee,55%,#6366f1)]",
-                        !isBlueprint && "bg-[linear-gradient(110deg,#818cf8,45%,#67e8f9,55%,#818cf8)]"
+                        isBtop
+                          ? "bg-[linear-gradient(110deg,#00f0ff,45%,#d946ef,55%,#00f0ff)] font-mono"
+                          : !isBlueprint && "bg-[linear-gradient(110deg,#818cf8,45%,#67e8f9,55%,#818cf8)]"
                       )}
                     >
-                      CYBERPROBE
+                      {isBtop ? "CYBERPROBE++" : "CYBERPROBE"}
                     </AnimatedGradientText>
                   </h1>
 
@@ -199,6 +220,8 @@ export const Header: React.FC<HeaderProps> = ({
                       wsConnected
                         ? isBlueprint
                           ? "bg-emerald-50 text-emerald-700 border-emerald-200/90"
+                          : isBtop
+                          ? "bg-cyan-950/40 text-cyan-300 border-cyan-500/30 shadow-[0_0_8px_rgba(0,240,255,0.15)]"
                           : "bg-emerald-950/40 text-emerald-400 border-emerald-500/30 shadow-[0_0_8px_rgba(16,185,129,0.15)]"
                         : isBlueprint
                         ? "bg-rose-50 text-rose-700 border-rose-200"
@@ -218,43 +241,143 @@ export const Header: React.FC<HeaderProps> = ({
                     className={`hidden md:inline-block shrink-0 rounded px-1.5 py-0.5 text-9 font-mono border ${
                       isBlueprint
                         ? "bg-slate-100 text-slate-500 border-slate-200"
+                        : isBtop
+                        ? "bg-[#090d16] text-cyan-400 border-[#1b253b]"
                         : "bg-zinc-900/80 text-zinc-400 border-zinc-800"
                     }`}
                   >
-                    v1.0
+                    {isBtop ? "btop++" : "v1.0"}
                   </span>
                 </div>
 
                 <p
                   className={`hidden truncate text-xs font-sans sm:block mt-0.5 ${
-                    isBlueprint ? "text-slate-500" : "text-zinc-400"
+                    isBlueprint ? "text-slate-500" : isBtop ? "text-slate-400 font-mono" : "text-zinc-400"
                   }`}
                 >
-                  高性能极简探针 · 内存事件 Hub
+                  {isBtop ? "btop++ 极客终端性能监控 · 内存事件 Hub" : "高性能极简探针 · 内存事件 Hub"}
                 </p>
               </div>
             </div>
 
             {/* Action buttons cluster */}
             <div className="flex shrink-0 items-center gap-1.5 sm:gap-2.5">
-              {/* Theme Toggle Button (Moon / Sun) */}
-              {onToggleTheme && (
-                <button
-                  onClick={onToggleTheme}
-                  className={`flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-xl border transition-all cursor-pointer active:scale-95 ${
-                    isBlueprint
-                      ? "bg-white border-slate-200 text-slate-600 hover:text-slate-900 hover:border-slate-300 shadow-xs"
-                      : "bg-zinc-900/80 border-white/[0.08] text-zinc-400 hover:text-zinc-100 hover:border-white/[0.18] hover:bg-zinc-800/80"
-                  }`}
-                  title={isBlueprint ? "切换到暗黑模式" : "切换到 Blueprint 浅色模式"}
-                  aria-label="Toggle Theme"
-                >
-                  {isBlueprint ? (
-                    <Moon className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-slate-600 transition-transform hover:-rotate-12" />
-                  ) : (
-                    <Sun className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-amber-400 transition-transform hover:rotate-45" />
+              {/* Theme Selector / Toggle Button with Dropdown */}
+              {(onToggleTheme || onSelectTheme) && (
+                <div className="relative" ref={themeMenuRef}>
+                  <button
+                    onClick={() => setThemeMenuOpen(!themeMenuOpen)}
+                    className={`flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-xl border transition-all cursor-pointer active:scale-95 ${
+                      isBlueprint
+                        ? "bg-white border-slate-200 text-slate-600 hover:text-slate-900 hover:border-slate-300 shadow-xs"
+                        : isBtop
+                        ? "bg-[#090d16] border-[#1b253b] text-cyan-400 hover:border-cyan-500/50 hover:bg-[#101726] shadow-[0_0_12px_rgba(0,240,255,0.12)]"
+                        : "bg-zinc-900/80 border-white/[0.08] text-zinc-400 hover:text-zinc-100 hover:border-white/[0.18] hover:bg-zinc-800/80"
+                    }`}
+                    title={`主题切换 (当前: ${theme === "btop" ? "btop++ 终端" : isBlueprint ? "蓝图浅色" : "默认暗黑"})`}
+                    aria-label="Toggle Theme Menu"
+                  >
+                    {theme === "btop" ? (
+                      <Terminal className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-cyan-400 transition-transform hover:scale-110" />
+                    ) : isBlueprint ? (
+                      <Sun className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-amber-500 transition-transform hover:rotate-45" />
+                    ) : (
+                      <Moon className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-indigo-400 transition-transform hover:-rotate-12" />
+                    )}
+                  </button>
+
+                  {/* Theme Dropdown Menu */}
+                  {themeMenuOpen && (
+                    <div
+                      className={`absolute right-0 top-10 sm:top-11 z-50 min-w-[210px] rounded-xl border p-1.5 shadow-2xl backdrop-blur-xl transition-all font-mono ${
+                        isBlueprint
+                          ? "bg-white/95 border-slate-200 text-slate-800 shadow-slate-300/60"
+                          : isBtop
+                          ? "bg-[#080c14]/95 border-[#1b253b] text-slate-200 shadow-[0_0_30px_rgba(0,0,0,0.8)]"
+                          : "bg-zinc-900/95 border-zinc-800 text-zinc-100 shadow-black/80"
+                      }`}
+                    >
+                      <div className="px-2.5 py-1.5 text-[10px] uppercase font-bold tracking-wider opacity-60 border-b border-inherit mb-1 flex items-center justify-between">
+                        <span>选择主题 / THEME</span>
+                        {onToggleTheme && (
+                          <button
+                            onClick={() => {
+                              onToggleTheme();
+                              setThemeMenuOpen(false);
+                            }}
+                            className="text-[10px] text-cyan-400 hover:underline cursor-pointer lowercase"
+                            title="循环切换到下一个主题"
+                          >
+                            [next]
+                          </button>
+                        )}
+                      </div>
+                      <div className="space-y-0.5">
+                        {[
+                          {
+                            id: "dark" as ThemeMode,
+                            name: "默认暗黑",
+                            desc: "Cyber Dark 经典暗黑",
+                            icon: <Moon className="h-3.5 w-3.5 text-indigo-400" />,
+                          },
+                          {
+                            id: "btop" as ThemeMode,
+                            name: "btop++ 终端",
+                            desc: "btop++ 极客终端高对比",
+                            icon: <Terminal className="h-3.5 w-3.5 text-cyan-400" />,
+                          },
+                          {
+                            id: "blueprint" as ThemeMode,
+                            name: "蓝图浅色",
+                            desc: "Blueprint 清爽工程图纸",
+                            icon: <Sun className="h-3.5 w-3.5 text-amber-500" />,
+                          },
+                        ].map((t) => {
+                          const active = theme === t.id;
+                          return (
+                            <button
+                              key={t.id}
+                              onClick={() => {
+                                if (onSelectTheme) {
+                                  onSelectTheme(t.id);
+                                } else if (onToggleTheme) {
+                                  onToggleTheme();
+                                }
+                                setThemeMenuOpen(false);
+                              }}
+                              className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-left transition-all cursor-pointer ${
+                                active
+                                  ? isBlueprint
+                                    ? "bg-indigo-50 text-indigo-700 font-semibold"
+                                    : isBtop
+                                    ? "bg-cyan-950/60 text-cyan-300 border border-cyan-500/40 font-semibold shadow-[0_0_10px_rgba(0,240,255,0.15)]"
+                                    : "bg-indigo-950/60 text-indigo-300 font-semibold"
+                                  : isBlueprint
+                                  ? "hover:bg-slate-100 text-slate-700"
+                                  : isBtop
+                                  ? "hover:bg-[#121927] text-slate-300"
+                                  : "hover:bg-zinc-800 text-zinc-300"
+                              }`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="shrink-0">{t.icon}</span>
+                                <div>
+                                  <div className="text-xs leading-none font-bold">{t.name}</div>
+                                  <div className="text-[10px] opacity-70 mt-1 font-sans leading-none">{t.desc}</div>
+                                </div>
+                              </div>
+                              {active && (
+                                <span className={`text-xs font-bold ${isBtop ? "text-cyan-400" : isBlueprint ? "text-indigo-600" : "text-indigo-400"}`}>
+                                  ✓
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
                   )}
-                </button>
+                </div>
               )}
 
               {/* Admin Console Button (session required) */}
@@ -421,6 +544,8 @@ export const Header: React.FC<HeaderProps> = ({
         className={`border-b transition-colors duration-200 ${
           isBlueprint
             ? "border-slate-200/70 bg-white/40"
+            : isBtop
+            ? "border-[#1b253b] bg-[#06080d]/80"
             : "border-white/[0.05] bg-zinc-950/40"
         }`}
       >
@@ -445,17 +570,37 @@ export const Header: React.FC<HeaderProps> = ({
                 </span>
               </div>
               {/* Online health micro-progress bar */}
-              <div className="mt-1.5 sm:mt-2 flex items-center gap-1.5 sm:gap-2">
-                <div className={`h-1 flex-1 rounded-full overflow-hidden ${isBlueprint ? "bg-slate-200/80" : "bg-zinc-800"}`}>
-                  <div
-                    className="h-full rounded-full bg-emerald-500 transition-all duration-500"
-                    style={{ width: `${onlinePercent}%` }}
-                  />
+              {isBtop ? (
+                <div className="mt-1.5 sm:mt-2 flex items-center gap-1.5 sm:gap-2">
+                  <div className="flex items-center gap-[2px] flex-1">
+                    {Array.from({ length: 12 }).map((_, i) => (
+                      <div
+                        key={i}
+                        className={`h-1.5 flex-1 ${
+                          onlinePercent >= (i + 1) * 8.33
+                            ? "bg-emerald-400 shadow-[0_0_3px_rgba(52,211,153,0.7)]"
+                            : "bg-[#0d1424] border border-[#1b253b]/80"
+                        }`}
+                      />
+                    ))}
+                  </div>
+                  <span className="text-[10px] font-mono text-cyan-400 whitespace-nowrap">
+                    {onlinePercent.toFixed(0)}% 在线
+                  </span>
                 </div>
-                <span className={`text-[10px] font-mono whitespace-nowrap ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}>
-                  {onlinePercent.toFixed(0)}% 在线
-                </span>
-              </div>
+              ) : (
+                <div className="mt-1.5 sm:mt-2 flex items-center gap-1.5 sm:gap-2">
+                  <div className={`h-1 flex-1 rounded-full overflow-hidden ${isBlueprint ? "bg-slate-200/80" : "bg-zinc-800"}`}>
+                    <div
+                      className="h-full rounded-full bg-emerald-500 transition-all duration-500"
+                      style={{ width: `${onlinePercent}%` }}
+                    />
+                  </div>
+                  <span className={`text-[10px] font-mono whitespace-nowrap ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}>
+                    {onlinePercent.toFixed(0)}% 在线
+                  </span>
+                </div>
+              )}
             </BlurFade>
 
             {/* Card 2: Total Ingress */}
@@ -518,20 +663,49 @@ export const Header: React.FC<HeaderProps> = ({
                 </div>
               </div>
               {/* Dual mini progress bar */}
-              <div className="mt-1.5 sm:mt-2 grid grid-cols-2 gap-1.5 sm:gap-2">
-                <div className={`h-1 rounded-full overflow-hidden ${isBlueprint ? "bg-slate-200/80" : "bg-zinc-800"}`} title={`CPU: ${summary.avg_cpu.toFixed(1)}%`}>
-                  <div
-                    className="h-full rounded-full bg-emerald-500 transition-all duration-500"
-                    style={{ width: `${Math.min(100, Math.max(0, summary.avg_cpu))}%` }}
-                  />
+              {isBtop ? (
+                <div className="mt-1.5 sm:mt-2 grid grid-cols-2 gap-1.5 sm:gap-2">
+                  <div className="flex items-center gap-[2px]" title={`CPU: ${summary.avg_cpu.toFixed(1)}%`}>
+                    {Array.from({ length: 8 }).map((_, i) => (
+                      <div
+                        key={i}
+                        className={`h-1.5 flex-1 ${
+                          summary.avg_cpu >= (i + 1) * 12.5
+                            ? "bg-cyan-400 shadow-[0_0_3px_rgba(0,240,255,0.7)]"
+                            : "bg-[#0d1424] border border-[#1b253b]/80"
+                        }`}
+                      />
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-[2px]" title={`RAM: ${summary.avg_mem.toFixed(1)}%`}>
+                    {Array.from({ length: 8 }).map((_, i) => (
+                      <div
+                        key={i}
+                        className={`h-1.5 flex-1 ${
+                          summary.avg_mem >= (i + 1) * 12.5
+                            ? "bg-emerald-400 shadow-[0_0_3px_rgba(52,211,153,0.7)]"
+                            : "bg-[#0d1424] border border-[#1b253b]/80"
+                        }`}
+                      />
+                    ))}
+                  </div>
                 </div>
-                <div className={`h-1 rounded-full overflow-hidden ${isBlueprint ? "bg-slate-200/80" : "bg-zinc-800"}`} title={`RAM: ${summary.avg_mem.toFixed(1)}%`}>
-                  <div
-                    className="h-full rounded-full bg-sky-500 transition-all duration-500"
-                    style={{ width: `${Math.min(100, Math.max(0, summary.avg_mem))}%` }}
-                  />
+              ) : (
+                <div className="mt-1.5 sm:mt-2 grid grid-cols-2 gap-1.5 sm:gap-2">
+                  <div className={`h-1 rounded-full overflow-hidden ${isBlueprint ? "bg-slate-200/80" : "bg-zinc-800"}`} title={`CPU: ${summary.avg_cpu.toFixed(1)}%`}>
+                    <div
+                      className="h-full rounded-full bg-emerald-500 transition-all duration-500"
+                      style={{ width: `${Math.min(100, Math.max(0, summary.avg_cpu))}%` }}
+                    />
+                  </div>
+                  <div className={`h-1 rounded-full overflow-hidden ${isBlueprint ? "bg-slate-200/80" : "bg-zinc-800"}`} title={`RAM: ${summary.avg_mem.toFixed(1)}%`}>
+                    <div
+                      className="h-full rounded-full bg-sky-500 transition-all duration-500"
+                      style={{ width: `${Math.min(100, Math.max(0, summary.avg_mem))}%` }}
+                    />
+                  </div>
                 </div>
-              </div>
+              )}
             </BlurFade>
           </div>
 
@@ -541,7 +715,7 @@ export const Header: React.FC<HeaderProps> = ({
             {/* Mobile Top Row: Search Input + View Mode Toggle */}
             <div className="flex items-center gap-2">
               <div className="relative flex-1">
-                <Search className={`absolute left-3 top-2.5 h-4 w-4 ${isBlueprint ? "text-slate-400" : "text-zinc-500"}`} />
+                <Search className={`absolute left-3 top-2.5 h-4 w-4 ${isBlueprint ? "text-slate-400" : isBtop ? "text-cyan-500/70" : "text-zinc-500"}`} />
                 <input
                   ref={searchInputRef}
                   type="text"
@@ -551,6 +725,8 @@ export const Header: React.FC<HeaderProps> = ({
                   className={`w-full rounded-xl border pl-9 pr-8 py-1.5 text-xs font-sans focus:outline-none transition-all ${
                     isBlueprint
                       ? "bg-white border-slate-200 text-slate-800 placeholder-slate-400 focus:border-indigo-500 shadow-xs"
+                      : isBtop
+                      ? "bg-[#090d16] border-[#1b253b] text-cyan-300 placeholder-slate-500 focus:border-cyan-500 font-mono"
                       : "bg-zinc-900/80 border-white/[0.08] text-zinc-100 placeholder-zinc-500 focus:border-indigo-500"
                   }`}
                 />
@@ -558,7 +734,7 @@ export const Header: React.FC<HeaderProps> = ({
                   <button
                     onClick={() => onSearchChange("")}
                     className={`absolute right-2.5 top-2 p-0.5 rounded-md ${
-                      isBlueprint ? "text-slate-400 hover:text-slate-700" : "text-zinc-500 hover:text-zinc-300"
+                      isBlueprint ? "text-slate-400 hover:text-slate-700" : isBtop ? "text-cyan-400 hover:text-cyan-200" : "text-zinc-500 hover:text-zinc-300"
                     } transition-colors cursor-pointer`}
                     title="清除搜索"
                   >
@@ -572,6 +748,8 @@ export const Header: React.FC<HeaderProps> = ({
                 className={`flex shrink-0 items-center rounded-xl border p-0.5 ${
                   isBlueprint
                     ? "border-slate-200/90 bg-slate-100 shadow-xs"
+                    : isBtop
+                    ? "border-[#1b253b] bg-[#090d16]"
                     : "border-white/[0.08] bg-zinc-900/80 shadow-inner"
                 }`}
               >
@@ -579,9 +757,13 @@ export const Header: React.FC<HeaderProps> = ({
                   onClick={() => onViewModeChange("grid")}
                   className={`rounded-lg p-1.5 transition-all cursor-pointer active:scale-95 ${
                     viewMode === "grid"
-                      ? "bg-indigo-600 text-white shadow-sm shadow-indigo-600/30"
+                      ? isBtop
+                        ? "bg-cyan-500 text-black font-bold shadow-sm shadow-cyan-500/30"
+                        : "bg-indigo-600 text-white shadow-sm shadow-indigo-600/30"
                       : isBlueprint
                       ? "text-slate-500"
+                      : isBtop
+                      ? "text-slate-400 hover:text-cyan-300"
                       : "text-zinc-400"
                   }`}
                   title="网格卡片视图"
@@ -593,9 +775,13 @@ export const Header: React.FC<HeaderProps> = ({
                   onClick={() => onViewModeChange("table")}
                   className={`rounded-lg p-1.5 transition-all cursor-pointer active:scale-95 ${
                     viewMode === "table"
-                      ? "bg-indigo-600 text-white shadow-sm shadow-indigo-600/30"
+                      ? isBtop
+                        ? "bg-cyan-500 text-black font-bold shadow-sm shadow-cyan-500/30"
+                        : "bg-indigo-600 text-white shadow-sm shadow-indigo-600/30"
                       : isBlueprint
                       ? "text-slate-500"
+                      : isBtop
+                      ? "text-slate-400 hover:text-cyan-300"
                       : "text-zinc-400"
                   }`}
                   title="表格机架视图"
@@ -611,22 +797,32 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 onClick={() => onRegionChange("ALL")}
                 className={cn(
-                  "rounded-xl px-2.5 py-1.5 text-xs font-medium transition-all cursor-pointer active:scale-95 flex items-center gap-1.5 whitespace-nowrap shrink-0",
+                  isBtop ? "rounded-none px-2 py-1" : "rounded-xl px-2.5 py-1.5",
+                  "text-xs font-medium transition-all cursor-pointer active:scale-95 flex items-center gap-1.5 whitespace-nowrap shrink-0",
                   selectedRegion === "ALL"
-                    ? "bg-indigo-600 text-white font-semibold shadow-md shadow-indigo-600/25"
+                    ? isBtop
+                      ? "bg-cyan-500 text-black font-bold shadow-md shadow-cyan-500/25 border border-cyan-400"
+                      : "bg-indigo-600 text-white font-semibold shadow-md shadow-indigo-600/25"
                     : isBlueprint
                     ? "bg-white text-slate-600 hover:text-slate-900 border border-slate-200 shadow-xs"
+                    : isBtop
+                    ? "bg-[#090d16] text-slate-400 hover:text-cyan-300 border border-[#1b253b]"
                     : "bg-zinc-900/80 text-zinc-400 hover:text-zinc-200 border border-white/[0.08]"
                 )}
               >
-                <span>全部</span>
+                <span>{isBtop ? "[ ALL ]" : "全部"}</span>
                 <span
                   className={cn(
-                    "px-1.5 py-0.2 rounded-full text-[10px] font-mono leading-tight",
+                    "px-1.5 py-0.2 text-[10px] font-mono leading-tight",
+                    isBtop ? "rounded-none" : "rounded-full",
                     selectedRegion === "ALL"
-                      ? "bg-white/20 text-white font-bold"
+                      ? isBtop
+                        ? "bg-black/30 text-black font-bold"
+                        : "bg-white/20 text-white font-bold"
                       : isBlueprint
                       ? "bg-slate-100 text-slate-500"
+                      : isBtop
+                      ? "bg-[#162235] text-cyan-400"
                       : "bg-zinc-800 text-zinc-400"
                   )}
                 >
@@ -640,24 +836,34 @@ export const Header: React.FC<HeaderProps> = ({
                     key={reg}
                     onClick={() => onRegionChange(reg)}
                     className={cn(
-                      "rounded-xl px-2.5 py-1.5 text-xs font-medium transition-all cursor-pointer active:scale-95 flex items-center gap-1.5 whitespace-nowrap shrink-0",
+                      isBtop ? "rounded-none px-2 py-1" : "rounded-xl px-2.5 py-1.5",
+                      "text-xs font-medium transition-all cursor-pointer active:scale-95 flex items-center gap-1.5 whitespace-nowrap shrink-0",
                       selectedRegion === reg
-                        ? "bg-indigo-600 text-white font-semibold shadow-md shadow-indigo-600/25"
+                        ? isBtop
+                          ? "bg-cyan-500 text-black font-bold shadow-md shadow-cyan-500/25 border border-cyan-400"
+                          : "bg-indigo-600 text-white font-semibold shadow-md shadow-indigo-600/25"
                         : isBlueprint
                         ? "bg-white text-slate-600 hover:text-slate-900 border border-slate-200 shadow-xs"
+                        : isBtop
+                        ? "bg-[#090d16] text-slate-400 hover:text-cyan-300 border border-[#1b253b]"
                         : "bg-zinc-900/80 text-zinc-400 hover:text-zinc-200 border border-white/[0.08]"
                     )}
                   >
                     <span className="text-sm leading-none">{getRegionFlag(reg)}</span>
-                    <span className="leading-none uppercase">{reg}</span>
+                    <span className="leading-none uppercase">{isBtop ? `[ ${reg} ]` : reg}</span>
                     {count != null && (
                       <span
                         className={cn(
-                          "px-1.5 py-0.2 rounded-full text-[10px] font-mono leading-tight",
+                          "px-1.5 py-0.2 text-[10px] font-mono leading-tight",
+                          isBtop ? "rounded-none" : "rounded-full",
                           selectedRegion === reg
-                            ? "bg-white/20 text-white font-bold"
+                            ? isBtop
+                              ? "bg-black/30 text-black font-bold"
+                              : "bg-white/20 text-white font-bold"
                             : isBlueprint
                             ? "bg-slate-100 text-slate-500"
+                            : isBtop
+                            ? "bg-[#162235] text-cyan-400"
                             : "bg-zinc-800 text-zinc-400"
                         )}
                       >
@@ -674,17 +880,19 @@ export const Header: React.FC<HeaderProps> = ({
           <div className="mt-3.5 hidden sm:flex items-center gap-2.5">
             {/* Search Bar with Shortcut Hint */}
             <div className="relative flex-1 min-w-[200px] max-w-sm">
-              <Search className={`absolute left-3 top-2.5 h-4 w-4 ${isBlueprint ? "text-slate-400" : "text-zinc-500"}`} />
+              <Search className={`absolute left-3 top-2.5 h-4 w-4 ${isBlueprint ? "text-slate-400" : isBtop ? "text-cyan-500/70" : "text-zinc-500"}`} />
               <input
                 ref={searchInputRef}
                 type="text"
-                placeholder="搜索主机名称、节点 ID 或 IP..."
+                placeholder={isBtop ? "FIND ❯ filter hostname, IP, tag..." : "搜索主机名称、节点 ID 或 IP..."}
                 value={searchQuery}
                 onChange={(e) => onSearchChange(e.target.value)}
-                className={`w-full rounded-xl border pl-9 pr-14 py-1.5 text-xs font-sans focus:outline-none transition-all ${
+                className={`w-full border pl-9 pr-14 py-1.5 text-xs font-sans focus:outline-none transition-all ${
                   isBlueprint
-                    ? "bg-white border-slate-200 text-slate-800 placeholder-slate-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/15 shadow-xs"
-                    : "bg-zinc-900/80 border-white/[0.08] text-zinc-100 placeholder-zinc-500 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+                    ? "rounded-xl bg-white border-slate-200 text-slate-800 placeholder-slate-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/15 shadow-xs"
+                    : isBtop
+                    ? "rounded-none bg-[#090d16] border-[#1b253b] text-cyan-300 placeholder-slate-500 focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/40 font-mono shadow-inner"
+                    : "rounded-xl bg-zinc-900/80 border-white/[0.08] text-zinc-100 placeholder-zinc-500 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
                 }`}
               />
               <div className="absolute right-2.5 top-2 flex items-center gap-1">
@@ -692,7 +900,7 @@ export const Header: React.FC<HeaderProps> = ({
                   <button
                     onClick={() => onSearchChange("")}
                     className={`p-0.5 rounded-md ${
-                      isBlueprint ? "text-slate-400 hover:text-slate-700" : "text-zinc-500 hover:text-zinc-300"
+                      isBlueprint ? "text-slate-400 hover:text-slate-700" : isBtop ? "text-cyan-400 hover:text-cyan-200" : "text-zinc-500 hover:text-zinc-300"
                     } transition-colors cursor-pointer`}
                     title="清除搜索"
                   >
@@ -703,6 +911,8 @@ export const Header: React.FC<HeaderProps> = ({
                     className={`px-1.5 py-0.5 rounded text-[10px] font-mono leading-none border ${
                       isBlueprint
                         ? "bg-slate-100 text-slate-400 border-slate-200"
+                        : isBtop
+                        ? "bg-[#162235] text-cyan-400 border-[#1b253b]"
                         : "bg-zinc-800/80 text-zinc-500 border-zinc-700/60"
                     }`}
                     title="按 / 聚焦搜索"
@@ -718,22 +928,31 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 onClick={() => onRegionChange("ALL")}
                 className={cn(
-                  "rounded-xl px-3 py-1.5 text-xs font-medium transition-all cursor-pointer active:scale-95 flex items-center gap-1.5 whitespace-nowrap",
+                  "px-3 py-1.5 text-xs font-medium transition-all cursor-pointer active:scale-95 flex items-center gap-1.5 whitespace-nowrap",
+                  isBtop ? "rounded-none" : "rounded-xl",
                   selectedRegion === "ALL"
-                    ? "bg-indigo-600 text-white font-semibold shadow-md shadow-indigo-600/25"
+                    ? isBtop
+                      ? "bg-cyan-500 text-black font-bold shadow-md shadow-cyan-500/25"
+                      : "bg-indigo-600 text-white font-semibold shadow-md shadow-indigo-600/25"
                     : isBlueprint
                     ? "bg-white text-slate-600 hover:text-slate-900 border border-slate-200 shadow-xs hover:border-slate-300"
+                    : isBtop
+                    ? "bg-[#090d16] text-slate-400 hover:text-cyan-300 border border-[#1b253b] hover:border-cyan-500/40"
                     : "bg-zinc-900/70 text-zinc-400 hover:text-zinc-200 border border-white/[0.08] hover:border-white/[0.16]"
                 )}
               >
-                <span>ALL REGIONS</span>
+                <span>{isBtop ? "[ ALL ]" : "ALL REGIONS"}</span>
                 <span
                   className={cn(
                     "px-1.5 py-0.2 rounded-full text-[10px] font-mono leading-tight",
                     selectedRegion === "ALL"
-                      ? "bg-white/20 text-white font-bold"
+                      ? isBtop
+                        ? "bg-black/30 text-black font-bold"
+                        : "bg-white/20 text-white font-bold"
                       : isBlueprint
                       ? "bg-slate-100 text-slate-500"
+                      : isBtop
+                      ? "bg-[#162235] text-cyan-400"
                       : "bg-zinc-800 text-zinc-400"
                   )}
                 >
@@ -747,24 +966,33 @@ export const Header: React.FC<HeaderProps> = ({
                     key={reg}
                     onClick={() => onRegionChange(reg)}
                     className={cn(
-                      "rounded-xl px-2.5 py-1.5 text-xs font-medium transition-all cursor-pointer active:scale-95 flex items-center gap-1.5 whitespace-nowrap",
+                      "px-2.5 py-1.5 text-xs font-medium transition-all cursor-pointer active:scale-95 flex items-center gap-1.5 whitespace-nowrap",
+                      isBtop ? "rounded-none" : "rounded-xl",
                       selectedRegion === reg
-                        ? "bg-indigo-600 text-white font-semibold shadow-md shadow-indigo-600/25"
+                        ? isBtop
+                          ? "bg-cyan-500 text-black font-bold shadow-md shadow-cyan-500/25"
+                          : "bg-indigo-600 text-white font-semibold shadow-md shadow-indigo-600/25"
                         : isBlueprint
                         ? "bg-white text-slate-600 hover:text-slate-900 border border-slate-200 shadow-xs hover:border-slate-300"
+                        : isBtop
+                        ? "bg-[#090d16] text-slate-400 hover:text-cyan-300 border border-[#1b253b] hover:border-cyan-500/40"
                         : "bg-zinc-900/70 text-zinc-400 hover:text-zinc-200 border border-white/[0.08] hover:border-white/[0.16]"
                     )}
                   >
                     <span className="text-sm leading-none">{getRegionFlag(reg)}</span>
-                    <span className="leading-none uppercase">{reg}</span>
+                    <span className="leading-none uppercase">{isBtop ? `[ ${reg} ]` : reg}</span>
                     {count != null && (
                       <span
                         className={cn(
                           "px-1.5 py-0.2 rounded-full text-[10px] font-mono leading-tight",
                           selectedRegion === reg
-                            ? "bg-white/20 text-white font-bold"
+                            ? isBtop
+                              ? "bg-black/30 text-black font-bold"
+                              : "bg-white/20 text-white font-bold"
                             : isBlueprint
                             ? "bg-slate-100 text-slate-500"
+                            : isBtop
+                            ? "bg-[#162235] text-cyan-400"
                             : "bg-zinc-800 text-zinc-400"
                         )}
                       >
@@ -781,6 +1009,8 @@ export const Header: React.FC<HeaderProps> = ({
               className={`flex shrink-0 items-center rounded-xl border p-0.5 ${
                 isBlueprint
                   ? "border-slate-200/90 bg-slate-100 shadow-xs"
+                  : isBtop
+                  ? "border-[#1b253b] bg-[#090d16]"
                   : "border-white/[0.08] bg-zinc-900/80 shadow-inner"
               }`}
             >
@@ -788,9 +1018,13 @@ export const Header: React.FC<HeaderProps> = ({
                 onClick={() => onViewModeChange("grid")}
                 className={`rounded-lg p-1.5 transition-all cursor-pointer active:scale-95 ${
                   viewMode === "grid"
-                    ? "bg-indigo-600 text-white shadow-sm shadow-indigo-600/30"
+                    ? isBtop
+                      ? "bg-cyan-500 text-black font-bold shadow-sm shadow-cyan-500/30"
+                      : "bg-indigo-600 text-white shadow-sm shadow-indigo-600/30"
                     : isBlueprint
                     ? "text-slate-500 hover:text-slate-900"
+                    : isBtop
+                    ? "text-slate-400 hover:text-cyan-300"
                     : "text-zinc-400 hover:text-zinc-200"
                 }`}
                 title="网格卡片视图"
@@ -803,9 +1037,13 @@ export const Header: React.FC<HeaderProps> = ({
                 onClick={() => onViewModeChange("table")}
                 className={`rounded-lg p-1.5 transition-all cursor-pointer active:scale-95 ${
                   viewMode === "table"
-                    ? "bg-indigo-600 text-white shadow-sm shadow-indigo-600/30"
+                    ? isBtop
+                      ? "bg-cyan-500 text-black font-bold shadow-sm shadow-cyan-500/30"
+                      : "bg-indigo-600 text-white shadow-sm shadow-indigo-600/30"
                     : isBlueprint
                     ? "text-slate-500 hover:text-slate-900"
+                    : isBtop
+                    ? "text-slate-400 hover:text-cyan-300"
                     : "text-zinc-400 hover:text-zinc-200"
                 }`}
                 title="表格机架视图"

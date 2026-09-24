@@ -1,13 +1,14 @@
 import React, { useState } from "react";
 import { Check, Copy, Globe, RefreshCw, Shield, Terminal, X } from "lucide-react";
 import { Button, Input } from "@heroui/react";
+import { ThemeMode } from "../../../types";
 import { cn } from "../../../lib/utils";
 
 interface HostDeployDialogProps {
   /** Token embedded into the install command; owned by the parent so the
       tokens tab and this dialog stay in agreement. */
   deployToken: string;
-  theme?: "blueprint" | "dark";
+  theme?: ThemeMode;
   onClose: () => void;
   /** Mints a fresh agent token and returns it, or null when the call failed. */
   onRegenerateToken: () => Promise<string | null>;

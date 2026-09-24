@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Check, CheckCircle2, Globe, Sliders, Ticket, X, Zap } from "lucide-react";
 import { Button, Chip, Input, ListBox, Select, Switch } from "@heroui/react";
-import { NodeSettings, NodeState } from "../../../types";
+import { NodeSettings, NodeState, ThemeMode } from "../../../types";
 import { getRegionFlag } from "../../../utils/flags";
 import { cn } from "../../../lib/utils";
 import { TagInput } from "../../TagInput";
@@ -12,7 +12,7 @@ import { BILLING_CYCLE_OPTIONS, CURRENCY_OPTIONS } from "./billingOptions";
 interface HostEditDialogProps {
   /** The row being configured. The dialog only mounts when this is set. */
   node: NodeState;
-  theme?: "blueprint" | "dark";
+  theme?: ThemeMode;
   onClose: () => void;
   /** Fired after a successful save so the caller can refetch the node list. */
   onSaved?: () => void;
