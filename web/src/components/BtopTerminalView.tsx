@@ -92,6 +92,61 @@ function formatBtopUptime(uptimeSeconds: number): string {
   return `up ${hh}:${mm}`;
 }
 
+// Block meter that stretches to its container width: the brackets hug the
+// panel edges like a real btop gauge instead of leaving dead space after a
+// fixed character count in wide layouts.
+const BlockMeterFill: React.FC<{
+  percent: number;
+  colors: { meterActiveText: string; meterEmptyText: string };
+}> = ({ percent, colors }) => {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [width, setWidth] = useState(0);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const update = () => setWidth(el.clientWidth);
+    update();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // ≈7px per monospace cell at text-[11px]/xs, minus the two brackets; clamped
+  // so extreme widths cannot explode the string length.
+  const blocks = width > 0 ? Math.max(6, Math.min(240, Math.floor((width - 14) / 7))) : 32;
+  const safeVal = Math.min(100, Math.max(0, percent));
+  const activeBlocks = Math.round((safeVal / 100) * blocks);
+  const filled = "█".repeat(activeBlocks);
+  const empty = "░".repeat(blocks - activeBlocks);
+
+  return (
+    <div ref={ref} className="w-full overflow-hidden whitespace-nowrap">
+      [
+      <span className="tracking-tight select-none">
+        <span className={colors.meterActiveText}>{filled}</span>
+        <span className={colors.meterEmptyText}>{empty}</span>
+      </span>
+      ]
+    </div>
+  );
+};
+
+// One braille waveform row drawn as fixed-width cells. Braille glyphs
+// (U+28xx) often fall back to a non-monospace font, which makes columns
+// drift apart and misalign while the wave scrolls — fixed cells pin every
+// column to the same grid.
+const BrailleLine: React.FC<{ line: string; className?: string }> = ({ line, className }) => (
+  <div className={className}>
+    {line.split("").map((ch, i) => (
+      <span key={i} className="inline-block w-[8px] text-center leading-none">
+        {ch}
+      </span>
+    ))}
+  </div>
+);
+
 export function BtopTerminalView({
   nodes,
   theme,
@@ -1099,7 +1154,7 @@ export function BtopTerminalView({
             {/* Total CPU Progress Meter Bar */}
             <div className="flex items-center justify-between gap-2 text-xs mb-1.5">
               <span className="font-bold shrink-0">CPU</span>
-              <div className="flex-1 overflow-hidden tracking-tight">[{renderBlockMeter(cpuPercent, 48)}]</div>
+              <div className="flex-1 min-w-0"><BlockMeterFill percent={cpuPercent} colors={colors} /></div>
               <span className="font-bold shrink-0 w-8 text-right">{cpuPercent.toFixed(0)}%</span>
               <span className={`text-[11px] shrink-0 ${colors.textDim}`}>......... Tasks: {activeNode.system?.process_count || 87}</span>
             </div>
@@ -1110,9 +1165,7 @@ export function BtopTerminalView({
               <div className="hidden md:flex md:col-span-4 flex-col justify-center font-mono leading-none py-1">
                 <div className="space-y-0.5 overflow-hidden">
                   {renderBrailleMatrix(cpuHistory, 6, 100).map((line, idx) => (
-                    <div key={idx} className={`leading-none tracking-wider whitespace-nowrap overflow-hidden text-xs ${colors.meterActiveText}`}>
-                      {line}
-                    </div>
+                    <BrailleLine key={idx} line={line} className={`leading-none whitespace-nowrap overflow-hidden text-xs ${colors.meterActiveText}`} />
                   ))}
                 </div>
                 <div className="text-[10px] mt-1.5 font-bold select-none">{uptimeStr}</div>
@@ -1283,12 +1336,11 @@ export function BtopTerminalView({
                     </div>
                     <div className="my-auto space-y-0.5 overflow-hidden">
                       {renderBrailleMatrix(netHistory, 6, maxNetRate).map((line, idx) => (
-                        <div
+                        <BrailleLine
                           key={idx}
-                          className={`text-xs leading-none tracking-wider whitespace-nowrap overflow-hidden font-mono ${colors.meterActiveText}`}
-                        >
-                          {line}
-                        </div>
+                          line={line}
+                          className={`text-xs leading-none whitespace-nowrap overflow-hidden font-mono ${colors.meterActiveText}`}
+                        />
                       ))}
                     </div>
                     <div className="flex justify-between text-[10px]">
@@ -1462,7 +1514,7 @@ export function BtopTerminalView({
                       <span>流量配额: {formatBytes(billing.bandwidth_used || 0)} / {formatBytes(billing.bandwidth_quota)}</span>
                       <span className={colors.accent}>{quotaPercent}%</span>
                     </div>
-                    <div className="w-full">[{renderBlockMeter(quotaPercent, 32)}]</div>
+                    <BlockMeterFill percent={quotaPercent} colors={colors} />
                     <div className="grid grid-cols-3 gap-1 text-[11px] pt-1 border-t border-dashed border-current/20">
                       <div>
                         <span className={colors.textMuted}>▲ 上行: </span>
@@ -1695,7 +1747,7 @@ export function BtopTerminalView({
                     <span className={colors.textMuted}>双向流量配额:</span>
                     <span>{formatBytes(billing.bandwidth_used || 0)} / {formatBytes(billing.bandwidth_quota)} ({quotaPercent}%)</span>
                   </div>
-                  <div className="w-full">[{renderBlockMeter(quotaPercent, 28)}]</div>
+                  <BlockMeterFill percent={quotaPercent} colors={colors} />
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-[11px] pt-1 border-t border-dashed border-current/20">
                   <div>
