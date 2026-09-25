@@ -5,10 +5,14 @@ import (
 	"encoding/json"
 	"io"
 	"log"
+	"math"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
+
+	"probe/pkg/model"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -30,6 +34,10 @@ func (s *Server) setupKomariRoutes(tm *ThemeManager) {
 
 	// Komari Live Telemetry WebSocket
 	s.router.GET("/api/clients", s.handleKomariClientsWS)
+
+	// Recent status history (modern Komari themes poll this for the
+	// instance-page monitor charts instead of the live WebSocket).
+	s.router.GET("/api/recent/:uuid", s.handleKomariRecent)
 
 	// Komari JSON-RPC 2.0 (Theme Transport: WebSocket & HTTP)
 	s.router.GET("/api/rpc2", s.handleKomariRPC2GET)
@@ -668,13 +676,9 @@ func (s *Server) executeRPCMethod(method string, params interface{}) (interface{
 	case "public:getPublicPingTasks", "admin:getAllPingTasks":
 		return s.getKomariRPCPingTasks(), nil
 	case "public:getPingMetricStats":
-		return gin.H{
-			"stats": []interface{}{},
-		}, nil
+		return s.getKomariPingMetricStats(params), nil
 	case "public:queryMetrics":
-		return gin.H{
-			"series": []interface{}{},
-		}, nil
+		return s.getKomariQueryMetrics(params), nil
 	case "admin:listPlugins":
 		return []interface{}{}, nil
 	default:
@@ -933,7 +937,6 @@ func (s *Server) handleKomariAdminDBSize(c *gin.Context) {
 	})
 }
 
-
 // --- Theme Management REST Handlers ---
 
 // GET /api/v1/themes
@@ -1056,4 +1059,450 @@ func (s *Server) handleDeleteTheme(tm *ThemeManager) gin.HandlerFunc {
 		}
 		c.JSON(http.StatusOK, gin.H{"message": "Theme deleted successfully"})
 	}
+}
+
+// --- Komari metrics compatibility (public:queryMetrics / getPingMetricStats) ---
+//
+// Modern Komari themes chart telemetry through these two JSON-RPC methods.
+// Series follow the upstream shape: one entry per (entity, metric) with the
+// ping metrics additionally tagged by task_id, points as {time, value} in
+// RFC3339. Returning empty payloads here left every 延迟/丢包 chart blank and
+// the loss summary rendering NaN%, which is why they are backed by the same
+// downsampler history the built-in dashboard charts read.
+
+// komariMetricPoint is one sampled value on a metric series. Time is RFC3339
+// because dayjs in the themes parses it directly.
+type KomariMetricPoint struct {
+	Time  string  `json:"time"`
+	Value float64 `json:"value"`
+}
+
+// KomariMetricSeries is one metric stream. Tags carry the ping task id on
+// both the series and each point: emerald-globe-pro reads the series-level
+// tag while ServerStatus groups per-point, so both are populated.
+type KomariMetricSeries struct {
+	MetricKey string                 `json:"metric_key"`
+	EntityID  string                 `json:"entity_id"`
+	Unit      string                 `json:"unit,omitempty"`
+	Tags      map[string]interface{} `json:"tags,omitempty"`
+	Points    []KomariMetricPoint    `json:"points"`
+}
+
+// komariQueryMetricsParams covers the union of arguments the themes send.
+type komariQueryMetricsParams struct {
+	MetricKeys []string `json:"metric_keys"`
+	Metrics    []string `json:"metrics"` // alias some themes use
+	EntityID   string   `json:"entity_id"`
+	UUID       string   `json:"uuid"`
+	Hours      int      `json:"hours"`
+	MaxPoints  int      `json:"max_points"`
+}
+
+// komariXY is a raw timestamped value before bucketing.
+type komariXY struct {
+	t int64
+	v float64
+}
+
+// komariBucketPoints averages raw samples into at most maxPoints uniform
+// buckets across [start, end], mirroring the "aggregation":"avg" the themes
+// request. The point time is its bucket start so charts align on the axis.
+func komariBucketPoints(start, end int64, maxPoints int, raw []komariXY) []KomariMetricPoint {
+	if len(raw) == 0 {
+		return []KomariMetricPoint{}
+	}
+	if maxPoints <= 0 {
+		maxPoints = 500
+	}
+	span := end - start
+	if span <= 0 {
+		span = 1
+	}
+	buckets := int(span) // one second per bucket at most
+	if buckets > maxPoints {
+		buckets = maxPoints
+	}
+	if buckets < 1 {
+		buckets = 1
+	}
+	width := float64(span) / float64(buckets)
+
+	sums := make([]float64, buckets)
+	counts := make([]int, buckets)
+	for _, p := range raw {
+		idx := int(float64(p.t-start) / width)
+		if idx < 0 {
+			idx = 0
+		}
+		if idx >= buckets {
+			idx = buckets - 1
+		}
+		sums[idx] += p.v
+		counts[idx]++
+	}
+
+	points := make([]KomariMetricPoint, 0, buckets)
+	for i := 0; i < buckets; i++ {
+		if counts[i] == 0 {
+			continue
+		}
+		points = append(points, KomariMetricPoint{
+			Time:  time.Unix(start+int64(float64(i)*width), 0).UTC().Format(time.RFC3339),
+			Value: sums[i] / float64(counts[i]),
+		})
+	}
+	return points
+}
+
+// komariTaskIDLookup builds label/target → task id maps so ping_points rows
+// (which carry the target label, not the task id) can be attributed to the
+// ping task the themes expect in tags.task_id.
+type komariTaskIDLookup struct {
+	byLabel  map[string]model.PingTargetConfig
+	byTarget map[string]model.PingTargetConfig
+}
+
+func (s *Server) komariPingTaskLookup() komariTaskIDLookup {
+	lookup := komariTaskIDLookup{byLabel: map[string]model.PingTargetConfig{}, byTarget: map[string]model.PingTargetConfig{}}
+	targets, err := s.storage.GetPingTargets()
+	if err != nil {
+		return lookup
+	}
+	for _, t := range targets {
+		if t.Label != "" {
+			lookup.byLabel[strings.ToLower(t.Label)] = t
+		}
+		if t.Target != "" {
+			lookup.byTarget[strings.ToLower(t.Target)] = t
+		}
+	}
+	return lookup
+}
+
+func (l komariTaskIDLookup) resolve(point *model.PingHistoryPoint) (model.PingTargetConfig, bool) {
+	if t, ok := l.byLabel[strings.ToLower(point.Label)]; ok {
+		return t, true
+	}
+	if t, ok := l.byTarget[strings.ToLower(point.Target)]; ok {
+		return t, true
+	}
+	return model.PingTargetConfig{}, false
+}
+
+// getKomariQueryMetrics serves public:queryMetrics. Only keys this server can
+// truthfully produce are answered; unknown keys simply get no series, which
+// the themes render as an empty chart rather than an error.
+func (s *Server) getKomariQueryMetrics(params interface{}) interface{} {
+	p := komariQueryMetricsParams{Hours: 1, MaxPoints: 500}
+	if raw, err := json.Marshal(params); err == nil {
+		_ = json.Unmarshal(raw, &p)
+	}
+	p.MetricKeys = append(p.MetricKeys, p.Metrics...)
+	if p.Hours <= 0 {
+		p.Hours = 1
+	}
+	if p.Hours > 720 {
+		p.Hours = 720
+	}
+	if p.MaxPoints <= 0 {
+		p.MaxPoints = 500
+	}
+	if p.MaxPoints > 3000 {
+		p.MaxPoints = 3000
+	}
+
+	entity := p.EntityID
+	if entity == "" {
+		entity = p.UUID
+	}
+	empty := gin.H{"series": []interface{}{}}
+	if entity == "" || len(p.MetricKeys) == 0 {
+		return empty
+	}
+
+	end := time.Now().Unix()
+	start := end - int64(p.Hours*3600)
+
+	want := func(key string) bool {
+		for _, k := range p.MetricKeys {
+			if strings.TrimSpace(k) == key {
+				return true
+			}
+		}
+		return false
+	}
+
+	series := make([]KomariMetricSeries, 0, len(p.MetricKeys))
+
+	// Ping metrics: a latency and a loss stream per ping task.
+	if want("ping.latency_ms") || want("ping.loss") {
+		lookup := s.komariPingTaskLookup()
+		history, err := s.storage.GetPingHistory(entity, start, end)
+		if err == nil {
+			grouped := map[int64]*struct {
+				task model.PingTargetConfig
+				lat  []komariXY
+				loss []komariXY
+			}{}
+			order := []int64{}
+			for _, pt := range history {
+				task, ok := lookup.resolve(pt)
+				if !ok {
+					continue
+				}
+				g := grouped[task.ID]
+				if g == nil {
+					g = &struct {
+						task model.PingTargetConfig
+						lat  []komariXY
+						loss []komariXY
+					}{task: task}
+					grouped[task.ID] = g
+					order = append(order, task.ID)
+				}
+				g.lat = append(g.lat, komariXY{t: pt.Timestamp, v: pt.LatencyMs})
+				g.loss = append(g.loss, komariXY{t: pt.Timestamp, v: pt.PacketLoss})
+			}
+			for _, id := range order {
+				g := grouped[id]
+				if want("ping.latency_ms") {
+					series = append(series, KomariMetricSeries{
+						MetricKey: "ping.latency_ms",
+						EntityID:  entity,
+						Unit:      "ms",
+						Tags:      map[string]interface{}{"task_id": g.task.ID},
+						Points:    komariBucketPoints(start, end, p.MaxPoints, g.lat),
+					})
+				}
+				if want("ping.loss") {
+					series = append(series, KomariMetricSeries{
+						MetricKey: "ping.loss",
+						EntityID:  entity,
+						Unit:      "%",
+						Tags:      map[string]interface{}{"task_id": g.task.ID},
+						Points:    komariBucketPoints(start, end, p.MaxPoints, g.loss),
+					})
+				}
+			}
+		}
+	}
+
+	// Load metrics from the downsampler history. Cumulative traffic
+	// (net.total.up/down) is intentionally absent: the downsampled history
+	// carries rates only, and inventing totals would mislead the charts.
+	loadKeys := map[string]bool{}
+	for _, key := range []string{"cpu.usage", "memory.used", "memory.total", "swap.used", "swap.total", "disk.used", "disk.total", "net.in.rate", "net.out.rate", "load.load1"} {
+		if want(key) {
+			loadKeys[key] = true
+		}
+	}
+	if len(loadKeys) > 0 {
+		history, err := s.storage.GetHistory(entity, start, end)
+		if err == nil {
+			extract := map[string]func(*model.HistoryPoint) (float64, string){
+				"cpu.usage":    func(h *model.HistoryPoint) (float64, string) { return h.CPUPercent, "%" },
+				"memory.used":  func(h *model.HistoryPoint) (float64, string) { return float64(h.MemUsed), "bytes" },
+				"memory.total": func(h *model.HistoryPoint) (float64, string) { return float64(h.MemTotal), "bytes" },
+				"swap.used":    func(h *model.HistoryPoint) (float64, string) { return float64(h.SwapUsed), "bytes" },
+				"swap.total":   func(h *model.HistoryPoint) (float64, string) { return float64(h.SwapTotal), "bytes" },
+				"disk.used":    func(h *model.HistoryPoint) (float64, string) { return float64(h.DiskUsed), "bytes" },
+				"disk.total":   func(h *model.HistoryPoint) (float64, string) { return float64(h.DiskTotal), "bytes" },
+				"net.in.rate":  func(h *model.HistoryPoint) (float64, string) { return h.RateDownload, "bytes/s" },
+				"net.out.rate": func(h *model.HistoryPoint) (float64, string) { return h.RateUpload, "bytes/s" },
+				"load.load1":   func(h *model.HistoryPoint) (float64, string) { return h.Load1, "" },
+			}
+			for key, fn := range extract {
+				if !loadKeys[key] {
+					continue
+				}
+				raw := make([]komariXY, 0, len(history))
+				for _, h := range history {
+					v, _ := fn(h)
+					raw = append(raw, komariXY{t: h.Timestamp, v: v})
+				}
+				unit := ""
+				if len(raw) > 0 {
+					_, unit = fn(history[0])
+				}
+				series = append(series, KomariMetricSeries{
+					MetricKey: key,
+					EntityID:  entity,
+					Unit:      unit,
+					Points:    komariBucketPoints(start, end, p.MaxPoints, raw),
+				})
+			}
+		}
+	}
+
+	return gin.H{"series": series}
+}
+
+// KomariPingMetricStat is one task's aggregate over the queried window. The
+// themes read loss as a percentage and derive the volatility badge from
+// p99_p50_ratio, so both are computed exactly rather than left zero.
+type KomariPingMetricStat struct {
+	EntityID        string  `json:"entity_id"`
+	TaskID          int64   `json:"task_id"`
+	Name            string  `json:"name"`
+	Type            string  `json:"type,omitempty"`
+	Interval        int     `json:"interval,omitempty"`
+	Total           int     `json:"total"`
+	Loss            float64 `json:"loss"`
+	LossApproximate bool    `json:"loss_approximate"`
+	Min             float64 `json:"min"`
+	Max             float64 `json:"max"`
+	Avg             float64 `json:"avg"`
+	Latest          float64 `json:"latest"`
+	P99             float64 `json:"p99"`
+	P50             float64 `json:"p50"`
+	P99P50Ratio     float64 `json:"p99_p50_ratio"`
+}
+
+// getKomariPingMetricStats serves public:getPingMetricStats: per-task loss
+// and latency aggregates for the queried window.
+func (s *Server) getKomariPingMetricStats(params interface{}) interface{} {
+	p := komariQueryMetricsParams{Hours: 1, MaxPoints: 500}
+	if raw, err := json.Marshal(params); err == nil {
+		_ = json.Unmarshal(raw, &p)
+	}
+	if p.Hours <= 0 {
+		p.Hours = 1
+	}
+	entity := p.EntityID
+	if entity == "" {
+		entity = p.UUID
+	}
+	empty := gin.H{"stats": []interface{}{}}
+	if entity == "" {
+		return empty
+	}
+
+	end := time.Now().Unix()
+	start := end - int64(p.Hours*3600)
+
+	lookup := s.komariPingTaskLookup()
+	history, err := s.storage.GetPingHistory(entity, start, end)
+	if err != nil {
+		return empty
+	}
+
+	grouped := map[int64]*struct {
+		task   model.PingTargetConfig
+		lat    []float64
+		loss   []float64
+		latest float64
+	}{}
+	order := []int64{}
+	for _, pt := range history {
+		task, ok := lookup.resolve(pt)
+		if !ok {
+			continue
+		}
+		g := grouped[task.ID]
+		if g == nil {
+			g = &struct {
+				task   model.PingTargetConfig
+				lat    []float64
+				loss   []float64
+				latest float64
+			}{task: task}
+			grouped[task.ID] = g
+			order = append(order, task.ID)
+		}
+		g.lat = append(g.lat, pt.LatencyMs)
+		g.loss = append(g.loss, pt.PacketLoss)
+		g.latest = pt.LatencyMs
+	}
+
+	stats := make([]KomariPingMetricStat, 0, len(order))
+	for _, id := range order {
+		g := grouped[id]
+		if len(g.lat) == 0 {
+			continue
+		}
+		sortedLat := append([]float64(nil), g.lat...)
+		sort.Float64s(sortedLat)
+		// Nearest-rank percentile: ceil(q*n)-1, clamped into the slice.
+		pct := func(q float64) float64 {
+			idx := int(math.Ceil(q * float64(len(sortedLat))))
+			if idx < 1 {
+				idx = 1
+			}
+			if idx > len(sortedLat) {
+				idx = len(sortedLat)
+			}
+			return sortedLat[idx-1]
+		}
+		p50 := pct(0.50)
+		p99 := pct(0.99)
+		var sumLat, sumLoss float64
+		for i := range g.lat {
+			sumLat += g.lat[i]
+			sumLoss += g.loss[i]
+		}
+		stat := KomariPingMetricStat{
+			EntityID: entity,
+			TaskID:   g.task.ID,
+			Name:     g.task.Label,
+			Type:     g.task.Protocol,
+			Interval: g.task.Interval,
+			Total:    len(g.lat),
+			Loss:     sumLoss / float64(len(g.loss)),
+			Min:      sortedLat[0],
+			Max:      sortedLat[len(sortedLat)-1],
+			Avg:      sumLat / float64(len(g.lat)),
+			Latest:   g.latest,
+			P99:      p99,
+			P50:      p50,
+		}
+		if p50 > 0 {
+			stat.P99P50Ratio = p99 / p50
+		}
+		stats = append(stats, stat)
+	}
+	return gin.H{"stats": stats}
+}
+
+// handleKomariRecent serves GET /api/recent/{uuid}: the node's recent status
+// history in the same record shape the live WebSocket uses, because the
+// instance-page monitor charts in Komari themes fetch this endpoint instead
+// of subscribing to the stream. The last 150 points are returned, matching
+// the window the themes slice to.
+func (s *Server) handleKomariRecent(c *gin.Context) {
+	uuid := c.Param("uuid")
+	end := time.Now().Unix()
+	start := end - 3600
+
+	history, err := s.storage.GetHistory(uuid, start, end)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"status": "success", "message": "", "data": []interface{}{}})
+		return
+	}
+	if len(history) > 150 {
+		history = history[len(history)-150:]
+	}
+
+	records := make([]gin.H, 0, len(history))
+	for _, p := range history {
+		records = append(records, gin.H{
+			"updated_at": time.Unix(p.Timestamp, 0).UTC().Format(time.RFC3339),
+			"cpu":        gin.H{"usage": p.CPUPercent},
+			"ram":        gin.H{"used": p.MemUsed, "total": p.MemTotal},
+			"swap":       gin.H{"used": p.SwapUsed, "total": p.SwapTotal},
+			"load":       gin.H{"load1": p.Load1},
+			"disk":       gin.H{"used": p.DiskUsed, "total": p.DiskTotal},
+			"network": gin.H{
+				"up":        p.RateUpload,
+				"down":      p.RateDownload,
+				"totalUp":   0,
+				"totalDown": 0,
+			},
+			"connections": gin.H{"tcp": p.TCPCount, "udp": p.UDPCount},
+			"process":     p.ProcessCount,
+			"uptime":      0,
+			"message":     "",
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "", "data": records})
 }

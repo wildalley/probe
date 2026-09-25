@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"probe/pkg/model"
+
+	"github.com/gin-gonic/gin"
 )
 
 func setupTestServerForRPC(t *testing.T) (*Server, func()) {
@@ -199,5 +201,207 @@ func TestKomariRPC2Endpoints(t *testing.T) {
 		if w.Code != http.StatusOK {
 			t.Fatalf("GET /api/admin/database/size expected 200, got %d", w.Code)
 		}
+	}
+}
+
+// TestKomariQueryMetricsPingSeries covers public:queryMetrics for the ping
+// metrics modern themes chart: one latency and one loss series per ping task,
+// each tagged with the task id, points bucketed from the downsampler history.
+func TestKomariQueryMetricsPingSeries(t *testing.T) {
+	srv, cleanup := setupTestServerForRPC(t)
+	defer cleanup()
+
+	target := &model.PingTargetConfig{Label: "中国电信", Target: "163.com", Protocol: "icmp", Interval: 60, Enabled: true}
+	if err := srv.storage.AddPingTarget(target); err != nil {
+		t.Fatal(err)
+	}
+	if target.ID == 0 {
+		t.Fatal("ping target id not assigned")
+	}
+
+	now := time.Now().Unix()
+	points := []*model.PingHistoryPoint{
+		{NodeID: "test-node-1", Timestamp: now - 120, Target: "163.com", Label: "中国电信", LatencyMs: 40, PacketLoss: 0},
+		{NodeID: "test-node-1", Timestamp: now - 60, Target: "163.com", Label: "中国电信", LatencyMs: 50, PacketLoss: 50},
+	}
+	if err := srv.storage.InsertPingBatch(points); err != nil {
+		t.Fatal(err)
+	}
+
+	res, rpcErr := srv.executeRPCMethod("public:queryMetrics", map[string]interface{}{
+		"metric_keys": []interface{}{"ping.latency_ms", "ping.loss"},
+		"entity_id":   "test-node-1",
+		"hours":       1,
+		"max_points":  500,
+	})
+	if rpcErr != nil {
+		t.Fatalf("rpc error: %v", rpcErr)
+	}
+	series, ok := res.(gin.H)["series"].([]KomariMetricSeries)
+	if !ok || len(series) != 2 {
+		t.Fatalf("expected 2 series, got %+v", res)
+	}
+	byKey := map[string]KomariMetricSeries{}
+	for _, s := range series {
+		if s.EntityID != "test-node-1" {
+			t.Fatalf("series entity = %q", s.EntityID)
+		}
+		if id, _ := s.Tags["task_id"].(int64); id != target.ID {
+			t.Fatalf("series %s task tag = %v, want %d", s.MetricKey, s.Tags["task_id"], target.ID)
+		}
+		byKey[s.MetricKey] = s
+	}
+	lat, ok := byKey["ping.latency_ms"]
+	if !ok || len(lat.Points) == 0 {
+		t.Fatal("missing latency points")
+	}
+	// The two samples land in separate buckets; both original values survive.
+	if len(lat.Points) != 2 {
+		t.Fatalf("latency points = %+v", lat.Points)
+	}
+	if lat.Points[0].Value != 40 || lat.Points[1].Value != 50 {
+		t.Fatalf("latency values = %v/%v, want 40/50", lat.Points[0].Value, lat.Points[1].Value)
+	}
+	loss, ok := byKey["ping.loss"]
+	if !ok || len(loss.Points) != 2 {
+		t.Fatalf("loss points = %+v", loss.Points)
+	}
+	if loss.Points[0].Value != 0 || loss.Points[1].Value != 50 {
+		t.Fatalf("loss values = %v/%v, want 0/50", loss.Points[0].Value, loss.Points[1].Value)
+	}
+}
+
+// TestKomariQueryMetricsLoadSeries covers the load metric keys the dashboard
+// charts request (cpu.usage, net rates) built from downsampler history.
+func TestKomariQueryMetricsLoadSeries(t *testing.T) {
+	srv, cleanup := setupTestServerForRPC(t)
+	defer cleanup()
+
+	now := time.Now().Unix()
+	if err := srv.storage.InsertHistoryBatch([]*model.HistoryPoint{
+		{NodeID: "test-node-1", Timestamp: now - 60, CPUPercent: 20, RateDownload: 1024, RateUpload: 512},
+		{NodeID: "test-node-1", Timestamp: now - 30, CPUPercent: 60, RateDownload: 3072, RateUpload: 1536},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	res, rpcErr := srv.executeRPCMethod("public:queryMetrics", map[string]interface{}{
+		"metric_keys": []interface{}{"cpu.usage", "net.in.rate", "net.total.up"},
+		"entity_id":   "test-node-1",
+		"hours":       1,
+	})
+	if rpcErr != nil {
+		t.Fatalf("rpc error: %v", rpcErr)
+	}
+	series, ok := res.(gin.H)["series"].([]KomariMetricSeries)
+	if !ok || len(series) != 2 {
+		t.Fatalf("expected 2 series (net.total.* has no history source), got %+v", res)
+	}
+	byKey := map[string]KomariMetricSeries{}
+	for _, s := range series {
+		byKey[s.MetricKey] = s
+	}
+	cpu, ok := byKey["cpu.usage"]
+	if !ok || cpu.Points[0].Value != 20 || cpu.Points[1].Value != 60 || cpu.Unit != "%" {
+		t.Fatalf("cpu series = %+v", byKey["cpu.usage"])
+	}
+	net, ok := byKey["net.in.rate"]
+	if !ok || net.Points[0].Value != 1024 || net.Points[1].Value != 3072 {
+		t.Fatalf("net series = %+v", byKey["net.in.rate"])
+	}
+}
+
+// TestKomariPingMetricStats covers public:getPingMetricStats: per-task loss
+// percentage and latency aggregates, which drive the 丢包/延迟 summary and the
+// volatility badge in the themes.
+func TestKomariPingMetricStats(t *testing.T) {
+	srv, cleanup := setupTestServerForRPC(t)
+	defer cleanup()
+
+	target := &model.PingTargetConfig{Label: "Cloudflare", Target: "1.1.1.1", Protocol: "icmp", Interval: 60, Enabled: true}
+	if err := srv.storage.AddPingTarget(target); err != nil {
+		t.Fatal(err)
+	}
+
+	now := time.Now().Unix()
+	points := []*model.PingHistoryPoint{
+		{NodeID: "test-node-1", Timestamp: now - 90, Target: "1.1.1.1", Label: "Cloudflare", LatencyMs: 10, PacketLoss: 0},
+		{NodeID: "test-node-1", Timestamp: now - 60, Target: "1.1.1.1", Label: "Cloudflare", LatencyMs: 20, PacketLoss: 0},
+		{NodeID: "test-node-1", Timestamp: now - 30, Target: "1.1.1.1", Label: "Cloudflare", LatencyMs: 60, PacketLoss: 100},
+	}
+	if err := srv.storage.InsertPingBatch(points); err != nil {
+		t.Fatal(err)
+	}
+
+	res, rpcErr := srv.executeRPCMethod("public:getPingMetricStats", map[string]interface{}{
+		"uuid":  "test-node-1",
+		"hours": 1,
+	})
+	if rpcErr != nil {
+		t.Fatalf("rpc error: %v", rpcErr)
+	}
+	stats, ok := res.(gin.H)["stats"].([]KomariPingMetricStat)
+	if !ok || len(stats) != 1 {
+		t.Fatalf("expected 1 stat, got %+v", res)
+	}
+	st := stats[0]
+	if st.TaskID != target.ID || st.EntityID != "test-node-1" || st.Name != "Cloudflare" {
+		t.Fatalf("stat identity = %+v", st)
+	}
+	if st.Total != 3 {
+		t.Fatalf("total = %d", st.Total)
+	}
+	// (0 + 0 + 100) / 3 = 33.3%
+	if st.Loss < 33 || st.Loss > 34 {
+		t.Fatalf("loss = %v, want ~33.3", st.Loss)
+	}
+	if st.Min != 10 || st.Max != 60 || st.Latest != 60 {
+		t.Fatalf("min/max/latest = %v/%v/%v", st.Min, st.Max, st.Latest)
+	}
+	if st.P50 != 20 || st.P99 != 60 || st.P99P50Ratio != 3 {
+		t.Fatalf("p50/p99/ratio = %v/%v/%v", st.P50, st.P99, st.P99P50Ratio)
+	}
+}
+
+// TestKomariRecentEndpoint covers GET /api/recent/{uuid}: the record shape
+// Komari themes parse for the instance-page monitor charts.
+func TestKomariRecentEndpoint(t *testing.T) {
+	srv, cleanup := setupTestServerForRPC(t)
+	defer cleanup()
+
+	now := time.Now().Unix()
+	if err := srv.storage.InsertHistoryBatch([]*model.HistoryPoint{
+		{NodeID: "test-node-1", Timestamp: now - 60, CPUPercent: 25, MemUsed: 1024, MemTotal: 4096, RateUpload: 100, RateDownload: 200, TCPCount: 7},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/recent/test-node-1", nil)
+	rec := httptest.NewRecorder()
+	srv.router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+
+	var body struct {
+		Data []map[string]interface{} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if len(body.Data) != 1 {
+		t.Fatalf("expected 1 record, got %d", len(body.Data))
+	}
+	rec0 := body.Data[0]
+	if _, ok := rec0["updated_at"].(string); !ok || rec0["updated_at"].(string) == "" {
+		t.Fatalf("updated_at missing: %+v", rec0)
+	}
+	cpu := rec0["cpu"].(map[string]interface{})
+	if cpu["usage"].(float64) != 25 {
+		t.Fatalf("cpu usage = %v", cpu["usage"])
+	}
+	ram := rec0["ram"].(map[string]interface{})
+	if ram["used"].(float64) != 1024 || ram["total"].(float64) != 4096 {
+		t.Fatalf("ram = %v", ram)
 	}
 }
