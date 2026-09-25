@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -33,7 +34,24 @@ func main() {
 		showVersion   bool
 	)
 
-	flag.StringVar(&listenAddr, "addr", getEnv("PROBE_SERVER_ADDR", ":8080"), "Server HTTP and WebSocket listen address")
+	// Listen address precedence: --addr flag > PROBE_SERVER_ADDR > PROBE_PORT
+	// (a bare port shorthand, so one variable works everywhere the compose
+	// file's PROBE_PORT does) > :8080.
+	defaultAddr := strings.TrimSpace(getEnv("PROBE_SERVER_ADDR", ""))
+	if defaultAddr == "" {
+		if port := strings.Trim(strings.TrimSpace(os.Getenv("PROBE_PORT")), ":"); port != "" {
+			if _, err := strconv.Atoi(port); err == nil {
+				defaultAddr = ":" + port
+			} else {
+				log.Printf("[Server] Ignoring non-numeric PROBE_PORT=%q", port)
+			}
+		}
+	}
+	if defaultAddr == "" {
+		defaultAddr = ":8080"
+	}
+
+	flag.StringVar(&listenAddr, "addr", defaultAddr, "Server HTTP and WebSocket listen address")
 	flag.StringVar(&dbPath, "db", getEnv("PROBE_DB_PATH", "probe.db"), "Path to SQLite database file")
 	flag.IntVar(&flushSec, "flush-interval", 15, "Seconds between downsample batch writes to SQLite")
 	flag.IntVar(&retentionDays, "retention-days", 7, "Days of historical downsampled telemetry to retain")

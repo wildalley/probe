@@ -107,14 +107,16 @@ VOLUME ["/data"]
 
 USER probe
 
-ENV PROBE_SERVER_ADDR=":8080" \
-    PROBE_DB_PATH="/data/probe.db"
+# No hardcoded PROBE_SERVER_ADDR here: the default (:8080) lives in the code,
+# so PROBE_PORT alone can move the listen port — and with it the healthcheck
+# below — in plain `docker run -e PROBE_PORT=...` too.
+ENV PROBE_DB_PATH="/data/probe.db"
 
 EXPOSE 8080
 
 # /api/v1/auth/status is deliberately public (login has to be reachable without
 # a session), so it works as a liveness probe even in the default private mode.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD wget -qO- "http://127.0.0.1:8080/api/v1/auth/status" >/dev/null 2>&1 || exit 1
+  CMD wget -qO- "http://127.0.0.1:${PROBE_PORT:-8080}/api/v1/auth/status" >/dev/null 2>&1 || exit 1
 
 ENTRYPOINT ["/app/probe-server"]
