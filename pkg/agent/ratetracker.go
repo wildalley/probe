@@ -9,6 +9,9 @@ import (
 
 // Virtual interface regex patterns to exclude according to PDF Section 3.2:
 // 剔除 lo (本地环回), docker0, veth* 等容器虚拟接口，仅汇总物理出口网卡 (如 eth0, ens3) 流量。
+// Tunnel interfaces (wg*, tailscale*, utun*, zt*) are excluded too: they carry
+// the same bytes the physical NIC underneath them also counts, so summing both
+// would double every VPN byte.
 var virtualInterfacePatterns = []*regexp.Regexp{
 	regexp.MustCompile(`^lo(\d+)?$`),
 	regexp.MustCompile(`^docker\d*$`),
@@ -23,6 +26,10 @@ var virtualInterfacePatterns = []*regexp.Regexp{
 	regexp.MustCompile(`^dummy\d*$`),
 	regexp.MustCompile(`^tun\d*$`),
 	regexp.MustCompile(`^tap\d*$`),
+	regexp.MustCompile(`^wg\d*$`),
+	regexp.MustCompile(`^tailscale\d*$`),
+	regexp.MustCompile(`^utun\d*$`),
+	regexp.MustCompile(`^zt.*$`),
 }
 
 // IsPhysicalInterface returns true if the interface should be counted as a physical/egress interface.

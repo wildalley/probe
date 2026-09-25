@@ -426,7 +426,8 @@ func getUdpConnectionsCount() int {
 			return count
 		}
 	}
-	return 4
+	// Nothing measured — report zero rather than a plausible-looking guess.
+	return 0
 }
 
 func readProcNetSnmpTcpEst() (int, error) {
