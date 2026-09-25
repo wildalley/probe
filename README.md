@@ -259,6 +259,8 @@ make build-all PROBE_VERSION=1.2.3
 
 Docker 构建走同一条通道：`PROBE_VERSION=1.2.3 docker compose build`（`docker-compose.yml` 把它转发给镜像的 `VERSION` 构建参数）。`.dockerignore` 排除了 `.git`，镜像内跑不了 `git describe`，所以这个值必须由宿主机传入。
 
+端口同样由环境变量驱动：`PROBE_PORT=9090 docker compose up -d` 会同时改写宿主机端口映射、容器内监听地址与健康检查（默认 8080）。构建期 Go 模块下载默认走 `goproxy.cn` 镜像（`docker-compose.yml` 转发 `GOPROXY` / `GOSUMDB` 构建参数），海外网络可覆盖为直连：`GOPROXY=https://proxy.golang.org,direct GOSUMDB=sum.golang.org docker compose build`。
+
 > 服务端与 Agent 从同一个 `PROBE_VERSION` 取值，因此**服务端下发的 Agent 版本与它自己报告的版本必然一致**——这正是看板用来判断「哪台机器是旧的」的基准。
 
 ---
