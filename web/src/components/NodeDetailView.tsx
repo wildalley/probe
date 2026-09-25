@@ -1276,7 +1276,7 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
                   内存
                 </div>
                 <div className={`font-bold text-sm mt-1 ${isBlueprintDark ? "text-slate-100" : isBlueprintLight ? "text-slate-900" : "text-zinc-100"}`}>
-                  {formatBytes(node.system.mem_total || 967 * 1024 * 1024)}
+                  {node.system.mem_total ? formatBytes(node.system.mem_total) : "--"}
                 </div>
               </div>
 
@@ -1286,7 +1286,7 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
                   内存交换
                 </div>
                 <div className={`font-bold text-sm mt-1 ${isBlueprintDark ? "text-slate-100" : isBlueprintLight ? "text-slate-900" : "text-zinc-100"}`}>
-                  {formatBytes(node.system.swap_total || 3800 * 1024 * 1024)}
+                  {node.system.swap_total ? formatBytes(node.system.swap_total) : "未启用"}
                 </div>
               </div>
 
@@ -1296,7 +1296,7 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
                   硬盘
                 </div>
                 <div className={`font-bold text-sm mt-1 ${isBlueprintDark ? "text-slate-100" : isBlueprintLight ? "text-slate-900" : "text-zinc-100"}`}>
-                  {formatBytes(node.system.disk_total || 46 * 1024 * 1024 * 1024)}
+                  {node.system.disk_total ? formatBytes(node.system.disk_total) : "--"}
                 </div>
               </div>
             </div>
@@ -1328,11 +1328,11 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
                   <span>近一周峰值</span>
                   <span className="flex items-center gap-0.5 text-emerald-600 dark:text-emerald-400 font-semibold">
                     <ArrowUp className="h-3 w-3" />
-                    <span>{formatRate(node.network.monthly_peak_up || 1.2 * 1024 * 1024)}</span>
+                    <span>{node.network.monthly_peak_up ? formatRate(node.network.monthly_peak_up) : "--"}</span>
                   </span>
                   <span className="flex items-center gap-0.5 text-blue-600 dark:text-blue-400 font-semibold">
                     <ArrowDown className="h-3 w-3" />
-                    <span>{formatRate(node.network.monthly_peak_down || 1.2 * 1024 * 1024)}</span>
+                    <span>{node.network.monthly_peak_down ? formatRate(node.network.monthly_peak_down) : "--"}</span>
                   </span>
                 </div>
               </div>

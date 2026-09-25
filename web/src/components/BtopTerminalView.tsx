@@ -33,6 +33,8 @@ import {
 } from "lucide-react";
 import { NodeState, ThemeMode, PingStat, BillingInfo } from "../types";
 import { formatBytes, formatRate } from "../utils/format";
+import { usedTrafficSplit } from "../utils/traffic";
+import { getCycleLabel } from "./admin/hosts/billingOptions";
 import { getRegionFlag } from "../utils/flags";
 
 interface BtopTerminalViewProps {
@@ -121,9 +123,10 @@ export function BtopTerminalView({
   }, [nodes, selectedNodeId]);
 
   const activeNode = useMemo(() => {
+    // 集群为空时的占位节点：仅保证布局可用，所有数值口径保持为空。
     return nodes.find((n) => n.node_id === selectedNodeId) || nodes[0] || ({
       node_id: "localhost-main",
-      name: "Ryzen 7 5800H",
+      name: "localhost",
       is_online: true,
     } as NodeState);
   }, [nodes, selectedNodeId]);
@@ -453,41 +456,23 @@ export function BtopTerminalView({
 
   // Real or simulated ping targets for active node (Covering 3 domestic carriers and international)
   const pingTargets: PingStat[] = useMemo(() => {
-    if (activeNode.pings && activeNode.pings.length > 0) {
-      return activeNode.pings;
-    }
-    return [
-      { target: "163.com", label: "中国电信 163 骨干 (上海 CT 163)", latency_ms: 32.4, packet_loss: 0, jitter: 1.2, color: "#10b981" },
-      { target: "cn2.ct", label: "中国电信 CN2 GIA (广州 CT CN2)", latency_ms: 28.6, packet_loss: 0, jitter: 0.8, color: "#10b981" },
-      { target: "cu10010.com", label: "中国联通 4837 优化 (北京 CU 4837)", latency_ms: 45.1, packet_loss: 0, jitter: 2.4, color: "#06b6d4" },
-      { target: "9929.cu", label: "中国联通 9929 精品 (上海 CU 9929)", latency_ms: 39.2, packet_loss: 0, jitter: 1.1, color: "#06b6d4" },
-      { target: "cm9808.cn", label: "中国移动 CMIN2 高级 (广州 CM CMIN2)", latency_ms: 38.6, packet_loss: 0, jitter: 1.8, color: "#3b82f6" },
-      { target: "cmi58453.hk", label: "中国移动 58453 (香港 CMI 骨干)", latency_ms: 24.5, packet_loss: 0, jitter: 0.9, color: "#3b82f6" },
-      { target: "hkix.net", label: "香港 HKIX / HKT 边缘交换中心", latency_ms: 18.2, packet_loss: 0, jitter: 0.4, color: "#8b5cf6" },
-      { target: "tokyo.ntt", label: "日本东京 NTT / IIJ 核心路由器", latency_ms: 52.8, packet_loss: 0, jitter: 1.5, color: "#f59e0b" },
-      { target: "1.1.1.1", label: "Cloudflare Anycast (1.1.1.1)", latency_ms: 12.3, packet_loss: 0, jitter: 0.5, color: "#ec4899" },
-    ];
+    // 只渲染 Agent 真实上报的目标。没有配置探测时显示为空，而不是一份
+    // 看起来像真数据的默认线路延迟。
+    return activeNode.pings || [];
   }, [activeNode]);
 
-  // Billing & Quota telemetry
-  const billing: BillingInfo = activeNode.billing || {
-    price: 35,
-    price_per_month: 35,
-    currency: "CNY",
-    billing_cycle: "month",
-    expiry_date: "2026-11-28",
-    remaining_days: 65,
-    remaining_value: 75.8,
-    bandwidth_quota: 1000 * 1024 * 1024 * 1024,
-    bandwidth_used: 427 * 1024 * 1024 * 1024,
-    bandwidth_used_up: 142 * 1024 * 1024 * 1024,
-    bandwidth_used_down: 285 * 1024 * 1024 * 1024,
-    provider: "DMIT Pro · GIA 线路",
-  };
+  // Billing & Quota telemetry — 服务端没配的口径一律留空，由各渲染处自行
+  // 显示 "--"，绝不兜底一份虚构的账单。BillingInfo 描述的是服务端 JSON 的
+  // 形状；客户端侧的空账单只能是空对象，故此处显式收窄。
+  const billing = (activeNode.billing || {}) as BillingInfo;
+
+  // 方向明细由服务端下发（up + down 恒等于 bandwidth_used）；旧服务端不下发
+  // 时返回 null，显示 "--" 而不是按 40%/60% 硬拆一份假明细。
+  const usedSplit = usedTrafficSplit(billing);
 
   const quotaPercent = billing.bandwidth_quota > 0
     ? Math.min(100, Math.round(((billing.bandwidth_used || 0) / billing.bandwidth_quota) * 100))
-    : 42;
+    : 0;
 
 
   const allRegions = useMemo(() => {
@@ -933,7 +918,7 @@ export function BtopTerminalView({
               const nDown = n.network?.rate_download || 0;
               const nUp = n.network?.rate_upload || 0;
               const nPing = getNodePingLatency(n);
-              const nProvider = n.billing?.provider || "Standard VPS";
+              const nProvider = n.billing?.provider || "--";
               const nIp = maskIP ? "**.***.***.**" : (n.system?.public_ip || "127.0.0.1");
 
               return (
@@ -1443,7 +1428,7 @@ export function BtopTerminalView({
                     <span className="font-bold">财务资费、双向流量配额与主机规格</span>
                   </div>
                   <span className={`text-[11px] ${colors.accent} font-bold`}>
-                    {billing.currency} {billing.price} / {billing.billing_cycle || "月"}
+                    {billing.price ? `${billing.currency || "$"} ${billing.price} / ${getCycleLabel(billing.billing_cycle)}` : "--"}
                   </span>
                 </div>
 
@@ -1452,20 +1437,22 @@ export function BtopTerminalView({
                   <div className="grid grid-cols-3 gap-2 text-xs">
                     <div className="p-1.5 border border-current/20 bg-current/5">
                       <div className={`text-[10px] ${colors.textMuted}`}>到期时间 / EXPIRY</div>
-                      <div className="font-bold mt-0.5 truncate">{billing.expiry_date || "2026-11-28"}</div>
-                      <div className="text-[10px] text-emerald-600 dark:text-emerald-400">剩余 {billing.remaining_days} 天</div>
+                      <div className="font-bold mt-0.5 truncate">{billing.expiry_date || "未设到期"}</div>
+                      <div className="text-[10px] text-emerald-600 dark:text-emerald-400">
+                        {billing.remaining_days ? `剩余 ${billing.remaining_days} 天` : (billing.auto_renewal ? "自动续费" : "--")}
+                      </div>
                     </div>
                     <div className="p-1.5 border border-current/20 bg-current/5">
                       <div className={`text-[10px] ${colors.textMuted}`}>剩余价值 / VALUE</div>
                       <div className="font-bold mt-0.5 text-amber-600 dark:text-amber-400 truncate">
-                        ¥ {billing.remaining_value.toFixed(2)} CNY
+                        {billing.remaining_value ? `¥ ${billing.remaining_value.toFixed(2)} CNY` : "--"}
                       </div>
                       <div className={`text-[10px] ${colors.textMuted}`}>{billing.auto_renewal ? "自动续费" : "手动续费"}</div>
                     </div>
                     <div className="p-1.5 border border-current/20 bg-current/5">
                       <div className={`text-[10px] ${colors.textMuted}`}>线路运营商 / ISP</div>
-                      <div className="font-bold mt-0.5 truncate">{billing.provider || "DMIT Pro"}</div>
-                      <div className="text-[10px] text-indigo-500 dark:text-indigo-400">三网优化 GIA</div>
+                      <div className="font-bold mt-0.5 truncate">{billing.provider || "--"}</div>
+                      <div className="text-[10px] text-indigo-500 dark:text-indigo-400">{activeNode.region || "--"}</div>
                     </div>
                   </div>
 
@@ -1479,15 +1466,15 @@ export function BtopTerminalView({
                     <div className="grid grid-cols-3 gap-1 text-[11px] pt-1 border-t border-dashed border-current/20">
                       <div>
                         <span className={colors.textMuted}>▲ 上行: </span>
-                        <span>{formatBytes(billing.bandwidth_used_up || billing.bandwidth_used! * 0.4)}</span>
+                        <span>{usedSplit ? formatBytes(usedSplit.up) : "--"}</span>
                       </div>
                       <div>
                         <span className={colors.textMuted}>▼ 下行: </span>
-                        <span>{formatBytes(billing.bandwidth_used_down || billing.bandwidth_used! * 0.6)}</span>
+                        <span>{usedSplit ? formatBytes(usedSplit.down) : "--"}</span>
                       </div>
                       <div className="text-right">
                         <span className={colors.textMuted}>结算: </span>
-                        <span className="font-semibold">每月1日重置</span>
+                        <span className="font-semibold">{getCycleLabel(billing.billing_cycle)}</span>
                       </div>
                     </div>
                   </div>
@@ -1496,7 +1483,7 @@ export function BtopTerminalView({
                   <div className="p-1.5 border border-current/15 bg-current/5 space-y-1 text-[11px]">
                     <div className="flex justify-between items-center">
                       <span className={colors.textMuted}>系统发行版:</span>
-                      <span className="font-semibold truncate">Linux 6.1.0 · Debian 12 (Bookworm) · KVM</span>
+                      <span className="font-semibold truncate">{activeNode.system?.os || "--"}{activeNode.system?.virtualization ? ` · ${activeNode.system.virtualization}` : ""}</span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className={colors.textMuted}>公网 IP 地址:</span>
@@ -1610,7 +1597,7 @@ export function BtopTerminalView({
                 </div>
                 <div className="flex justify-between">
                   <span className={colors.textMuted}>数据中心 / ISP:</span>
-                  <span className="truncate">{activeNode.billing?.provider || "DMIT Pro · GIA 优质三网优化"}</span>
+                  <span className="truncate">{activeNode.billing?.provider || "--"}</span>
                 </div>
               </div>
             </div>
@@ -1685,16 +1672,22 @@ export function BtopTerminalView({
               <div className="space-y-1.5 text-xs py-1">
                 <div className="flex justify-between font-bold">
                   <span className={colors.textMuted}>套餐资费 / PRICE:</span>
-                  <span className={colors.accent}>{billing.currency} {billing.price} / {billing.billing_cycle || "月"}</span>
+                  <span className={colors.accent}>{billing.price ? `${billing.currency || "$"} ${billing.price} / ${getCycleLabel(billing.billing_cycle)}` : "--"}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className={colors.textMuted}>到期时间 / EXPIRY:</span>
-                  <span className="font-bold">{billing.expiry_date || "2026-11-28"} (剩余 {billing.remaining_days} 天)</span>
+                  <span className="font-bold">
+                    {billing.expiry_date
+                      ? `${billing.expiry_date}${billing.remaining_days ? ` (剩余 ${billing.remaining_days} 天)` : ""}`
+                      : "未设到期 / 自动续费"}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className={colors.textMuted}>剩余价值 / VALUE:</span>
                   <span className="font-bold text-amber-600 dark:text-amber-400">
-                    ¥ {billing.remaining_value.toFixed(2)} CNY ({billing.auto_renewal ? "自动续费" : "手动续费"})
+                    {billing.remaining_value
+                      ? `¥ ${billing.remaining_value.toFixed(2)} CNY (${billing.auto_renewal ? "自动续费" : "手动续费"})`
+                      : "--"}
                   </span>
                 </div>
                 <div className="pt-1 border-t border-dashed border-current/20">
@@ -1707,16 +1700,16 @@ export function BtopTerminalView({
                 <div className="grid grid-cols-2 gap-2 text-[11px] pt-1 border-t border-dashed border-current/20">
                   <div>
                     <span className={colors.textMuted}>▲ 上行已用: </span>
-                    <span className="font-semibold">{formatBytes(billing.bandwidth_used_up || billing.bandwidth_used! * 0.4)}</span>
+                    <span className="font-semibold">{usedSplit ? formatBytes(usedSplit.up) : "--"}</span>
                   </div>
                   <div>
                     <span className={colors.textMuted}>▼ 下行已用: </span>
-                    <span className="font-semibold">{formatBytes(billing.bandwidth_used_down || billing.bandwidth_used! * 0.6)}</span>
+                    <span className="font-semibold">{usedSplit ? formatBytes(usedSplit.down) : "--"}</span>
                   </div>
                 </div>
                 <div className="flex justify-between text-[10px] text-current/60 pt-0.5">
-                  <span>流量重置: 每月1日 00:00</span>
-                  <span>线路优化: CN2 GIA / 9929 / CMIN2</span>
+                  <span>结算周期: {getCycleLabel(billing.billing_cycle)}</span>
+                  <span>{billing.auto_renewal ? "自动续费" : "手动续费"}</span>
                 </div>
               </div>
             </div>
