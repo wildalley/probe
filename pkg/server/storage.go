@@ -863,22 +863,25 @@ func (s *Storage) SaveNodeSettings(ns *model.NodeSettings) error {
 	return err
 }
 
-// UpdateBandwidthBaseCounter writes only the calibration anchors. It is a narrow
-// UPDATE on purpose: anchoring happens from the ingest path, and a full row
-// upsert there would clobber any edit the operator is making at the same moment.
+// UpdateBandwidthCalibration writes the calibration baseline and anchors. It is
+// a narrow UPDATE on purpose: anchoring happens from the ingest path, and a
+// full row upsert there would clobber any edit the operator is making at the
+// same moment.
 //
-// All three anchors move together. The per-direction pair is what apportions the
-// combined baseline across 上行/下行, so persisting the total without them would
-// leave the split computed against a stale reading.
-func (s *Storage) UpdateBandwidthBaseCounter(nodeID string, counter, up, down uint64) error {
+// All three anchors move together. The per-direction pair is what apportions
+// the combined baseline across 上行/下行, so persisting the total without them
+// would leave the split computed against a stale reading. The baseline moves
+// with them when a counter reset folded accumulated traffic into it.
+func (s *Storage) UpdateBandwidthCalibration(nodeID string, baseline, counter, up, down uint64) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	_, err := s.db.Exec(`UPDATE node_settings
-		SET bandwidth_base_counter = ?,
+		SET bandwidth_used = ?,
+		    bandwidth_base_counter = ?,
 		    bandwidth_base_counter_up = ?,
 		    bandwidth_base_counter_down = ?
-		WHERE node_id = ?`, counter, up, down, nodeID)
+		WHERE node_id = ?`, baseline, counter, up, down, nodeID)
 	return err
 }
 

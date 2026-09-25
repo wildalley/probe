@@ -95,21 +95,25 @@ func TestBandwidthAccumulationModel(t *testing.T) {
 	}
 
 	// Counter reset (reboot / NIC rebuild): live 10 < anchor → re-anchor to 10,
-	// baseline preserved → effective 1000.
-	if st := report(10, 0); st.Billing.BandwidthUsed != 1000 {
-		t.Fatalf("expected 1000 after counter reset re-anchor, got %d", st.Billing.BandwidthUsed)
+	// and the 200 counted since the calibration is folded into the baseline, so
+	// the effective total keeps standing at 1200 instead of dropping back.
+	if st := report(10, 0); st.Billing.BandwidthUsed != 1200 {
+		t.Fatalf("expected 1200 after counter reset (folded), got %d", st.Billing.BandwidthUsed)
 	}
-	// The re-anchor must have persisted, both in memory and in storage.
+	// The re-anchor and folded baseline must have persisted, in memory and storage.
 	if h.nodeSettings[nodeID].BandwidthBaseCounter != 10 {
 		t.Fatalf("in-memory anchor not updated: %d", h.nodeSettings[nodeID].BandwidthBaseCounter)
 	}
-	if ns, _ := h.storage.GetNodeSettings(nodeID); ns == nil || ns.BandwidthBaseCounter != 10 {
-		t.Fatalf("persisted anchor not updated: %+v", ns)
+	if h.nodeSettings[nodeID].BandwidthUsed != 1200 {
+		t.Fatalf("in-memory baseline not folded: %d", h.nodeSettings[nodeID].BandwidthUsed)
+	}
+	if ns, _ := h.storage.GetNodeSettings(nodeID); ns == nil || ns.BandwidthBaseCounter != 10 || ns.BandwidthUsed != 1200 {
+		t.Fatalf("persisted calibration not updated: %+v", ns)
 	}
 
-	// Growth after the reset: live 100 = anchor 10 + 90 → effective 1000 + 90 = 1090.
-	if st := report(100, 0); st.Billing.BandwidthUsed != 1090 {
-		t.Fatalf("expected 1090 after post-reset growth, got %d", st.Billing.BandwidthUsed)
+	// Growth after the reset: live 100 = anchor 10 + 90 → effective 1200 + 90 = 1290.
+	if st := report(100, 0); st.Billing.BandwidthUsed != 1290 {
+		t.Fatalf("expected 1290 after post-reset growth, got %d", st.Billing.BandwidthUsed)
 	}
 }
 
@@ -243,6 +247,7 @@ func TestBandwidthSplitSumsToTotal(t *testing.T) {
 	cases := []struct {
 		name                         string
 		baseline, anchor, aUp, aDown uint64
+		lastUp, lastDown             uint64
 		liveUp, liveDown             uint64
 	}{
 		{name: "no calibration", liveUp: 585, liveDown: 654},
@@ -250,7 +255,8 @@ func TestBandwidthSplitSumsToTotal(t *testing.T) {
 		{name: "anchored mid-life", baseline: 1000, anchor: 300, aUp: 100, aDown: 200, liveUp: 150, liveDown: 400},
 		{name: "unanchored baseline", baseline: 5000, liveUp: 585, liveDown: 654},
 		{name: "counter reset below anchor", baseline: 5000, anchor: 9000, aUp: 4000, aDown: 5000, liveUp: 10, liveDown: 20},
-		{name: "one direction reset only", baseline: 5000, anchor: 900, aUp: 400, aDown: 500, liveUp: 10, liveDown: 900},
+		{name: "counter reset with previous report", baseline: 5000, anchor: 9000, aUp: 4000, aDown: 5000, lastUp: 6000, lastDown: 5000, liveUp: 10, liveDown: 20},
+		{name: "one direction reset only", baseline: 5000, anchor: 900, aUp: 400, aDown: 500, lastUp: 600, lastDown: 700, liveUp: 10, liveDown: 900},
 		{name: "download only", baseline: 2048, anchor: 100, aDown: 100, liveDown: 900},
 		{name: "upload only", baseline: 2048, anchor: 100, aUp: 100, liveUp: 900},
 		{name: "legacy row: combined anchor, no split", baseline: 4096, anchor: 1000, liveUp: 700, liveDown: 900},
@@ -258,7 +264,8 @@ func TestBandwidthSplitSumsToTotal(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, _ := computeBandwidthUsage(tc.baseline, tc.anchor, tc.aUp, tc.aDown, tc.liveUp, tc.liveDown)
+			got, _ := computeBandwidthUsage(tc.baseline, tc.anchor, tc.aUp, tc.aDown,
+				tc.lastUp, tc.lastDown, tc.liveUp, tc.liveDown)
 			if got.Up+got.Down != got.Total {
 				t.Fatalf("breakdown does not sum to total: up=%d down=%d total=%d", got.Up, got.Down, got.Total)
 			}
@@ -279,7 +286,7 @@ func TestBandwidthSplitSumsToTotal(t *testing.T) {
 func TestBandwidthSplitAttributesRealTraffic(t *testing.T) {
 	// Baseline 1000 anchored at 400↑/600↓ → baseline splits 40/60.
 	// Since then: +300↑, +100↓.
-	got, reanchored := computeBandwidthUsage(1000, 1000, 400, 600, 700, 700)
+	got, reanchored := computeBandwidthUsage(1000, 1000, 400, 600, 700, 700, 700, 700)
 	if reanchored {
 		t.Fatal("anchor moved even though both counters grew")
 	}
@@ -300,7 +307,7 @@ func TestBandwidthSplitAttributesRealTraffic(t *testing.T) {
 // calibration there is nothing to estimate, so the breakdown is the raw
 // per-direction counters rather than an apportioned guess.
 func TestBandwidthNoCalibrationSplitIsExact(t *testing.T) {
-	got, reanchored := computeBandwidthUsage(0, 0, 0, 0, 585, 654)
+	got, reanchored := computeBandwidthUsage(0, 0, 0, 0, 0, 0, 585, 654)
 	if reanchored {
 		t.Fatal("no calibration should never need an anchor")
 	}
@@ -371,7 +378,7 @@ func TestBandwidthDirectionalAnchorPersists(t *testing.T) {
 func TestBandwidthUsageReportsAnchorsItUsed(t *testing.T) {
 	// Legacy row: combined anchor 1000, no split. The recovery must keep the
 	// original combined anchor and only fill in its halves.
-	got, reanchored := computeBandwidthUsage(4096, 1000, 0, 0, 700, 900)
+	got, reanchored := computeBandwidthUsage(4096, 1000, 0, 0, 0, 0, 700, 900)
 	if !reanchored {
 		t.Fatal("a legacy row with no split must report a re-anchor")
 	}
@@ -519,5 +526,172 @@ func TestApportionIsExactAtPetabyteScale(t *testing.T) {
 	first, second := apportion(1001, 7, 0)
 	if first+second != 1001 || first != 500 {
 		t.Fatalf("zero-denominator split = %d/%d, want 500/501", first, second)
+	}
+}
+
+// TestBandwidthResetFoldsAccumulatedIntoBaseline pins the reboot case. A
+// counter restart used to fall back to the raw baseline, so every byte counted
+// since the calibration visibly vanished from the dashboard the moment the node
+// rebooted. The fold keeps that traffic by moving it onto the baseline.
+func TestBandwidthResetFoldsAccumulatedIntoBaseline(t *testing.T) {
+	// Calibrated 5000 at 9000 (4000↑/5000↓); 2000↑/0↓ counted since; then the
+	// node rebooted and the counter came back at 10↑/20↓.
+	got, reanchored := computeBandwidthUsage(5000, 9000, 4000, 5000, 6000, 5000, 10, 20)
+	if !reanchored {
+		t.Fatal("a counter reset must report a re-anchor")
+	}
+	if got.Baseline != 7000 || got.Total != 7000 {
+		t.Fatalf("baseline/total = %d/%d, want 7000/7000 (5000 + 2000 folded)",
+			got.Baseline, got.Total)
+	}
+	if got.Anchor != 30 {
+		t.Fatalf("anchor = %d, want 30 (the post-reset live counter)", got.Anchor)
+	}
+	// The original baseline splits 2222↑ by the pre-reset ratio; the folded
+	// 2000↑ keeps its direction.
+	if got.Up != 4222 || got.Down != 2778 {
+		t.Fatalf("split = %d↑/%d↓, want 4222↑/2778↓", got.Up, got.Down)
+	}
+	if got.Up+got.Down != got.Total {
+		t.Fatalf("split does not sum to total")
+	}
+
+	// Without a previous report there is nothing same-origin to fold, so the
+	// total falls back to the baseline rather than inventing traffic.
+	got, _ = computeBandwidthUsage(5000, 9000, 4000, 5000, 0, 0, 10, 20)
+	if got.Total != 5000 {
+		t.Fatalf("total = %d with no previous report, want the untouched baseline 5000", got.Total)
+	}
+}
+
+// TestBandwidthDirectionalResetFoldsPerDirection covers one direction alone
+// restarting while the other keeps growing. The reset side folds what the last
+// report had counted; the healthy side counts straight up to its live reading.
+func TestBandwidthDirectionalResetFoldsPerDirection(t *testing.T) {
+	// Calibrated 1000 at 1000 (400↑/600↓); last report 700↑/700↓; now the upload
+	// counter restarted at 300 while download grew to 1200.
+	got, reanchored := computeBandwidthUsage(1000, 1000, 400, 600, 700, 700, 300, 1200)
+	if !reanchored {
+		t.Fatal("a single-direction reset must report a re-anchor")
+	}
+	// Real counted traffic: 300↑ (last-anchor) + 600↓ (100 last-anchor and 500
+	// since), so the total is 1000 + 900 = 1900.
+	if got.Total != 1900 {
+		t.Fatalf("total = %d, want 1900", got.Total)
+	}
+	if got.Up != 700 || got.Down != 1200 {
+		t.Fatalf("split = %d↑/%d↓, want 700↑/1200↓", got.Up, got.Down)
+	}
+	if got.Baseline != 1900 {
+		t.Fatalf("baseline = %d, want 1900", got.Baseline)
+	}
+}
+
+// TestBandwidthResetSurvivesRebootEndToEnd runs the fold through the hub and
+// storage: after the reset the baseline and anchors must be persisted so a
+// server restart does not undo the rescue either.
+func TestBandwidthResetSurvivesRebootEndToEnd(t *testing.T) {
+	h := newBillingTestHub(t)
+	const nodeID = "node-reboot"
+
+	h.nodeSettings[nodeID] = &model.NodeSettings{
+		NodeID:        nodeID,
+		BandwidthUsed: 1000,
+	}
+	if err := h.storage.SaveNodeSettings(h.nodeSettings[nodeID]); err != nil {
+		t.Fatal(err)
+	}
+
+	// First report anchors lazily at 1000 combined.
+	h.IngestReport(&model.NodeReport{
+		NodeID:  nodeID,
+		Network: model.NetworkInfo{BytesSent: 400, BytesRecv: 600},
+	}, "203.0.113.14")
+
+	// Traffic accrues to 400↑/700↓, then the node reboots and reports 5↑/8↓.
+	h.IngestReport(&model.NodeReport{
+		NodeID:  nodeID,
+		Network: model.NetworkInfo{BytesSent: 400, BytesRecv: 700},
+	}, "203.0.113.14")
+	h.IngestReport(&model.NodeReport{
+		NodeID:  nodeID,
+		Network: model.NetworkInfo{BytesSent: 5, BytesRecv: 8},
+	}, "203.0.113.14")
+
+	h.mu.RLock()
+	st := h.nodeStates[nodeID]
+	h.mu.RUnlock()
+	// 100↓ was counted since the calibration and must survive the reboot.
+	if st.Billing.BandwidthUsed != 1100 {
+		t.Fatalf("total after reboot = %d, want 1100 (100 counted since calibration preserved)",
+			st.Billing.BandwidthUsed)
+	}
+
+	// The folded baseline and the post-reset anchors must be persisted, so the
+	// hub rebooting right now does not resurrect the old counter either.
+	ns, err := h.storage.GetNodeSettings(nodeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ns.BandwidthUsed != 1100 {
+		t.Fatalf("persisted baseline = %d, want 1100", ns.BandwidthUsed)
+	}
+	if ns.BandwidthBaseCounter != 13 {
+		t.Fatalf("persisted anchor = %d, want 13 (the post-reset reading)", ns.BandwidthBaseCounter)
+	}
+
+	// Growth after the reboot accumulates on the folded baseline: +10↑/+20↓.
+	h.IngestReport(&model.NodeReport{
+		NodeID:  nodeID,
+		Network: model.NetworkInfo{BytesSent: 15, BytesRecv: 28},
+	}, "203.0.113.14")
+	h.mu.RLock()
+	st = h.nodeStates[nodeID]
+	h.mu.RUnlock()
+	if st.Billing.BandwidthUsed != 1130 {
+		t.Fatalf("total after post-reboot growth = %d, want 1130", st.Billing.BandwidthUsed)
+	}
+}
+
+// TestResolveSavedCalibrationKeepsAnchorsOnUnrelatedEdits guards the save path.
+// The edit dialog resubmits the persisted baseline on every save, so the server
+// must only move the anchors when the operator actually changed the baseline —
+// otherwise renaming a host would silently discard everything counted since
+// the calibration.
+func TestResolveSavedCalibrationKeepsAnchorsOnUnrelatedEdits(t *testing.T) {
+	prev := &model.NodeSettings{
+		BandwidthUsed:          1000,
+		BandwidthBaseCounter:   5000,
+		BandwidthBaseCounterUp: 2000,
+		BandwidthBaseCounterDown: 3000,
+	}
+
+	// Same baseline resubmitted: anchors survive untouched even though the live
+	// counters have grown far past them.
+	ns := &model.NodeSettings{BandwidthUsed: 1000, Name: "renamed-host"}
+	resolveSavedCalibration(ns, prev, 7000, 8000)
+	if ns.BandwidthBaseCounter != 5000 || ns.BandwidthBaseCounterUp != 2000 || ns.BandwidthBaseCounterDown != 3000 {
+		t.Fatalf("unchanged calibration re-anchored to live: %+v", ns)
+	}
+
+	// A genuinely new calibration value anchors to the live counters.
+	ns = &model.NodeSettings{BandwidthUsed: 1500}
+	resolveSavedCalibration(ns, prev, 7000, 8000)
+	if ns.BandwidthBaseCounter != 15000 || ns.BandwidthBaseCounterUp != 7000 || ns.BandwidthBaseCounterDown != 8000 {
+		t.Fatalf("changed calibration did not anchor to live counters: %+v", ns)
+	}
+
+	// Clearing the calibration (0) drops the anchors entirely.
+	ns = &model.NodeSettings{BandwidthUsed: 0}
+	resolveSavedCalibration(ns, prev, 7000, 8000)
+	if ns.BandwidthBaseCounter != 0 || ns.BandwidthBaseCounterUp != 0 || ns.BandwidthBaseCounterDown != 0 {
+		t.Fatalf("cleared calibration kept anchors: %+v", ns)
+	}
+
+	// First-ever calibration (no previous row) anchors to the live counters.
+	ns = &model.NodeSettings{BandwidthUsed: 800}
+	resolveSavedCalibration(ns, nil, 100, 200)
+	if ns.BandwidthBaseCounter != 300 || ns.BandwidthBaseCounterUp != 100 || ns.BandwidthBaseCounterDown != 200 {
+		t.Fatalf("first calibration did not anchor to live counters: %+v", ns)
 	}
 }

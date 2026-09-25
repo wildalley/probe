@@ -1023,27 +1023,28 @@ func (s *Server) handleSaveNodeSettings(c *gin.Context) {
 	ns.NodeID = nodeID
 
 	// The calibration baseline is anchored to the node's live interface counters
-	// at save time, so real traffic accumulates on top of it instead of the
-	// baseline freezing the display. A node that has never reported anchors to 0
-	// and the hub anchors it lazily on the first report it sees. All three
-	// anchors move together — the per-direction pair is what apportions the
-	// baseline across ↑/↓, so a stale pair would skew the breakdown.
+	// at the moment the operator recalibrates, so real traffic accumulates on
+	// top of it instead of the baseline freezing the display. A node that has
+	// never reported anchors to 0 and the hub anchors it lazily on the first
+	// report it sees. All three anchors move together — the per-direction pair
+	// is what apportions the baseline across ↑/↓, so a stale pair would skew
+	// the breakdown.
 	state, hasState := s.hub.GetNodeState(nodeID)
 	var liveUp, liveDown uint64
 	if hasState {
 		liveUp, liveDown = state.Network.BytesSent, state.Network.BytesRecv
 	}
-	liveCounter := liveUp + liveDown
-	if ns.BandwidthUsed > 0 {
-		ns.BandwidthBaseCounter = liveCounter
-		ns.BandwidthBaseCounterUp = liveUp
-		ns.BandwidthBaseCounterDown = liveDown
-	} else {
-		// 0 means "cancel calibration": no baseline, so no anchor to remember.
-		ns.BandwidthBaseCounter = 0
-		ns.BandwidthBaseCounterUp = 0
-		ns.BandwidthBaseCounterDown = 0
-	}
+
+	// The dialog submits the persisted baseline on every save, changed or not.
+	// Re-anchoring unconditionally would therefore jump the anchor to the live
+	// counter on an unrelated edit (a rename, a price tweak) and silently drop
+	// every byte counted since the calibration. Only a baseline that actually
+	// differs from the stored one moves the anchor; an unchanged one keeps it.
+	s.hub.settingsMu.RLock()
+	prevSettings := s.hub.nodeSettings[nodeID]
+	s.hub.settingsMu.RUnlock()
+
+	resolveSavedCalibration(&ns, prevSettings, liveUp, liveDown)
 
 	if err := s.storage.SaveNodeSettings(&ns); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -1086,10 +1087,12 @@ func (s *Server) handleSaveNodeSettings(c *gin.Context) {
 		// path uses, rather than re-deriving the numbers here. At t=save the
 		// counters equal the anchors just written, so it yields exactly the
 		// baseline (or the raw counters when the calibration was cleared) — and it
-		// cannot drift away from the real computation later.
+		// cannot drift away from the real computation later. Last counters equal
+		// the live ones, so no counter-reset fold can trigger here.
 		usage, _ := computeBandwidthUsage(
 			ns.BandwidthUsed, ns.BandwidthBaseCounter,
 			ns.BandwidthBaseCounterUp, ns.BandwidthBaseCounterDown,
+			liveUp, liveDown,
 			liveUp, liveDown,
 		)
 		state.Billing.BandwidthUsed = usage.Total
@@ -1122,6 +1125,32 @@ func (s *Server) handleSaveNodeSettings(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, ns)
+}
+
+// resolveSavedCalibration decides the calibration anchors a settings save
+// persists, in place on ns. prev is the stored settings row (nil when the node
+// has none yet); liveUp/liveDown are the node's current interface counters.
+//
+// A save that did not touch the baseline must keep the stored anchors: the edit
+// dialog resubmits the persisted baseline on every save, so re-anchoring on an
+// unchanged value would silently discard all traffic counted since the
+// operator calibrated. A changed or fresh baseline anchors to the live
+// counters, and a cleared one (0) drops the anchors entirely.
+func resolveSavedCalibration(ns *model.NodeSettings, prev *model.NodeSettings, liveUp, liveDown uint64) {
+	switch {
+	case ns.BandwidthUsed == 0:
+		ns.BandwidthBaseCounter = 0
+		ns.BandwidthBaseCounterUp = 0
+		ns.BandwidthBaseCounterDown = 0
+	case prev == nil || ns.BandwidthUsed != prev.BandwidthUsed:
+		ns.BandwidthBaseCounter = liveUp + liveDown
+		ns.BandwidthBaseCounterUp = liveUp
+		ns.BandwidthBaseCounterDown = liveDown
+	default:
+		ns.BandwidthBaseCounter = prev.BandwidthBaseCounter
+		ns.BandwidthBaseCounterUp = prev.BandwidthBaseCounterUp
+		ns.BandwidthBaseCounterDown = prev.BandwidthBaseCounterDown
+	}
 }
 
 // handleGetExchangeRates returns exchange rate settings.
