@@ -41,6 +41,7 @@
   - 支持在管理后台一键拉取并安装官方市场主题，亦可上传第三方 ZIP 主题包；
   - 主题安装目录默认为工作目录下的 `themes/`，可用 `PROBE_THEMES_DIR` 指向可写路径（如挂载卷 `/data/themes`）；Docker 镜像已预置属主正确的 `/app/themes` 并由 compose 挂 named volume 持久化，镜像升级不再丢已装主题；
   - **国内网络友好**：市场索引默认走 raw.githubusercontent.com，取不到时自动回退 jsDelivr 镜像；可用 `PROBE_THEME_MARKET_URL` 指向自建/CDN 市场源，`PROBE_THEME_ASSET_MIRROR` 可为 GitHub 主题包下载配置加速前缀或 `{url}` 模板（自带 SHA256 的主题包下载后仍会校验完整性）；
+  - **指标与图标兼容**：实现 Komari 的 `public:queryMetrics` / `public:getPingMetricStats` RPC 与 `/api/recent/{uuid}` 历史接口（延迟/丢包图表与实例监控页依赖它们），OS 图标与地区旗帜在内置解析器找不到时回退到程序内嵌的通用图标，任何 Komari 主题都不会出现破图；
   - 独立管理后台页面（`/admin`），主题切换与管理操作彻底解耦。
 - **现代前端技术栈与移动端深度适配**：基于 React 19、Tailwind CSS 4 与 HeroUI 构建。重构了移动端全屏响应式体验：导航顶栏自适应紧凑折叠与抽屉菜单彻底杜绝内容遮挡，地区支持横向平滑滚动筛选；管理后台全面采用移动端全屏抽屉排版防溢出，详情页主机切换下拉采用居中防越界浮层与毛玻璃遮罩。
 - **uPlot 毫秒级时序图**：体积仅 30KB，微秒级渲染上万点数据；全功能 **Hover 垂直标尺 + 毛玻璃浮动指示气泡**，实时展示精确时间与数值。
