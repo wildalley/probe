@@ -87,6 +87,14 @@ func NewServer(hub *Hub, storage *Storage, downsampler *Downsampler, notifier *N
 		}
 	})
 
+	// Theme (plugin) packages are installed relative to the working directory.
+	// Containers that run unprivileged often cannot create it there, so the
+	// location is overridable — e.g. PROBE_THEMES_DIR=/data/themes on a volume.
+	themesDir := strings.TrimSpace(os.Getenv("PROBE_THEMES_DIR"))
+	if themesDir == "" {
+		themesDir = "themes"
+	}
+
 	s := &Server{
 		router:       router,
 		hub:          hub,
@@ -95,7 +103,7 @@ func NewServer(hub *Hub, storage *Storage, downsampler *Downsampler, notifier *N
 		notifier:     notifier,
 		distFS:       distFS,
 		auth:         auth,
-		themeManager: NewThemeManager(storage, "themes"),
+		themeManager: NewThemeManager(storage, themesDir),
 		privateMode:  privateMode,
 	}
 

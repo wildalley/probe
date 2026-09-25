@@ -38,7 +38,12 @@ func NewThemeManager(storage *Storage, themesDir string) *ThemeManager {
 	if themesDir == "" {
 		themesDir = defaultThemesDir
 	}
-	_ = os.MkdirAll(themesDir, 0755)
+	if err := os.MkdirAll(themesDir, 0755); err != nil {
+		// Installation would fail later anyway; say so now, at startup, where
+		// the cause (a read-only working directory, a root-owned /app) is still
+		// visible in the same log.
+		log.Printf("[Theme] Cannot create themes directory %q: %v — theme installation will fail until this is writable", themesDir, err)
+	}
 
 	tm := &ThemeManager{
 		themesDir:   themesDir,
@@ -253,7 +258,7 @@ func (tm *ThemeManager) InstallFromZip(r io.ReaderAt, size int64) (*KomariThemeI
 	targetDir := filepath.Join(tm.themesDir, manifest.Short)
 	_ = os.RemoveAll(targetDir) // Clean before install
 	if err := os.MkdirAll(targetDir, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create theme folder: %w", err)
+		return nil, fmt.Errorf("无法创建主题目录 %s：%v。请检查服务端对主题目录（PROBE_THEMES_DIR，默认工作目录下的 themes/）是否有写权限", targetDir, err)
 	}
 
 	// 2. Extract files, stripping any top-level wrapping directory prefix
@@ -426,12 +431,12 @@ func (tm *ThemeManager) FetchMarketThemes() ([]KomariThemeItem, error) {
 			Name:        "btop++ 极客终端",
 			Short:       "btop-terminal",
 			Description: "真实还原 Linux 顶级终端监控工具 btop++ 的硬核字符与色块风格，高刷新率、多节点聚合看板与终端沉浸体验",
-			Version:     "1.0.0",
+			Version:     "1.0.1",
 			Author:      "wildalley",
 			URL:         "https://github.com/wildalley/komari-theme-btop",
 			Preview:     "https://raw.githubusercontent.com/wildalley/komari-theme-btop/main/preview.png",
-			DownloadURL: "https://github.com/wildalley/komari-theme-btop/releases/download/v1.0.0/btop-terminal.zip",
-			SHA256:      "3ec0f35a96088d6b65cadd0df492c35415a77d87ebfd9b321e1224724da3fc09",
+			DownloadURL: "https://github.com/wildalley/komari-theme-btop/releases/download/v1.0.1/btop-terminal.zip",
+			SHA256:      "af0528803f8cf5f5da7d542a339f274295a1b52ecf512302b1fb4cdf0a168b7d",
 			IsInstalled: isInstalled,
 			IsActive:    ("btop-terminal" == tm.activeTheme),
 		}

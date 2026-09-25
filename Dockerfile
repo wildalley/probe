@@ -90,8 +90,11 @@ COPY --from=server /out/probe-server /app/probe-server
 COPY --from=server /out/probe-agent /app/bin/probe-agent
 COPY deploy/install.sh /app/deploy/install.sh
 
-# SQLite lives on a volume so history survives image upgrades.
-RUN mkdir -p /data && chown -R probe:probe /data
+# SQLite lives on a volume so history survives image upgrades. The theme
+# manager installs plugin packages into ./themes relative to the working
+# directory — /app itself is root-owned, so without this pre-created, probe-
+# owned directory every install fails with a permission error.
+RUN mkdir -p /data /app/themes && chown -R probe:probe /data /app/themes
 VOLUME ["/data"]
 
 USER probe
