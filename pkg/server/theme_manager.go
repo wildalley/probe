@@ -19,7 +19,12 @@ import (
 
 const (
 	defaultThemesDir = "themes"
-	themeMarketURL   = "https://raw.githubusercontent.com/komari-monitor/theme-market/main/v1.json"
+	// defaultThemeMarketURL is the upstream Komari market index. Raw GitHub is
+	// unreachable from many mainland-China networks, so fetches fall back to a
+	// jsDelivr mirror of the same file before giving up.
+	defaultThemeMarketURL = "https://raw.githubusercontent.com/komari-monitor/theme-market/main/v1.json"
+	// fallbackThemeMarketURL serves the identical index through jsDelivr's CDN.
+	fallbackThemeMarketURL = "https://cdn.jsdelivr.net/gh/komari-monitor/theme-market@main/v1.json"
 )
 
 // ThemeManager coordinates installed Komari themes and the community theme market.
@@ -31,6 +36,14 @@ type ThemeManager struct {
 	installed    map[string]*KomariThemeItem
 	marketCache  []KomariThemeItem
 	lastMarketAt time.Time
+
+	// marketURL is the market index to fetch; marketFallbackURL is tried only
+	// when the primary fails and is empty when the operator supplied a custom
+	// index (the built-in mirror only mirrors the upstream file). assetMirror
+	// optionally rewrites GitHub download URLs through an accelerator.
+	marketURL         string
+	marketFallbackURL string
+	assetMirror       string
 }
 
 // NewThemeManager initializes the theme manager with persistence.
@@ -50,7 +63,22 @@ func NewThemeManager(storage *Storage, themesDir string) *ThemeManager {
 		activeTheme: "builtin",
 		storage:     storage,
 		installed:   make(map[string]*KomariThemeItem),
+		marketURL:   defaultThemeMarketURL,
 	}
+
+	// Raw GitHub is unreachable from many mainland-China networks, so the same
+	// upstream index is also tried through jsDelivr. A custom index replaces
+	// the primary and disables the built-in mirror — it only mirrors the
+	// upstream file and would be wrong for a self-hosted market.
+	tm.marketFallbackURL = fallbackThemeMarketURL
+	if custom := strings.TrimSpace(os.Getenv("PROBE_THEME_MARKET_URL")); custom != "" {
+		tm.marketURL = custom
+		tm.marketFallbackURL = ""
+	}
+
+	// Optional accelerator for the theme package downloads themselves (they
+	// point at github.com release assets), e.g. a gh-proxy style prefix.
+	tm.assetMirror = strings.TrimSpace(os.Getenv("PROBE_THEME_ASSET_MIRROR"))
 
 	// Load active theme setting from storage
 	if storage != nil {
@@ -323,6 +351,7 @@ func (tm *ThemeManager) InstallFromZip(r io.ReaderAt, size int64) (*KomariThemeI
 
 // DownloadAndInstall downloads a theme zip from URL, optionally verifies SHA256, and installs it.
 func (tm *ThemeManager) DownloadAndInstall(downloadURL string, expectedSHA256 string) (*KomariThemeItem, error) {
+	downloadURL = tm.rewriteAssetURL(downloadURL)
 	client := &http.Client{Timeout: 60 * time.Second}
 	req, err := http.NewRequest("GET", downloadURL, nil)
 	if err != nil {
@@ -366,6 +395,44 @@ func (tm *ThemeManager) DownloadAndInstall(downloadURL string, expectedSHA256 st
 	return tm.InstallFromZip(tmpFile, size)
 }
 
+// rewriteAssetURL routes a theme package download through the configured
+// accelerator, if any. The mirror is either a plain prefix ("https://gh-proxy.com/")
+// or a template containing "{url}" ("https://mirror.example.com/fetch?url={url}").
+// Only GitHub hosts are rewritten — the operator's accelerator is for GitHub
+// assets, not for arbitrary hosts — and when the market entry ships a SHA256
+// the downloaded bytes are still verified afterwards, so the accelerator
+// cannot silently substitute a different package.
+func (tm *ThemeManager) rewriteAssetURL(raw string) string {
+	mirror := strings.TrimSpace(tm.assetMirror)
+	if mirror == "" || raw == "" {
+		return raw
+	}
+	if !strings.Contains(raw, "github.com") && !strings.Contains(raw, "githubusercontent.com") {
+		return raw
+	}
+	if strings.Contains(mirror, "{url}") {
+		return strings.ReplaceAll(mirror, "{url}", raw)
+	}
+	return strings.TrimRight(mirror, "/") + "/" + raw
+}
+
+// fetchMarketIndex retrieves and decodes one market index document.
+func fetchMarketIndex(client *http.Client, url string) (*KomariMarketPayload, error) {
+	resp, err := client.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("market index responded with status %d", resp.StatusCode)
+	}
+	var payload KomariMarketPayload
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		return nil, fmt.Errorf("failed to decode market payload: %w", err)
+	}
+	return &payload, nil
+}
+
 // FetchMarketThemes retrieves and caches the official Komari theme market directory.
 func (tm *ThemeManager) FetchMarketThemes() ([]KomariThemeItem, error) {
 	tm.mu.Lock()
@@ -377,18 +444,18 @@ func (tm *ThemeManager) FetchMarketThemes() ([]KomariThemeItem, error) {
 	}
 
 	client := &http.Client{Timeout: 15 * time.Second}
-	resp, err := client.Get(themeMarketURL)
+	payload, err := fetchMarketIndex(client, tm.marketURL)
+	if err != nil && tm.marketFallbackURL != "" {
+		// Raw GitHub is unreachable from many mainland-China networks; the
+		// jsDelivr mirror carries the identical upstream file.
+		log.Printf("[Theme] Market index fetch failed (%v), retrying via jsDelivr mirror", err)
+		payload, err = fetchMarketIndex(client, tm.marketFallbackURL)
+	}
 	if err != nil {
 		if len(tm.marketCache) > 0 {
 			return tm.marketCache, nil // fallback to stale cache
 		}
 		return nil, fmt.Errorf("failed to fetch theme market: %w", err)
-	}
-	defer resp.Body.Close()
-
-	var payload KomariMarketPayload
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		return nil, fmt.Errorf("failed to decode market payload: %w", err)
 	}
 
 	items := make([]KomariThemeItem, 0, len(payload.Themes))

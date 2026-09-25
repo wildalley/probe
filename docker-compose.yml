@@ -53,6 +53,21 @@ services:
       # login throttling. Empty means forwarding headers are not trusted.
       PROBE_TRUSTED_PROXIES: "${PROBE_TRUSTED_PROXIES:-}"
 
+      # Theme (plugin) install directory. The image's /app/themes is writable,
+      # so this stays empty unless you mount a custom path (e.g. /data/themes).
+      PROBE_THEMES_DIR: "${PROBE_THEMES_DIR:-}"
+
+      # Theme market index override (a v1.json document, e.g. a self-hosted or
+      # CDN mirror). Empty keeps the upstream index with an automatic jsDelivr
+      # fallback for networks where raw.githubusercontent.com is unreachable.
+      PROBE_THEME_MARKET_URL: "${PROBE_THEME_MARKET_URL:-}"
+
+      # Accelerator for GitHub theme-package downloads on restricted networks:
+      # a prefix ("https://gh-proxy.com/") or a template with {url}. Only
+      # github.com / githubusercontent.com URLs are rewritten, and packages
+      # shipping a SHA256 are still verified after download.
+      PROBE_THEME_ASSET_MIRROR: "${PROBE_THEME_ASSET_MIRROR:-}"
+
       # Keep false on internet-facing deployments. Enable only when probes or
       # webhook receivers intentionally live on a trusted private network.
       PROBE_ALLOW_PRIVATE_TARGETS: "${PROBE_ALLOW_PRIVATE_TARGETS:-false}"

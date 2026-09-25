@@ -3,6 +3,10 @@ package server
 import (
 	"archive/zip"
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -89,5 +93,141 @@ func TestInstallFromZipHappyPath(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(base, "themes", "demo", "index.html")); err != nil {
 		t.Fatalf("index.html not extracted: %v", err)
+	}
+}
+
+// TestRewriteAssetURL pins the accelerator behavior: GitHub URLs go through
+// the configured mirror (prefix style or {url} template style), other hosts
+// pass through untouched, and an unset mirror changes nothing.
+func TestRewriteAssetURL(t *testing.T) {
+	tm := &ThemeManager{}
+
+	// No mirror configured: everything passes through.
+	if got := tm.rewriteAssetURL("https://github.com/a/b/releases/download/v1/x.zip"); got != "https://github.com/a/b/releases/download/v1/x.zip" {
+		t.Fatalf("empty mirror rewrote the url: %s", got)
+	}
+
+	// Prefix style.
+	tm.assetMirror = "https://gh-proxy.com/"
+	got := tm.rewriteAssetURL("https://github.com/a/b/releases/download/v1/x.zip")
+	want := "https://gh-proxy.com/https://github.com/a/b/releases/download/v1/x.zip"
+	if got != want {
+		t.Fatalf("prefix rewrite = %s, want %s", got, want)
+	}
+
+	// Template style with {url}.
+	tm.assetMirror = "https://mirror.example.com/fetch?url={url}"
+	got = tm.rewriteAssetURL("https://github.com/a/b/releases/download/v1/x.zip")
+	want = "https://mirror.example.com/fetch?url=https://github.com/a/b/releases/download/v1/x.zip"
+	if got != want {
+		t.Fatalf("template rewrite = %s, want %s", got, want)
+	}
+
+	// Non-GitHub hosts are never rewritten through the accelerator.
+	tm.assetMirror = "https://gh-proxy.com/"
+	const selfHosted = "https://themes.internal.example.com/pack.zip"
+	if got := tm.rewriteAssetURL(selfHosted); got != selfHosted {
+		t.Fatalf("non-github url was rewritten: %s", got)
+	}
+}
+
+// marketTestServer builds an HTTP test server answering with the given body
+// and status, so the market fetch can be exercised without touching GitHub.
+func marketTestServer(t *testing.T, status int, body string) *httptest.Server {
+	t.Helper()
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte(body))
+	}))
+	t.Cleanup(ts.Close)
+	return ts
+}
+
+// TestFetchMarketFallsBackToMirror covers the mainland-China path: raw
+// GitHub (the primary) is unreachable, so the identical jsDelivr mirror is
+// tried and its payload is used.
+func TestFetchMarketFallsBackToMirror(t *testing.T) {
+	tm := NewThemeManager(nil, t.TempDir())
+	tm.marketURL = marketTestServer(t, 500, "upstream down").URL
+
+	const index = `{"schema":1,"updated_at":"2026-09-25","themes":[{"short":"demo","name":"Demo","version":"9.9.9","download":"https://github.com/demo/demo.zip","sha256":"abc"}]}`
+	tm.marketFallbackURL = marketTestServer(t, 200, index).URL
+
+	items, err := tm.FetchMarketThemes()
+	if err != nil {
+		t.Fatalf("mirror fetch failed: %v", err)
+	}
+	var found *KomariThemeItem
+	for i := range items {
+		if items[i].Short == "demo" {
+			found = &items[i]
+		}
+	}
+	if found == nil {
+		t.Fatalf("mirror payload not applied, items: %+v", items)
+	}
+	if found.Version != "9.9.9" || found.DownloadURL != "https://github.com/demo/demo.zip" {
+		t.Fatalf("unexpected item: %+v", found)
+	}
+}
+
+// TestFetchMarketCustomURLDisablesFallback: an operator-supplied index is the
+// only source consulted — the built-in jsDelivr mirror mirrors the upstream
+// file and must not leak entries into a self-hosted market.
+func TestFetchMarketCustomURLDisablesFallback(t *testing.T) {
+	custom := marketTestServer(t, 404, "not found").URL
+	t.Setenv("PROBE_THEME_MARKET_URL", custom)
+
+	tm := NewThemeManager(nil, t.TempDir())
+	if tm.marketURL != custom {
+		t.Fatalf("marketURL = %s, want the custom index", tm.marketURL)
+	}
+	if tm.marketFallbackURL != "" {
+		t.Fatal("a custom index must disable the built-in jsDelivr fallback")
+	}
+	if _, err := tm.FetchMarketThemes(); err == nil {
+		t.Fatal("a custom index failure must surface as an error, not fall back")
+	}
+}
+
+// TestDownloadAndInstallUsesAssetMirror runs a full download-install cycle
+// where the zip is only reachable through the {url} template accelerator,
+// proving the rewrite happens on the actual download path and the SHA256
+// check still guards the bytes.
+func TestDownloadAndInstallUsesAssetMirror(t *testing.T) {
+	zipFile := zipTheme(t, map[string]string{
+		"komari-theme.json": `{"short":"mirrored","name":"Mirrored","version":"1.0.0"}`,
+		"index.html":        "<html></html>",
+	})
+	zipBytes := new(bytes.Buffer)
+	if _, err := zipBytes.ReadFrom(zipFile); err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(zipBytes.Bytes())
+	wantSHA := hex.EncodeToString(sum[:])
+
+	base := t.TempDir()
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/fetch"):
+			if got := r.URL.Query().Get("url"); got != "https://github.com/demo/demo.zip" {
+				t.Errorf("accelerator received unexpected url: %s", got)
+			}
+			_, _ = w.Write(zipBytes.Bytes())
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer ts.Close()
+
+	tm := NewThemeManager(nil, base)
+	tm.assetMirror = ts.URL + "/fetch?url={url}"
+
+	item, err := tm.DownloadAndInstall("https://github.com/demo/demo.zip", wantSHA)
+	if err != nil {
+		t.Fatalf("mirrored install failed: %v", err)
+	}
+	if item.Short != "mirrored" {
+		t.Fatalf("short = %q, want mirrored", item.Short)
 	}
 }
