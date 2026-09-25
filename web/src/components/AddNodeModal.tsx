@@ -18,7 +18,9 @@ export const AddNodeModal: React.FC<AddNodeModalProps> = ({ isOpen, onClose, the
   const [copiedCmd, setCopiedCmd] = useState<string | null>(null);
   const [isRefreshingToken, setIsRefreshingToken] = useState<boolean>(false);
 
-  const isBlueprint = theme === "blueprint";
+  const isDark = theme === "dark" || theme === "btop" || theme === "blueprint-dark";
+  const isLight = !isDark;
+  const isBlueprint = isLight;
 
   // Auto fetch active token on open
   useEffect(() => {

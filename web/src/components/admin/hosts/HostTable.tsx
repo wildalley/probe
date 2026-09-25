@@ -23,7 +23,9 @@ export const HostTable: React.FC<HostTableProps> = ({
   onEdit,
   onDelete,
 }) => {
-  const isBlueprint = theme === "blueprint";
+  const isDark = theme === "dark" || theme === "btop" || theme === "blueprint-dark";
+  const isLight = !isDark;
+  const isBlueprint = isLight;
 
   return (
     <div

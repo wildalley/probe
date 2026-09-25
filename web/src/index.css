@@ -159,37 +159,51 @@
     color: #e2e8f0;
   }
 
-  /* Universal Monospace & Terminal styling for btop theme */
-  html.btop,
-  html.btop *,
-  html[data-theme="btop"],
-  html[data-theme="btop"] * {
+  /* Terminal styling strictly scoped to the btop-terminal dashboard */
+  .btop-terminal,
+  .btop-terminal * {
     font-family: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   }
 
-  /* Enforce crisp sharp terminal window corners in btop mode */
-  html.btop .rounded-2xl,
-  html.btop .rounded-xl,
-  html.btop .rounded-lg,
-  html.btop .rounded-md,
-  html[data-theme="btop"] .rounded-2xl,
-  html[data-theme="btop"] .rounded-xl,
-  html[data-theme="btop"] .rounded-lg,
-  html[data-theme="btop"] .rounded-md {
+  /* Enforce crisp sharp terminal window corners strictly in btop terminal view */
+  .btop-terminal .rounded-2xl,
+  .btop-terminal .rounded-xl,
+  .btop-terminal .rounded-lg,
+  .btop-terminal .rounded-md {
     border-radius: 2px !important;
   }
 
   /* Inverted terminal reverse-video text selection */
-  html.btop ::selection,
-  html[data-theme="btop"] ::selection {
+  .btop .btop-terminal ::selection,
+  [data-theme="btop"] .btop-terminal ::selection {
     background: #00f0ff !important;
     color: #06080d !important;
   }
 
-  html.blueprint body,
+  html.btop-light body,
+  html[data-theme="btop-light"] body {
+    background-color: #ebe7ee;
+    color: #2b2735;
+  }
+
+  /* Inverted terminal reverse-video text selection for btop-light */
+  .btop-light .btop-terminal ::selection,
+  [data-theme="btop-light"] .btop-terminal ::selection {
+    background: #7c5c99 !important;
+    color: #ffffff !important;
+  }
+
+  html.blueprint:not(.dark):not(.blueprint-dark) body,
+  html[data-theme="blueprint-light"] body,
   html[data-theme="light"] body {
     background-color: #f8fafc;
     color: #0f172a;
+  }
+
+  html.blueprint-dark body,
+  html[data-theme="blueprint-dark"] body {
+    background-color: #070e1e;
+    color: #e2e8f0;
   }
 }
 
@@ -294,27 +308,15 @@
   font-weight: 600;
 }
 
-.btop .popover,
-.btop [data-slot="popover"],
-.btop [data-slot="date-picker-popover"],
-.btop .date-picker__popover,
-.btop .select__popover {
-  background-color: #080c14 !important;
-  color: #f1f5f9 !important;
-  border: 1px solid #1b253b !important;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.8), 0 0 15px rgba(0, 240, 255, 0.08) !important;
-}
 
-.btop .list-box-item:hover,
-.btop [data-slot="list-box-item"]:hover {
-  background-color: #121927 !important;
-  color: #38bdf8 !important;
-}
-
-.btop .list-box-item[data-selected="true"],
-.btop [data-slot="list-box-item"][data-selected="true"] {
-  background-color: rgba(6, 182, 212, 0.25) !important;
-  color: #22d3ee !important;
+.list-box-item:focus,
+.list-box-item:focus-visible,
+[data-slot="list-box-item"]:focus,
+[data-slot="list-box-item"]:focus-visible,
+[data-slot="list-box-item"][data-focused="true"],
+[data-slot="list-box-item"][data-focus-visible="true"] {
+  outline: none !important;
+  box-shadow: none !important;
 }
 
 .list-box-item__indicator {
@@ -325,10 +327,25 @@
   color: #a5b4fc !important;
 }
 
-/* Select Trigger Borders */
+/* Select Trigger & Indicator */
 .select__trigger,
 [data-slot="select-trigger"] {
+  position: relative !important;
   border: 1px solid #cbd5e1;
+}
+.select__trigger:has(.select__indicator),
+[data-slot="select-trigger"]:has([data-slot="select-indicator"]),
+[data-slot="select-trigger"]:has([data-slot="select-default-indicator"]) {
+  padding-right: 1.85rem !important;
+}
+.select__indicator,
+[data-slot="select-indicator"],
+[data-slot="select-default-indicator"] {
+  position: absolute !important;
+  right: 0.5rem !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  pointer-events: none !important;
 }
 .select__trigger:hover,
 [data-slot="select-trigger"]:hover {
@@ -446,13 +463,36 @@
     linear-gradient(to bottom, rgba(0, 240, 255, 0.04) 1px, transparent 1px);
 }
 
-/* Blueprint architecture graph paper background pattern */
+/* btop++ light terminal paper-grid pattern */
+.btop-light-grid {
+  background-color: #ebe7ee;
+  background-size: 32px 32px;
+  background-image:
+    linear-gradient(to right, rgba(124, 92, 153, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(124, 92, 153, 0.05) 1px, transparent 1px);
+}
+
+/* Blueprint architecture graph paper background pattern (Light) */
 .blueprint-grid {
   background-color: #f1f5f9;
   background-size: 24px 24px;
   background-image:
     linear-gradient(to right, rgba(203, 213, 225, 0.5) 1px, transparent 1px),
     linear-gradient(to bottom, rgba(203, 213, 225, 0.5) 1px, transparent 1px);
+}
+
+/* Blueprint architecture graph paper background pattern (Cyanotype Dark) */
+.blueprint-grid-dark {
+  background-color: #070e1e;
+  background-size: 24px 24px;
+  background-image:
+    linear-gradient(to right, rgba(56, 189, 248, 0.08) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(56, 189, 248, 0.08) 1px, transparent 1px);
+}
+
+html.blueprint-dark body {
+  background-color: #070e1e;
+  color: #e2e8f0;
 }
 
 /* Subtle ambient radial glow behind header */

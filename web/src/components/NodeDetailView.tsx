@@ -89,8 +89,12 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
 }) => {
   const [localTheme, setLocalTheme] = useState<ThemeMode>("dark");
   const theme = propsTheme || localTheme;
-  const isBlueprint = theme === "blueprint";
-  const isBtop = theme === "btop";
+  const isBlueprintLight = theme === "blueprint";
+  const isBlueprintDark = theme === "blueprint-dark";
+  const isBlueprint = isBlueprintLight || isBlueprintDark;
+  const isBtopDark = theme === "btop";
+  const isBtopLight = theme === "btop-light";
+  const isBtop = isBtopDark || isBtopLight;
 
   // 三个状态都不共用文案：旧 Agent 根本不发版本字段，把这个「缺失」渲染成
   // 任何版本号都会毁掉整条升级信号的唯一来源。
@@ -98,13 +102,14 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
   const versionStatus = agentVersionStatus(nodeAgentVersion, latestAgentVersion);
 
   const toggleTheme = () => {
-    if (onSelectTheme) {
-      const nextTheme: ThemeMode = theme === "dark" ? "btop" : theme === "btop" ? "blueprint" : "dark";
-      onSelectTheme(nextTheme);
-    } else if (onToggleTheme) {
+    if (onToggleTheme) {
       onToggleTheme();
-    } else {
-      setLocalTheme((prev) => (prev === "dark" ? "btop" : prev === "btop" ? "blueprint" : "dark"));
+    } else if (onSelectTheme) {
+      if (theme === "blueprint") onSelectTheme("blueprint-dark");
+      else if (theme === "blueprint-dark") onSelectTheme("blueprint");
+      else if (theme === "btop-light") onSelectTheme("btop");
+      else if (theme === "btop") onSelectTheme("btop-light");
+      else onSelectTheme("blueprint");
     }
   };
 
@@ -473,51 +478,91 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
 
 
   // Card theme classes
-  const cardBgClass = isBlueprint
+  const cardBgClass = isBlueprintDark
+    ? "bg-[#0b152d]/90 border-[#1d2d52] text-slate-100 shadow-[0_4px_20px_rgba(0,0,0,0.4)]"
+    : isBlueprintLight
     ? "bg-white border-slate-200/80 text-slate-800 shadow-sm"
-    : isBtop
+    : isBtopLight
+    ? "bg-[#f2eef5] border-[#aba4b8] text-[#2b2735] shadow-xs"
+    : isBtopDark
     ? "bg-[#0b101c]/90 border-[#1b253b] text-slate-100 shadow-[0_0_15px_rgba(0,0,0,0.5)]"
     : "bg-zinc-900/60 border-zinc-800/80 text-zinc-100 shadow-inner";
 
-  const statCardClass = isBlueprint
-    ? "bg-white border-slate-200/80 shadow-sm text-slate-800"
-    : isBtop
-    ? "bg-[#0b101c]/90 border-[#1b253b] text-slate-100 shadow-[0_0_10px_rgba(0,0,0,0.3)]"
+  const statCardClass = isBlueprintDark
+    ? "bg-[#0b152d]/90 border-[#1d2d52] text-slate-100 shadow-md font-mono"
+    : isBlueprintLight
+    ? "bg-white border-slate-200/80 shadow-sm text-slate-800 font-mono"
+    : isBtopLight
+    ? "bg-[#f2eef5] border-[#aba4b8] text-[#2b2735] shadow-xs font-mono"
+    : isBtopDark
+    ? "bg-[#0b101c]/90 border-[#1b253b] text-slate-100 shadow-[0_0_10px_rgba(0,0,0,0.3)] font-mono"
     : "bg-zinc-900/50 border-zinc-800/80 shadow-inner text-zinc-100";
 
   // Shared label row for the 8 summary stat cards.
   const statLabelClass = cn(
     "flex items-center justify-between text-xs",
-    isBlueprint ? "text-slate-600 font-medium" : isBtop ? "text-cyan-400 font-mono font-medium" : "text-zinc-400"
+    isBlueprintDark
+      ? "text-slate-400 font-medium"
+      : isBlueprintLight
+      ? "text-slate-600 font-medium"
+      : isBtopLight
+      ? "text-[#6e687e] font-mono font-bold"
+      : isBtopDark
+      ? "text-cyan-400 font-mono font-medium"
+      : "text-zinc-400"
   );
 
   // Tab list background; HeroUI's Tabs supplies the selected/unselected states.
-  const tabsClass = isBlueprint ? "bg-slate-100" : isBtop ? "bg-[#070b14] border border-[#1b253b]" : "bg-zinc-900/70";
+  const tabsClass = isBlueprintDark
+    ? "bg-[#070e1f] border border-[#1d2d52]"
+    : isBlueprintLight
+    ? "bg-slate-100"
+    : isBtopLight
+    ? "bg-[#ded8e6] border border-[#aba4b8]"
+    : isBtopDark
+    ? "bg-[#070b14] border border-[#1b253b]"
+    : "bg-zinc-900/70";
 
   return (
     <div
       className={`min-h-screen font-sans transition-colors duration-200 ${
-        isBlueprint
+        isBlueprintDark
+          ? "blueprint-grid-dark text-slate-100 bg-[#070e1e]"
+          : isBlueprintLight
           ? "blueprint-grid text-slate-800"
-          : isBtop
+          : isBtopLight
+          ? "btop-light-grid text-[#2b2735] bg-[#ebe7ee]"
+          : isBtopDark
           ? "btop-grid text-slate-100 bg-[#06080d]"
           : "cyber-grid text-zinc-100 bg-zinc-950"
       }`}
     >
-      <div className="mx-auto max-w-[1600px] px-3.5 py-4 sm:px-6 sm:py-6 lg:px-8 animate-fade-in">
+      <div className="mx-auto max-w-[1700px] px-3.5 py-4 sm:px-6 sm:py-6 lg:px-8 animate-fade-in">
         {/* 1. Top Navigation Bar */}
         <div
           className={`flex flex-wrap items-center justify-between gap-2.5 sm:gap-4 border-b pb-3 sm:pb-4 ${
-            isBlueprint ? "border-slate-200" : isBtop ? "border-[#1b253b]" : "border-zinc-800/80"
+            isBlueprintDark
+              ? "border-[#1d2d52]"
+              : isBlueprintLight
+              ? "border-slate-200"
+              : isBtopLight
+              ? "border-[#aba4b8]"
+              : isBtopDark
+              ? "border-[#1b253b]"
+              : "border-zinc-800/80"
           }`}
         >
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <button
               onClick={onBack}
               className={`flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-xl border transition-colors ${
-                isBlueprint
+                isBlueprintDark
+                  ? "bg-[#0b152d] border-[#1d2d52] text-slate-300 hover:border-slate-500 hover:text-white shadow-xs"
+                  : isBlueprintLight
                   ? "bg-white border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900 shadow-sm"
-                  : isBtop
+                  : isBtopLight
+                  ? "bg-[#ded8e6] border-[#aba4b8] text-[#2b2735] hover:border-[#7c5c99] shadow-xs"
+                  : isBtopDark
                   ? "bg-[#0b101c] border-[#1b253b] text-cyan-400 hover:border-cyan-500/50 hover:text-cyan-300 shadow-[0_0_10px_rgba(0,240,255,0.1)]"
                   : "bg-zinc-900/80 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-100"
               }`}
@@ -530,7 +575,7 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
               <span className="text-xl sm:text-2xl leading-none shrink-0">{getRegionFlag(node.region)}</span>
               <h2
                 className={`text-base sm:text-xl font-bold tracking-tight font-sans truncate ${
-                  isBlueprint ? "text-slate-900" : "text-zinc-100"
+                  isBlueprintDark ? "text-slate-100" : isBlueprintLight ? "text-slate-900" : "text-zinc-100"
                 }`}
               >
                 {node.name}
@@ -548,7 +593,7 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
                   key={tag}
                   className={`rounded-lg px-2.5 py-0.5 text-xs font-sans font-medium border transition-all ${getTagStyle(
                     tag,
-                    isBlueprint
+                    isBlueprintLight
                   )}`}
                 >
                   {tag}
@@ -563,10 +608,14 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
               onClick={toggleStar}
               className={`flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-lg sm:rounded-xl transition-all cursor-pointer active:scale-95 ${
                 isStarred
-                  ? isBlueprint
+                  ? isBlueprintDark
+                    ? "bg-amber-950/40 text-amber-300 border border-amber-500/30"
+                    : isBlueprintLight
                     ? "bg-amber-50 text-amber-500"
                     : "bg-amber-500/15 text-amber-400"
-                  : isBlueprint
+                  : isBlueprintDark
+                  ? "text-slate-400 hover:bg-[#132247] hover:text-amber-400 border border-[#1d2d52]"
+                  : isBlueprintLight
                   ? "text-slate-400 hover:bg-slate-100 hover:text-amber-500"
                   : "text-zinc-400 hover:bg-zinc-800/80 hover:text-amber-400"
               }`}
@@ -579,14 +628,22 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
             <div
               ref={dropdownRef}
               className={`relative flex items-center rounded-lg border px-1.5 py-1 gap-0.5 ${
-                isBlueprint ? "bg-white border-slate-200 text-slate-700 shadow-sm" : "bg-zinc-900/80 border-zinc-800 text-zinc-200"
+                isBlueprintDark
+                  ? "bg-[#0b152d] border-[#1d2d52] text-slate-200 shadow-inner"
+                  : isBlueprintLight
+                  ? "bg-white border-slate-200 text-slate-700 shadow-sm"
+                  : "bg-zinc-900/80 border-zinc-800 text-zinc-200"
               }`}
             >
               <button
                 disabled={!prevNode}
                 onClick={() => prevNode && onSelectNode(prevNode)}
                 className={`p-1 rounded transition-colors disabled:opacity-30 ${
-                  isBlueprint ? "text-slate-400 hover:text-slate-800 hover:bg-slate-100" : "text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800"
+                  isBlueprintDark
+                    ? "text-slate-400 hover:text-slate-200 hover:bg-[#132247]"
+                    : isBlueprintLight
+                    ? "text-slate-400 hover:text-slate-800 hover:bg-slate-100"
+                    : "text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800"
                 }`}
                 title="上一个节点"
               >
@@ -596,7 +653,9 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
               <button
                 onClick={() => setIsDropdownOpen(!isDropdownOpen)}
                 className={`flex items-center gap-1 px-1.5 py-0.5 rounded font-semibold transition-colors ${
-                  isBlueprint
+                  isBlueprintDark
+                    ? isDropdownOpen ? "bg-[#132247] text-cyan-400" : "hover:bg-[#132247] text-slate-200"
+                    : isBlueprintLight
                     ? isDropdownOpen ? "bg-slate-100 text-indigo-600" : "hover:bg-slate-100 text-slate-800"
                     : isDropdownOpen ? "bg-zinc-800 text-indigo-400" : "hover:bg-zinc-800 text-zinc-200"
                 }`}
@@ -605,7 +664,7 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
                 <span className="text-sm leading-none">{getRegionFlag(node.region)}</span>
                 <span className="truncate max-w-[70px] sm:max-w-[120px] leading-none">{node.name}</span>
                 <ChevronDown className={`h-3 w-3 transition-transform duration-200 ${
-                  isDropdownOpen ? "rotate-180 text-indigo-500" : "text-slate-400"
+                  isDropdownOpen ? "rotate-180 text-cyan-400" : "text-slate-400"
                 }`} />
               </button>
 
@@ -613,7 +672,11 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
                 disabled={!nextNode}
                 onClick={() => nextNode && onSelectNode(nextNode)}
                 className={`p-1 rounded transition-colors disabled:opacity-30 ${
-                  isBlueprint ? "text-slate-400 hover:text-slate-800 hover:bg-slate-100" : "text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800"
+                  isBlueprintDark
+                    ? "text-slate-400 hover:text-slate-200 hover:bg-[#132247]"
+                    : isBlueprintLight
+                    ? "text-slate-400 hover:text-slate-800 hover:bg-slate-100"
+                    : "text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800"
                 }`}
                 title="下一个节点"
               >
@@ -631,16 +694,18 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
                   <div
                     className={cn(
                       "fixed inset-x-3 top-20 max-w-sm mx-auto sm:absolute sm:inset-x-auto sm:top-full sm:right-0 sm:w-72 rounded-xl border p-1.5 shadow-2xl z-50 animate-fade-in font-mono",
-                      isBlueprint
+                      isBlueprintDark
+                        ? "bg-[#0b152d] border-[#1d2d52] text-slate-100 shadow-[0_10px_30px_rgba(0,0,0,0.8)] backdrop-blur-xl"
+                        : isBlueprintLight
                         ? "bg-white border-slate-200 text-slate-800 shadow-slate-200/80 backdrop-blur-xl"
                         : "bg-zinc-900 border-zinc-700/80 text-zinc-100 shadow-black/90 backdrop-blur-xl"
                     )}
                   >
                     <div className={`flex items-center justify-between px-2.5 py-1.5 text-11 font-semibold border-b mb-1 ${
-                      isBlueprint ? "border-slate-100 text-slate-500" : "border-zinc-800 text-zinc-400"
+                      isBlueprintDark ? "border-[#1d2d52] text-slate-400" : isBlueprintLight ? "border-slate-100 text-slate-500" : "border-zinc-800 text-zinc-400"
                     }`}>
                       <span>切换主机 ({nodesList.length})</span>
-                      <Server className="h-3.5 w-3.5 text-indigo-500" />
+                      <Server className="h-3.5 w-3.5 text-cyan-400" />
                     </div>
                     <div className="max-h-64 overflow-y-auto space-y-0.5 pr-0.5">
                       {nodesList.map((n) => {
@@ -654,10 +719,14 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
                             }}
                             className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs transition-colors text-left ${
                               isActive
-                                ? isBlueprint
+                                ? isBlueprintDark
+                                  ? "bg-cyan-950/40 text-cyan-300 font-bold border border-cyan-500/30"
+                                  : isBlueprintLight
                                   ? "bg-indigo-50 text-indigo-600 font-bold border border-indigo-200/60"
                                   : "bg-indigo-500/15 text-indigo-300 font-bold border border-indigo-500/30"
-                                : isBlueprint
+                                : isBlueprintDark
+                                ? "hover:bg-[#132247] text-slate-300"
+                                : isBlueprintLight
                                 ? "hover:bg-slate-100/80 text-slate-700"
                                 : "hover:bg-zinc-800/80 text-zinc-300"
                             }`}
@@ -666,7 +735,7 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
                               <span className="text-base leading-none shrink-0">{getRegionFlag(n.region)}</span>
                               <div className="overflow-hidden">
                                 <div className="truncate font-medium">{n.name}</div>
-                                <div className={`text-10 truncate ${isBlueprint ? "text-slate-400" : "text-zinc-500"}`}>
+                                <div className={`text-10 truncate ${isBlueprintDark ? "text-slate-400" : isBlueprintLight ? "text-slate-400" : "text-zinc-500"}`}>
                                   {n.system.os || n.region} {n.system.public_ip ? `· ${n.system.public_ip}` : ""}
                                 </div>
                               </div>
@@ -679,7 +748,7 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
                                     : "bg-rose-500"
                                 }`}
                               />
-                              {isActive && <Check className="h-3.5 w-3.5 text-indigo-500 shrink-0" />}
+                              {isActive && <Check className="h-3.5 w-3.5 text-cyan-400 shrink-0" />}
                             </div>
                           </button>
                         );
@@ -693,7 +762,9 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
             {/* Provider badge */}
             <div
               className={`hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-lg border ${
-                isBlueprint
+                isBlueprintDark
+                  ? "bg-[#0b152d] border-[#1d2d52] text-slate-300 shadow-xs"
+                  : isBlueprintLight
                   ? "bg-white border-slate-200 text-slate-600 shadow-sm"
                   : "bg-zinc-900/60 border-zinc-800 text-zinc-400"
               }`}
@@ -708,24 +779,36 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
             <button
               onClick={toggleTheme}
               className={`flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-lg sm:rounded-xl border transition-all cursor-pointer active:scale-95 ${
-                isBlueprint
+                isBlueprintDark
+                  ? "bg-[#0b152d] border-[#1d2d52] text-cyan-400 hover:border-cyan-400/50 shadow-xs"
+                  : isBlueprintLight
                   ? "bg-white border-slate-200 text-slate-600 hover:text-slate-900 hover:border-slate-300 shadow-sm"
+                  : isBtopLight
+                  ? "bg-[#ded8e6] border-[#aba4b8] text-[#7c5c99] hover:text-[#2b2735] shadow-sm"
                   : isBtop
                   ? "bg-[#0b101c] border-[#1b253b] text-cyan-400 hover:text-cyan-300 hover:border-cyan-500/50 shadow-[0_0_10px_rgba(0,240,255,0.15)]"
                   : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-100 hover:border-zinc-700"
               }`}
               title={
-                isBlueprint
+                isBlueprintDark
+                  ? "当前: 蓝图暗黑 (点击切换)"
+                  : isBlueprintLight
                   ? "当前: 蓝图浅色 (点击切换到暗黑)"
-                  : isBtop
-                  ? "当前: btop++ 终端 (点击切换到蓝图)"
-                  : "当前: 默认暗黑 (点击切换到 btop++)"
+                  : theme === "btop-light"
+                  ? "当前: btop++ 亮色终端 (点击切换到蓝图)"
+                  : theme === "btop"
+                  ? "当前: btop++ 暗色终端 (点击切换到 btop++ 亮色)"
+                  : "当前: 默认暗黑 (点击切换到 btop++ 暗色)"
               }
             >
-              {isBlueprint ? (
-                <Sun className="h-4 w-4 text-amber-500" />
-              ) : isBtop ? (
+              {theme === "btop" ? (
                 <Terminal className="h-4 w-4 text-cyan-400" />
+              ) : theme === "btop-light" ? (
+                <Terminal className="h-4 w-4 text-purple-600" />
+              ) : isBlueprintDark ? (
+                <Moon className="h-4 w-4 text-cyan-400" />
+              ) : isBlueprintLight ? (
+                <Sun className="h-4 w-4 text-amber-500" />
               ) : (
                 <Moon className="h-4 w-4 text-indigo-400" />
               )}
@@ -738,52 +821,52 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
           <BlurFade delay={0.02} className={cn(isBtop ? "rounded-none" : "rounded-xl", "border p-2.5 sm:p-3.5", statCardClass)}>
             <div className={statLabelClass}>
               <span>{isBtop ? "[ 节点定价 ]" : "节点定价"}</span>
-              <CreditCard className={`h-3.5 w-3.5 ${isBlueprint ? "text-slate-500" : isBtop ? "text-cyan-400" : "text-zinc-400"}`} />
+              <CreditCard className={`h-3.5 w-3.5 ${isBlueprintDark ? "text-slate-400" : isBlueprintLight ? "text-slate-500" : isBtop ? "text-cyan-400" : "text-zinc-400"}`} />
             </div>
-            <div className={`mt-1 sm:mt-1.5 text-base sm:text-lg font-bold truncate ${isBlueprint ? "text-slate-900" : isBtop ? "text-cyan-200" : "text-zinc-100"}`}>
+            <div className={`mt-1 sm:mt-1.5 text-base sm:text-lg font-bold truncate ${isBlueprintDark ? "text-slate-100" : isBlueprintLight ? "text-slate-900" : isBtop ? "text-cyan-200" : "text-zinc-100"}`}>
               {node.billing?.currency || "$"}
               <NumberTicker
                 value={node.billing?.price != null && node.billing.price > 0 ? node.billing.price : (node.billing?.price_per_month || 0)}
                 decimals={2}
               />
-              <span className={`text-xs font-normal ${isBlueprint ? "text-slate-500" : isBtop ? "text-cyan-400/70" : "text-zinc-400"}`}> / {getCycleLabel(node.billing?.billing_cycle)}</span>
+              <span className={`text-xs font-normal ${isBlueprintDark ? "text-slate-400" : isBlueprintLight ? "text-slate-500" : isBtop ? "text-cyan-400/70" : "text-zinc-400"}`}> / {getCycleLabel(node.billing?.billing_cycle)}</span>
             </div>
           </BlurFade>
 
           <BlurFade delay={0.05} className={cn(isBtop ? "rounded-none" : "rounded-xl", "border p-2.5 sm:p-3.5", statCardClass)}>
             <div className={statLabelClass}>
               <span>{isBtop ? "[ 月均支出 ]" : "月均支出"}</span>
-              <DollarSign className={`h-3.5 w-3.5 ${isBlueprint ? "text-slate-500" : isBtop ? "text-cyan-400" : "text-zinc-400"}`} />
+              <DollarSign className={`h-3.5 w-3.5 ${isBlueprintDark ? "text-slate-400" : isBlueprintLight ? "text-slate-500" : isBtop ? "text-cyan-400" : "text-zinc-400"}`} />
             </div>
-            <div className={`mt-1 sm:mt-1.5 text-base sm:text-lg font-bold truncate ${isBlueprint ? "text-slate-900" : isBtop ? "text-cyan-200" : "text-zinc-100"}`}>
+            <div className={`mt-1 sm:mt-1.5 text-base sm:text-lg font-bold truncate ${isBlueprintDark ? "text-slate-100" : isBlueprintLight ? "text-slate-900" : isBtop ? "text-cyan-200" : "text-zinc-100"}`}>
               {node.billing?.currency || "$"}
               <NumberTicker value={node.billing?.price_per_month || 0} decimals={2} />
-              <span className={`text-xs font-normal ${isBlueprint ? "text-slate-500" : isBtop ? "text-cyan-400/70" : "text-zinc-400"}`}> / 月</span>
+              <span className={`text-xs font-normal ${isBlueprintDark ? "text-slate-400" : isBlueprintLight ? "text-slate-500" : isBtop ? "text-cyan-400/70" : "text-zinc-400"}`}> / 月</span>
             </div>
           </BlurFade>
 
           <BlurFade delay={0.08} className={cn(isBtop ? "rounded-none" : "rounded-xl", "border p-2.5 sm:p-3.5", statCardClass)}>
             <div className={statLabelClass}>
               <span>{isBtop ? "[ 剩余时间 ]" : "剩余时间"}</span>
-              <Calendar className={`h-3.5 w-3.5 ${isBlueprint ? "text-slate-500" : isBtop ? "text-cyan-400" : "text-zinc-400"}`} />
+              <Calendar className={`h-3.5 w-3.5 ${isBlueprintDark ? "text-slate-400" : isBlueprintLight ? "text-slate-500" : isBtop ? "text-cyan-400" : "text-zinc-400"}`} />
             </div>
             <div className="mt-1 sm:mt-1.5 flex items-baseline justify-between gap-1">
               <span className="text-base sm:text-lg font-bold text-emerald-600 dark:text-emerald-400">
                 {node.billing?.expiry_date ? (
                   <>
                     <NumberTicker value={node.billing?.remaining_days || 0} />
-                    <span className={`text-xs font-normal ${isBlueprint ? "text-slate-500" : isBtop ? "text-cyan-400/70" : "text-zinc-400"}`}> 天</span>
+                    <span className={`text-xs font-normal ${isBlueprintDark ? "text-slate-400" : isBlueprintLight ? "text-slate-500" : isBtop ? "text-cyan-400/70" : "text-zinc-400"}`}> 天</span>
                   </>
                 ) : (
-                  <span className={isBlueprint ? "text-slate-400" : "text-zinc-500"}>--</span>
+                  <span className={isBlueprintDark ? "text-slate-500" : isBlueprintLight ? "text-slate-400" : "text-zinc-500"}>--</span>
                 )}
               </span>
               {node.billing?.expiry_date ? (
-                <span className={`text-10 truncate max-w-[80px] sm:max-w-[90px] ${isBlueprint ? "text-slate-500" : isBtop ? "text-cyan-400/70" : "text-zinc-400"}`} title={`到期日: ${node.billing.expiry_date}`}>
+                <span className={`text-10 truncate max-w-[80px] sm:max-w-[90px] ${isBlueprintDark ? "text-slate-400" : isBlueprintLight ? "text-slate-500" : isBtop ? "text-cyan-400/70" : "text-zinc-400"}`} title={`到期日: ${node.billing.expiry_date}`}>
                   {node.billing.expiry_date}
                 </span>
               ) : (
-                <span className={`text-10 ${isBlueprint ? "text-slate-500" : isBtop ? "text-cyan-400/70" : "text-zinc-400"}`}>自动续费</span>
+                <span className={`text-10 ${isBlueprintDark ? "text-slate-400" : isBlueprintLight ? "text-slate-500" : isBtop ? "text-cyan-400/70" : "text-zinc-400"}`}>自动续费</span>
               )}
             </div>
           </BlurFade>
@@ -791,7 +874,7 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
           <BlurFade delay={0.11} className={cn(isBtop ? "rounded-none" : "rounded-xl", "border p-2.5 sm:p-3.5", statCardClass)}>
             <div className={statLabelClass}>
               <span>{isBtop ? "[ 剩余价值 ]" : "剩余价值"}</span>
-              <Coins className={`h-3.5 w-3.5 ${isBlueprint ? "text-slate-500" : isBtop ? "text-cyan-400" : "text-zinc-400"}`} />
+              <Coins className={`h-3.5 w-3.5 ${isBlueprintDark ? "text-slate-400" : isBlueprintLight ? "text-slate-500" : isBtop ? "text-cyan-400" : "text-zinc-400"}`} />
             </div>
             <div className="mt-1 sm:mt-1.5 flex items-baseline justify-between gap-1">
               <span className="text-base sm:text-lg font-bold text-cyan-600 dark:text-cyan-400">
@@ -801,7 +884,7 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
                   prefix={node.billing?.currency || "$"}
                 />
               </span>
-              <span className={`text-10 font-mono ${isBlueprint ? "text-cyan-700" : "text-cyan-400/80"}`}>
+              <span className={`text-10 font-mono ${isBlueprintDark ? "text-cyan-400" : isBlueprintLight ? "text-cyan-700" : "text-cyan-400/80"}`}>
                 按剩余天数
               </span>
             </div>
@@ -810,9 +893,9 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
           <BlurFade delay={0.14} className={cn(isBtop ? "rounded-none" : "rounded-xl", "border p-2.5 sm:p-3.5", statCardClass)}>
             <div className={statLabelClass}>
               <span>{isBtop ? "[ 已用流量 ]" : "已用流量"}</span>
-              <ArrowUpDown className={`h-3.5 w-3.5 ${isBlueprint ? "text-slate-500" : isBtop ? "text-cyan-400" : "text-zinc-400"}`} />
+              <ArrowUpDown className={`h-3.5 w-3.5 ${isBlueprintDark ? "text-slate-400" : isBlueprintLight ? "text-slate-500" : isBtop ? "text-cyan-400" : "text-zinc-400"}`} />
             </div>
-            <div className={`mt-1 sm:mt-1.5 text-base sm:text-lg font-bold ${isBlueprint ? "text-slate-900" : isBtop ? "text-cyan-200" : "text-zinc-100"}`}>
+            <div className={`mt-1 sm:mt-1.5 text-base sm:text-lg font-bold ${isBlueprintDark ? "text-slate-100" : isBlueprintLight ? "text-slate-900" : isBtop ? "text-cyan-200" : "text-zinc-100"}`}>
               {formatBytes(usedTraffic)}
             </div>
           </BlurFade>
@@ -820,16 +903,16 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
           <BlurFade delay={0.17} className={cn(isBtop ? "rounded-none" : "rounded-xl", "border p-2.5 sm:p-3.5", statCardClass)}>
             <div className={statLabelClass}>
               <span>{isBtop ? "[ 流量配额 ]" : "流量配额"}</span>
-              <PieChart className={`h-3.5 w-3.5 ${isBlueprint ? "text-slate-500" : isBtop ? "text-cyan-400" : "text-zinc-400"}`} />
+              <PieChart className={`h-3.5 w-3.5 ${isBlueprintDark ? "text-slate-400" : isBlueprintLight ? "text-slate-500" : isBtop ? "text-cyan-400" : "text-zinc-400"}`} />
             </div>
             <div className="mt-1 sm:mt-1.5 text-base sm:text-lg font-bold text-blue-600 dark:text-blue-400 flex items-baseline gap-1">
               {quotaBytes > 0 ? (
                 <>
                   <NumberTicker value={quotaPercent} decimals={1} suffix="%" />
-                  <span className={`text-xs font-normal ${isBlueprint ? "text-slate-500" : isBtop ? "text-cyan-400/70" : "text-zinc-400"}`}>/ {formatBytes(quotaBytes)}</span>
+                  <span className={`text-xs font-normal ${isBlueprintDark ? "text-slate-400" : isBlueprintLight ? "text-slate-500" : isBtop ? "text-cyan-400/70" : "text-zinc-400"}`}>/ {formatBytes(quotaBytes)}</span>
                 </>
               ) : (
-                <span className={`text-xs sm:text-sm font-semibold ${isBlueprint ? "text-slate-700" : "text-zinc-300"}`}>无限制</span>
+                <span className={`text-xs sm:text-sm font-semibold ${isBlueprintDark ? "text-slate-300" : isBlueprintLight ? "text-slate-700" : "text-zinc-300"}`}>无限制</span>
               )}
             </div>
           </BlurFade>
@@ -837,9 +920,9 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
           <BlurFade delay={0.2} className={cn(isBtop ? "rounded-none" : "rounded-xl", "border p-2.5 sm:p-3.5", statCardClass)}>
             <div className={statLabelClass}>
               <span>{isBtop ? "[ 运行时间 ]" : "运行时间"}</span>
-              <Clock className={`h-3.5 w-3.5 ${isBlueprint ? "text-slate-500" : isBtop ? "text-cyan-400" : "text-zinc-400"}`} />
+              <Clock className={`h-3.5 w-3.5 ${isBlueprintDark ? "text-slate-400" : isBlueprintLight ? "text-slate-500" : isBtop ? "text-cyan-400" : "text-zinc-400"}`} />
             </div>
-            <div className={`mt-1 sm:mt-1.5 text-xs sm:text-sm font-bold truncate ${isBlueprint ? "text-slate-900" : isBtop ? "text-cyan-200" : "text-zinc-100"}`} title={node.uptime_str}>
+            <div className={`mt-1 sm:mt-1.5 text-xs sm:text-sm font-bold truncate ${isBlueprintDark ? "text-slate-100" : isBlueprintLight ? "text-slate-900" : isBtop ? "text-cyan-200" : "text-zinc-100"}`} title={node.uptime_str}>
               {node.uptime_str}
             </div>
           </BlurFade>
@@ -847,9 +930,9 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
           <BlurFade delay={0.23} className={cn(isBtop ? "rounded-none" : "rounded-xl", "border p-2.5 sm:p-3.5", statCardClass)}>
             <div className={statLabelClass}>
               <span>{isBtop ? "[ 连接数 ]" : "连接数"}</span>
-              <LinkIcon className={`h-3.5 w-3.5 ${isBlueprint ? "text-slate-500" : isBtop ? "text-cyan-400" : "text-zinc-400"}`} />
+              <LinkIcon className={`h-3.5 w-3.5 ${isBlueprintDark ? "text-slate-400" : isBlueprintLight ? "text-slate-500" : isBtop ? "text-cyan-400" : "text-zinc-400"}`} />
             </div>
-            <div className={`mt-1 sm:mt-1.5 text-base sm:text-lg font-bold ${isBlueprint ? "text-slate-900" : isBtop ? "text-cyan-200" : "text-zinc-100"}`}>
+            <div className={`mt-1 sm:mt-1.5 text-base sm:text-lg font-bold ${isBlueprintDark ? "text-slate-100" : isBlueprintLight ? "text-slate-900" : isBtop ? "text-cyan-200" : "text-zinc-100"}`}>
               <NumberTicker value={node.network.tcp_established + (node.network.udp_established || 4)} />
             </div>
           </BlurFade>
@@ -861,7 +944,9 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
             <div
               className={cn(
                 "flex flex-wrap items-center justify-between gap-3 px-4 py-3 rounded-xl border transition-all text-xs font-sans",
-                isBlueprint
+                isBlueprintDark
+                  ? "bg-amber-950/25 border-amber-500/30 text-amber-200"
+                  : isBlueprintLight
                   ? "bg-amber-50/80 border-amber-200/90 text-amber-900 shadow-2xs"
                   : "bg-amber-950/20 border-amber-800/40 text-amber-200"
               )}
@@ -874,7 +959,7 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
                   <div className="flex items-center gap-1.5 font-semibold text-amber-700 dark:text-amber-400">
                     <span>配置备注 / 折扣码</span>
                   </div>
-                  <div className="font-mono text-xs sm:text-sm font-medium mt-0.5 break-all select-all text-slate-800 dark:text-zinc-200">
+                  <div className={`font-mono text-xs sm:text-sm font-medium mt-0.5 break-all select-all ${isBlueprintDark ? "text-slate-200" : isBlueprintLight ? "text-slate-800" : "text-zinc-200"}`}>
                     {node.billing.note}
                   </div>
                 </div>
@@ -887,7 +972,9 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
                   "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all cursor-pointer active:scale-95 shrink-0",
                   copiedField === "note"
                     ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-600 dark:text-emerald-400"
-                    : isBlueprint
+                    : isBlueprintDark
+                    ? "bg-[#0b152d] hover:bg-[#132247] border-amber-500/30 text-amber-300"
+                    : isBlueprintLight
                     ? "bg-white hover:bg-amber-100/60 border-amber-300/80 text-amber-800 shadow-2xs"
                     : "bg-zinc-900 hover:bg-zinc-800 border-amber-700/50 text-amber-300"
                 )}
@@ -912,9 +999,9 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
         <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3.5 font-sans text-xs">
           {/* Hardware Info */}
           <BlurFade delay={0.04} className={cn(isBtop ? "rounded-none" : "rounded-xl", "border p-4", cardBgClass)}>
-            <div className={`flex items-center justify-between border-b pb-2.5 font-bold ${isBlueprint ? "border-slate-100 text-slate-900" : isBtop ? "border-[#1b253b] text-cyan-300 font-mono" : "border-zinc-800/70 text-zinc-100"}`}>
+            <div className={`flex items-center justify-between border-b pb-2.5 font-bold ${isBlueprintDark ? "border-[#1d2d52] text-slate-100" : isBlueprintLight ? "border-slate-100 text-slate-900" : isBtop ? "border-[#1b253b] text-cyan-300 font-mono" : "border-zinc-800/70 text-zinc-100"}`}>
               <span className="flex items-center gap-2">
-                <Cpu className={`h-4 w-4 ${isBtop ? "text-cyan-400" : "text-indigo-500"}`} />
+                <Cpu className={`h-4 w-4 ${isBtop ? "text-cyan-400" : isBlueprintDark ? "text-cyan-400" : "text-indigo-500"}`} />
                 {isBtop ? "┌─ [ BOX HARDWARE ]" : "硬件信息"}
               </span>
               {isBtop && <span className="text-cyan-500 font-mono text-xs select-none">─┐</span>}
@@ -922,8 +1009,8 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
             <div className="mt-3 space-y-2.5">
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <span className={`flex items-center gap-1.5 font-semibold ${isBlueprint ? "text-slate-700" : "text-zinc-300"}`}>
-                    <Cpu className={`h-3.5 w-3.5 ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`} />
+                  <span className={`flex items-center gap-1.5 font-semibold ${isBlueprintDark ? "text-slate-300" : isBlueprintLight ? "text-slate-700" : "text-zinc-300"}`}>
+                    <Cpu className={`h-3.5 w-3.5 ${isBlueprintDark ? "text-slate-400" : isBlueprintLight ? "text-slate-500" : "text-zinc-400"}`} />
                     CPU
                   </span>
                   <a
@@ -933,7 +1020,9 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
                     target="_blank"
                     rel="noopener noreferrer"
                     className={`rounded-lg px-2 py-0.5 text-10 border flex items-center gap-1 transition-all cursor-pointer active:scale-95 ${
-                      isBlueprint
+                      isBlueprintDark
+                        ? "bg-[#070e1f] text-cyan-300 hover:bg-[#132247] border-[#1d2d52]"
+                        : isBlueprintLight
                         ? "bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border-indigo-200"
                         : "bg-indigo-500/10 text-indigo-300 hover:bg-indigo-500/20 border-indigo-500/30"
                     }`}
@@ -943,7 +1032,7 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
                     <ExternalLink className="h-3 w-3 shrink-0" />
                   </a>
                 </div>
-                <div className={`font-semibold truncate ${isBlueprint ? "text-slate-900" : "text-zinc-100"}`} title={node.system.cpu_model || "通用处理器 / 虚拟化 CPU"}>
+                <div className={`font-semibold truncate ${isBlueprintDark ? "text-slate-100" : isBlueprintLight ? "text-slate-900" : "text-zinc-100"}`} title={node.system.cpu_model || "通用处理器 / 虚拟化 CPU"}>
                   {node.system.cpu_model || "通用处理器 / 虚拟化 CPU"} ({node.system.cpu_count || 1} vCPU)
                 </div>
                 {/* Benchmark score bar */}
@@ -951,7 +1040,7 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
                   <span className="rounded bg-emerald-500/20 px-1 py-0.5 text-10 font-bold leading-none text-emerald-600 dark:text-emerald-400">
                     {node.system.cpu_count && node.system.cpu_count >= 8 ? "S" : node.system.cpu_count && node.system.cpu_count >= 4 ? "A" : "B"}
                   </span>
-                  <div className={`flex-1 h-2 rounded-full overflow-hidden ${isBlueprint ? "bg-slate-200" : "bg-zinc-800"}`}>
+                  <div className={`flex-1 h-2 rounded-full overflow-hidden ${isBlueprintDark ? "bg-[#16274a]" : isBlueprintLight ? "bg-slate-200" : "bg-zinc-800"}`}>
                     <div
                       className="h-full bg-emerald-500 rounded-full transition-all duration-500"
                       style={{
@@ -959,34 +1048,34 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
                       }}
                     />
                   </div>
-                  <span className={`text-10 ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}>
+                  <span className={`text-10 ${isBlueprintDark ? "text-slate-400" : isBlueprintLight ? "text-slate-500" : "text-zinc-400"}`}>
                     {node.system.cpu_mark || (node.system.cpu_count && node.system.cpu_count >= 8 ? "高性能计算型" : node.system.cpu_count && node.system.cpu_count >= 4 ? "标准多核服务器" : "通用入门型")}
                   </span>
                 </div>
               </div>
 
-              <div className={`grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-2.5 border-t ${isBlueprint ? "border-slate-100" : "border-zinc-800/60"}`}>
+              <div className={`grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-2.5 border-t ${isBlueprintDark ? "border-[#1d2d52]" : isBlueprintLight ? "border-slate-100" : "border-zinc-800/60"}`}>
                 {/* IPv4 */}
                 <div>
-                  <div className={`text-10 flex items-center justify-between ${isBlueprint ? "text-slate-500 font-medium" : "text-zinc-400"}`}>
+                  <div className={`text-10 flex items-center justify-between ${isBlueprintDark ? "text-slate-400 font-medium" : isBlueprintLight ? "text-slate-500 font-medium" : "text-zinc-400"}`}>
                     <span>公网 IPv4</span>
                     <button
                       onClick={toggleMaskIP}
-                      className={`flex items-center gap-1 hover:underline cursor-pointer ${isBlueprint ? "text-indigo-600" : "text-indigo-400"}`}
+                      className={`flex items-center gap-1 hover:underline cursor-pointer ${isBlueprintDark ? "text-cyan-400" : isBlueprintLight ? "text-indigo-600" : "text-indigo-400"}`}
                       title={maskIP ? "点击显示完整 IP" : "点击脱敏隐藏 IP"}
                     >
                       {maskIP ? <EyeOff className="h-3 w-3 shrink-0" /> : <Eye className="h-3 w-3 shrink-0" />}
                       <span className="text-10 leading-none">{maskIP ? "已脱敏" : "显示"}</span>
                     </button>
                   </div>
-                  <div className={`flex items-center gap-1 mt-0.5 font-semibold ${isBlueprint ? "text-slate-800" : "text-zinc-200"}`}>
+                  <div className={`flex items-center gap-1 mt-0.5 font-semibold ${isBlueprintDark ? "text-slate-100" : isBlueprintLight ? "text-slate-800" : "text-zinc-200"}`}>
                     <span className="truncate" title={node.system.public_ip || "未上报"}>
                       {maskIPString(node.system.public_ip)}
                     </span>
                     {node.system.public_ip && (
                       <button
                         onClick={() => copyText(node.system.public_ip || "", "ip4")}
-                        className={`${isBlueprint ? "text-slate-400 hover:text-slate-700" : "text-zinc-500 hover:text-zinc-300"} shrink-0`}
+                        className={`${isBlueprintDark ? "text-slate-400 hover:text-slate-200" : isBlueprintLight ? "text-slate-400 hover:text-slate-700" : "text-zinc-500 hover:text-zinc-300"} shrink-0`}
                         title="复制完整 IPv4"
                       >
                         {copiedField === "ip4" ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
@@ -997,17 +1086,17 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
 
                 {/* IPv6 */}
                 <div>
-                  <div className={`text-10 ${isBlueprint ? "text-slate-500 font-medium" : "text-zinc-400"}`}>
+                  <div className={`text-10 ${isBlueprintDark ? "text-slate-400 font-medium" : isBlueprintLight ? "text-slate-500 font-medium" : "text-zinc-400"}`}>
                     公网 IPv6
                   </div>
-                  <div className={`flex items-center gap-1 mt-0.5 font-semibold ${isBlueprint ? "text-slate-800" : "text-zinc-200"}`}>
+                  <div className={`flex items-center gap-1 mt-0.5 font-semibold ${isBlueprintDark ? "text-slate-100" : isBlueprintLight ? "text-slate-800" : "text-zinc-200"}`}>
                     <span className="truncate" title={node.system.public_ipv6 || "未上报"}>
                       {maskIPString(node.system.public_ipv6)}
                     </span>
                     {node.system.public_ipv6 && (
                       <button
                         onClick={() => copyText(node.system.public_ipv6 || "", "ip6")}
-                        className={`${isBlueprint ? "text-slate-400 hover:text-slate-700" : "text-zinc-500 hover:text-zinc-300"} shrink-0`}
+                        className={`${isBlueprintDark ? "text-slate-400 hover:text-slate-200" : isBlueprintLight ? "text-slate-400 hover:text-slate-700" : "text-zinc-500 hover:text-zinc-300"} shrink-0`}
                         title="复制完整 IPv6"
                       >
                         {copiedField === "ip6" ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
@@ -1018,16 +1107,16 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
 
                 {/* CPU Cores */}
                 <div>
-                  <div className={`text-10 ${isBlueprint ? "text-slate-500 font-medium" : "text-zinc-400"}`}>物理核心</div>
-                  <div className={`mt-0.5 font-semibold ${isBlueprint ? "text-slate-800" : "text-zinc-200"}`}>
+                  <div className={`text-10 ${isBlueprintDark ? "text-slate-400 font-medium" : isBlueprintLight ? "text-slate-500 font-medium" : "text-zinc-400"}`}>物理核心</div>
+                  <div className={`mt-0.5 font-semibold ${isBlueprintDark ? "text-slate-100" : isBlueprintLight ? "text-slate-800" : "text-zinc-200"}`}>
                     {node.system.cpu_count || 1} 核
                   </div>
                 </div>
 
                 {/* Virtualization */}
                 <div>
-                  <div className={`text-10 ${isBlueprint ? "text-slate-500 font-medium" : "text-zinc-400"}`}>虚拟化</div>
-                  <div className={`mt-0.5 font-semibold uppercase ${isBlueprint ? "text-slate-800" : "text-zinc-200"}`}>
+                  <div className={`text-10 ${isBlueprintDark ? "text-slate-400 font-medium" : isBlueprintLight ? "text-slate-500 font-medium" : "text-zinc-400"}`}>虚拟化</div>
+                  <div className={`mt-0.5 font-semibold uppercase ${isBlueprintDark ? "text-slate-100" : isBlueprintLight ? "text-slate-800" : "text-zinc-200"}`}>
                     {node.system.virtualization || "--"}
                   </div>
                 </div>
@@ -1037,36 +1126,36 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
 
           {/* System Info */}
           <BlurFade delay={0.08} className={cn(isBtop ? "rounded-none" : "rounded-xl", "border p-4", cardBgClass)}>
-            <div className={`flex items-center justify-between border-b pb-2.5 font-bold ${isBlueprint ? "border-slate-100 text-slate-900" : isBtop ? "border-[#1b253b] text-cyan-300 font-mono" : "border-zinc-800/70 text-zinc-100"}`}>
+            <div className={`flex items-center justify-between border-b pb-2.5 font-bold ${isBlueprintDark ? "border-[#1d2d52] text-slate-100" : isBlueprintLight ? "border-slate-100 text-slate-900" : isBtop ? "border-[#1b253b] text-cyan-300 font-mono" : "border-zinc-800/70 text-zinc-100"}`}>
               <span className="flex items-center gap-2">
-                <ShieldCheck className={`h-4 w-4 ${isBtop ? "text-cyan-400" : "text-cyan-600"}`} />
+                <ShieldCheck className={`h-4 w-4 ${isBtop ? "text-cyan-400" : isBlueprintDark ? "text-cyan-400" : "text-cyan-600"}`} />
                 {isBtop ? "┌─ [ BOX SYSTEM ]" : "系统信息"}
               </span>
               {isBtop && <span className="text-cyan-500 font-mono text-xs select-none">─┐</span>}
             </div>
             <div className="mt-3 grid grid-cols-2 gap-y-3 gap-x-4">
               <div>
-                <div className={`text-10 ${isBlueprint ? "text-slate-500 font-medium" : "text-zinc-400"}`}>操作系统</div>
+                <div className={`text-10 ${isBlueprintDark ? "text-slate-400 font-medium" : isBlueprintLight ? "text-slate-500 font-medium" : "text-zinc-400"}`}>操作系统</div>
                 <div className="mt-1 flex items-center gap-2">
                   <span className={`h-7 w-7 rounded-lg flex items-center justify-center border shrink-0 ${
-                    isBlueprint ? "bg-slate-50 border-slate-200 text-slate-700 shadow-sm" : "bg-zinc-800/80 border-zinc-700 text-zinc-300"
+                    isBlueprintDark ? "bg-[#070e1f] border-[#1d2d52] text-slate-200 shadow-xs" : isBlueprintLight ? "bg-slate-50 border-slate-200 text-slate-700 shadow-sm" : "bg-zinc-800/80 border-zinc-700 text-zinc-300"
                   }`}>
                     <OsIcon os={node.system.os} className="h-3.5 w-3.5" />
                   </span>
-                  <span className={`font-semibold truncate text-xs ${isBlueprint ? "text-slate-800" : "text-zinc-200"}`} title={node.system.os}>
+                  <span className={`font-semibold truncate text-xs ${isBlueprintDark ? "text-slate-100" : isBlueprintLight ? "text-slate-800" : "text-zinc-200"}`} title={node.system.os}>
                     {node.system.os || "--"}
                   </span>
                 </div>
               </div>
 
               <div>
-                <div className={`text-10 ${isBlueprint ? "text-slate-500 font-medium" : "text-zinc-400"}`}>内核版本</div>
-                <div className={`flex items-center gap-1 mt-1 font-semibold ${isBlueprint ? "text-slate-800" : "text-zinc-200"}`}>
+                <div className={`text-10 ${isBlueprintDark ? "text-slate-400 font-medium" : isBlueprintLight ? "text-slate-500 font-medium" : "text-zinc-400"}`}>内核版本</div>
+                <div className={`flex items-center gap-1 mt-1 font-semibold ${isBlueprintDark ? "text-slate-100" : isBlueprintLight ? "text-slate-800" : "text-zinc-200"}`}>
                   <span className="truncate text-xs" title={node.system.kernel}>{node.system.kernel || "--"}</span>
                   {node.system.kernel && (
                     <button
                       onClick={() => copyText(node.system.kernel, "kernel")}
-                      className={`${isBlueprint ? "text-slate-400 hover:text-slate-700 shrink-0" : "text-zinc-500 hover:text-zinc-300 shrink-0"}`}
+                      className={`${isBlueprintDark ? "text-slate-400 hover:text-slate-200" : isBlueprintLight ? "text-slate-400 hover:text-slate-700" : "text-zinc-500 hover:text-zinc-300"} shrink-0`}
                       title="复制内核版本"
                     >
                       {copiedField === "kernel" ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
@@ -1076,14 +1165,14 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
               </div>
 
               <div>
-                <div className={`text-10 ${isBlueprint ? "text-slate-500 font-medium" : "text-zinc-400"}`}>Agent 版本</div>
+                <div className={`text-10 ${isBlueprintDark ? "text-slate-400 font-medium" : isBlueprintLight ? "text-slate-500 font-medium" : "text-zinc-400"}`}>Agent 版本</div>
                 {nodeAgentVersion ? (
-                  <div className={`flex items-center gap-1 mt-1 font-semibold ${isBlueprint ? "text-slate-800" : "text-zinc-200"}`}>
+                  <div className={`flex items-center gap-1 mt-1 font-semibold ${isBlueprintDark ? "text-slate-100" : isBlueprintLight ? "text-slate-800" : "text-zinc-200"}`}>
                     <span className="truncate text-xs" title={nodeAgentVersion}>{nodeAgentVersion}</span>
                     {versionStatus === "outdated" && (
                       <span
                         className={`shrink-0 rounded px-1 py-0.5 text-10 font-bold ${
-                          isBlueprint ? "bg-amber-50 text-amber-600" : "bg-amber-500/15 text-amber-400"
+                          isBlueprintDark ? "bg-amber-950/40 text-amber-300 border border-amber-500/30" : isBlueprintLight ? "bg-amber-50 text-amber-600" : "bg-amber-500/15 text-amber-400"
                         }`}
                         title={`服务端当前下发的版本是 ${latestAgentVersion}`}
                       >
@@ -1092,7 +1181,7 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
                     )}
                     <button
                       onClick={() => copyText(nodeAgentVersion, "agent-version")}
-                      className={`${isBlueprint ? "text-slate-400 hover:text-slate-700 shrink-0" : "text-zinc-500 hover:text-zinc-300 shrink-0"}`}
+                      className={`${isBlueprintDark ? "text-slate-400 hover:text-slate-200" : isBlueprintLight ? "text-slate-400 hover:text-slate-700" : "text-zinc-500 hover:text-zinc-300"} shrink-0`}
                       title="复制 Agent 版本"
                     >
                       {copiedField === "agent-version" ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
@@ -1102,7 +1191,7 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
                   /* 没有版本号不是「加载中」，而是这台机器上的 Agent 早于版本
                      字段本身。这正是最需要升级的那批，所以直说，不填占位串。 */
                   <div
-                    className={`mt-1 font-semibold text-xs ${isBlueprint ? "text-amber-600" : "text-amber-400"}`}
+                    className={`mt-1 font-semibold text-xs ${isBlueprintDark ? "text-amber-400" : isBlueprintLight ? "text-amber-600" : "text-amber-400"}`}
                     title="该 Agent 不上报版本号，说明它早于版本字段本身"
                   >
                     未知（旧版）
@@ -1111,15 +1200,15 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
               </div>
 
               <div>
-                <div className={`text-10 ${isBlueprint ? "text-slate-500 font-medium" : "text-zinc-400"}`}>运行时间</div>
-                <div className={`mt-1 font-semibold text-xs ${isBlueprint ? "text-slate-800" : "text-zinc-200"}`}>
+                <div className={`text-10 ${isBlueprintDark ? "text-slate-400 font-medium" : isBlueprintLight ? "text-slate-500 font-medium" : "text-zinc-400"}`}>运行时间</div>
+                <div className={`mt-1 font-semibold text-xs ${isBlueprintDark ? "text-slate-100" : isBlueprintLight ? "text-slate-800" : "text-zinc-200"}`}>
                   {node.uptime_str}
                 </div>
               </div>
 
               <div>
-                <div className={`text-10 ${isBlueprint ? "text-slate-500 font-medium" : "text-zinc-400"}`}>厂商</div>
-                <div className={`mt-0.5 font-semibold truncate ${isBlueprint ? "text-slate-800" : "text-zinc-200"}`} title={node.billing?.provider}>
+                <div className={`text-10 ${isBlueprintDark ? "text-slate-400 font-medium" : isBlueprintLight ? "text-slate-500 font-medium" : "text-zinc-400"}`}>厂商</div>
+                <div className={`mt-0.5 font-semibold truncate ${isBlueprintDark ? "text-slate-100" : isBlueprintLight ? "text-slate-800" : "text-zinc-200"}`} title={node.billing?.provider}>
                   {node.billing?.provider || "--"}
                 </div>
               </div>
@@ -1128,23 +1217,23 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
                   需要当初那条部署命令的 token，也不会改动 node_id。 */}
               {versionStatus !== "current" && (
                 <div className={`col-span-2 mt-1 rounded-lg border px-2.5 py-2 ${
-                  isBlueprint ? "border-amber-200 bg-amber-50/60" : "border-amber-500/25 bg-amber-500/5"
+                  isBlueprintDark ? "border-amber-500/30 bg-amber-950/20" : isBlueprintLight ? "border-amber-200 bg-amber-50/60" : "border-amber-500/25 bg-amber-500/5"
                 }`}>
-                  <div className={`text-10 font-medium ${isBlueprint ? "text-amber-700" : "text-amber-400"}`}>
+                  <div className={`text-10 font-medium ${isBlueprintDark ? "text-amber-300" : isBlueprintLight ? "text-amber-700" : "text-amber-400"}`}>
                     {versionStatus === "unknown"
                       ? "该 Agent 不上报版本号，早于版本字段本身，建议升级。"
                       : `与当前下发的 ${latestAgentVersion} 不一致，建议升级。`}
                   </div>
                   <div className="mt-1 flex items-center gap-1.5">
                     <code
-                      className={`truncate font-mono text-10 ${isBlueprint ? "text-slate-700" : "text-zinc-300"}`}
+                      className={`truncate font-mono text-10 ${isBlueprintDark ? "text-amber-200" : isBlueprintLight ? "text-slate-700" : "text-zinc-300"}`}
                       title={AGENT_UPGRADE_COMMAND}
                     >
                       {AGENT_UPGRADE_COMMAND}
                     </code>
                     <button
                       onClick={() => copyText(AGENT_UPGRADE_COMMAND, "agent-upgrade")}
-                      className={`${isBlueprint ? "text-slate-400 hover:text-slate-700 shrink-0" : "text-zinc-500 hover:text-zinc-300 shrink-0"}`}
+                      className={`${isBlueprintDark ? "text-slate-400 hover:text-slate-200" : isBlueprintLight ? "text-slate-400 hover:text-slate-700" : "text-zinc-500 hover:text-zinc-300"} shrink-0`}
                       title="复制升级命令"
                     >
                       {copiedField === "agent-upgrade" ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
@@ -1157,40 +1246,40 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
 
           {/* Storage Info */}
           <BlurFade delay={0.11} className={cn(isBtop ? "rounded-none" : "rounded-xl", "border p-4", cardBgClass)}>
-            <div className={`flex items-center justify-between border-b pb-2.5 font-bold ${isBlueprint ? "border-slate-100 text-slate-900" : isBtop ? "border-[#1b253b] text-cyan-300 font-mono" : "border-zinc-800/70 text-zinc-100"}`}>
+            <div className={`flex items-center justify-between border-b pb-2.5 font-bold ${isBlueprintDark ? "border-[#1d2d52] text-slate-100" : isBlueprintLight ? "border-slate-100 text-slate-900" : isBtop ? "border-[#1b253b] text-cyan-300 font-mono" : "border-zinc-800/70 text-zinc-100"}`}>
               <span className="flex items-center gap-2">
-                <HardDrive className={`h-4 w-4 ${isBtop ? "text-cyan-400" : "text-amber-500"}`} />
+                <HardDrive className={`h-4 w-4 ${isBtop ? "text-cyan-400" : isBlueprintDark ? "text-amber-400" : "text-amber-500"}`} />
                 {isBtop ? "┌─ [ BOX STORAGE ]" : "存储信息"}
               </span>
               {isBtop && <span className="text-cyan-500 font-mono text-xs select-none">─┐</span>}
             </div>
             <div className="mt-3 grid grid-cols-3 gap-2">
               <div>
-                <div className={`text-10 flex items-center gap-1 ${isBlueprint ? "text-slate-500 font-medium" : "text-zinc-400"}`}>
-                  <Layers className={`h-3 w-3 ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`} />
+                <div className={`text-10 flex items-center gap-1 ${isBlueprintDark ? "text-slate-400 font-medium" : isBlueprintLight ? "text-slate-500 font-medium" : "text-zinc-400"}`}>
+                  <Layers className={`h-3 w-3 ${isBlueprintDark ? "text-slate-400" : isBlueprintLight ? "text-slate-500" : "text-zinc-400"}`} />
                   内存
                 </div>
-                <div className={`font-bold text-sm mt-1 ${isBlueprint ? "text-slate-900" : "text-zinc-100"}`}>
+                <div className={`font-bold text-sm mt-1 ${isBlueprintDark ? "text-slate-100" : isBlueprintLight ? "text-slate-900" : "text-zinc-100"}`}>
                   {formatBytes(node.system.mem_total || 967 * 1024 * 1024)}
                 </div>
               </div>
 
               <div>
-                <div className={`text-10 flex items-center gap-1 ${isBlueprint ? "text-slate-500 font-medium" : "text-zinc-400"}`}>
-                  <ArrowUpDown className={`h-3 w-3 ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`} />
+                <div className={`text-10 flex items-center gap-1 ${isBlueprintDark ? "text-slate-400 font-medium" : isBlueprintLight ? "text-slate-500 font-medium" : "text-zinc-400"}`}>
+                  <ArrowUpDown className={`h-3 w-3 ${isBlueprintDark ? "text-slate-400" : isBlueprintLight ? "text-slate-500" : "text-zinc-400"}`} />
                   内存交换
                 </div>
-                <div className={`font-bold text-sm mt-1 ${isBlueprint ? "text-slate-900" : "text-zinc-100"}`}>
+                <div className={`font-bold text-sm mt-1 ${isBlueprintDark ? "text-slate-100" : isBlueprintLight ? "text-slate-900" : "text-zinc-100"}`}>
                   {formatBytes(node.system.swap_total || 3800 * 1024 * 1024)}
                 </div>
               </div>
 
               <div>
-                <div className={`text-10 flex items-center gap-1 ${isBlueprint ? "text-slate-500 font-medium" : "text-zinc-400"}`}>
-                  <HardDrive className={`h-3 w-3 ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`} />
+                <div className={`text-10 flex items-center gap-1 ${isBlueprintDark ? "text-slate-400 font-medium" : isBlueprintLight ? "text-slate-500 font-medium" : "text-zinc-400"}`}>
+                  <HardDrive className={`h-3 w-3 ${isBlueprintDark ? "text-slate-400" : isBlueprintLight ? "text-slate-500" : "text-zinc-400"}`} />
                   硬盘
                 </div>
-                <div className={`font-bold text-sm mt-1 ${isBlueprint ? "text-slate-900" : "text-zinc-100"}`}>
+                <div className={`font-bold text-sm mt-1 ${isBlueprintDark ? "text-slate-100" : isBlueprintLight ? "text-slate-900" : "text-zinc-100"}`}>
                   {formatBytes(node.system.disk_total || 46 * 1024 * 1024 * 1024)}
                 </div>
               </div>
@@ -1199,27 +1288,27 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
 
           {/* Network Info */}
           <BlurFade delay={0.15} className={cn(isBtop ? "rounded-none" : "rounded-xl", "border p-4", cardBgClass)}>
-            <div className={`flex items-center justify-between border-b pb-2.5 font-bold ${isBlueprint ? "border-slate-100 text-slate-900" : isBtop ? "border-[#1b253b] text-cyan-300 font-mono" : "border-zinc-800/70 text-zinc-100"}`}>
+            <div className={`flex items-center justify-between border-b pb-2.5 font-bold ${isBlueprintDark ? "border-[#1d2d52] text-slate-100" : isBlueprintLight ? "border-slate-100 text-slate-900" : isBtop ? "border-[#1b253b] text-cyan-300 font-mono" : "border-zinc-800/70 text-zinc-100"}`}>
               <span className="flex items-center gap-2">
-                <Network className={`h-4 w-4 ${isBtop ? "text-cyan-400" : "text-emerald-500"}`} />
+                <Network className={`h-4 w-4 ${isBtop ? "text-cyan-400" : isBlueprintDark ? "text-emerald-400" : "text-emerald-500"}`} />
                 {isBtop ? "┌─ [ BOX NETWORK ]" : "网络信息"}
               </span>
               {isBtop && <span className="text-cyan-500 font-mono text-xs select-none">─┐</span>}
             </div>
             <div className="mt-3 grid grid-cols-2 gap-4">
               <div>
-                <div className={`flex items-center gap-1 text-10 ${isBlueprint ? "text-slate-500 font-medium" : "text-zinc-400"}`}>
-                  <ArrowUpDown className={`h-3 w-3 ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`} />
+                <div className={`flex items-center gap-1 text-10 ${isBlueprintDark ? "text-slate-400 font-medium" : isBlueprintLight ? "text-slate-500 font-medium" : "text-zinc-400"}`}>
+                  <ArrowUpDown className={`h-3 w-3 ${isBlueprintDark ? "text-slate-400" : isBlueprintLight ? "text-slate-500" : "text-zinc-400"}`} />
                   <span>总流量</span>
-                  <span className={`rounded px-1 py-0.5 text-10 font-semibold leading-none ${isBlueprint ? "bg-slate-100 text-slate-700" : "bg-zinc-800 text-zinc-300"}`}>IPv4</span>
-                  <span className={`ml-auto font-mono ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}>
+                  <span className={`rounded px-1 py-0.5 text-10 font-semibold leading-none ${isBlueprintDark ? "bg-[#070e1f] text-slate-200 border border-[#1d2d52]" : isBlueprintLight ? "bg-slate-100 text-slate-700" : "bg-zinc-800 text-zinc-300"}`}>IPv4</span>
+                  <span className={`ml-auto font-mono ${isBlueprintDark ? "text-slate-400" : isBlueprintLight ? "text-slate-500" : "text-zinc-400"}`}>
                     {formatBytes(node.network.bytes_recv)} / {formatBytes(node.network.bytes_sent)}
                   </span>
                 </div>
-                <div className={`font-bold text-sm mt-1 ${isBlueprint ? "text-slate-900" : "text-zinc-100"}`}>
+                <div className={`font-bold text-sm mt-1 ${isBlueprintDark ? "text-slate-100" : isBlueprintLight ? "text-slate-900" : "text-zinc-100"}`}>
                   {formatBytes(usedTraffic)} {quotaBytes > 0 ? `/ ${formatBytes(quotaBytes)}` : "（无限制）"}
                 </div>
-                <div className={`text-10 mt-1.5 flex items-center gap-2 ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}>
+                <div className={`text-10 mt-1.5 flex items-center gap-2 ${isBlueprintDark ? "text-slate-400" : isBlueprintLight ? "text-slate-500" : "text-zinc-400"}`}>
                   <span>近一周峰值</span>
                   <span className="flex items-center gap-0.5 text-emerald-600 dark:text-emerald-400 font-semibold">
                     <ArrowUp className="h-3 w-3" />
@@ -1233,8 +1322,8 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
               </div>
 
               <div>
-                <div className={`text-10 flex items-center gap-1 ${isBlueprint ? "text-slate-500 font-medium" : "text-zinc-400"}`}>
-                  <Activity className={`h-3 w-3 ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`} />
+                <div className={`text-10 flex items-center gap-1 ${isBlueprintDark ? "text-slate-400 font-medium" : isBlueprintLight ? "text-slate-500 font-medium" : "text-zinc-400"}`}>
+                  <Activity className={`h-3 w-3 ${isBlueprintDark ? "text-slate-400" : isBlueprintLight ? "text-slate-500" : "text-zinc-400"}`} />
                   网络速率
                 </div>
                 <div className="font-bold text-sm mt-1 flex items-center gap-3">
@@ -1255,7 +1344,7 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
         {/* 4. Real-time Telemetry Charts Header (Tabs: 实时, 4 小时, 1 天, 自定义) */}
         <div
           className={`mt-7 flex flex-wrap items-center justify-between gap-3 border-b pb-2.5 font-sans ${
-            isBlueprint ? "border-slate-200" : "border-zinc-800"
+            isBlueprintDark ? "border-[#1d2d52]" : isBlueprintLight ? "border-slate-200" : "border-zinc-800"
           }`}
         >
           <Tabs
@@ -1345,7 +1434,7 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
 
         {/* 5. Latency & Packet Loss Section (延迟 / 丢包) */}
         <div className={cn(isBtop ? "rounded-none" : "rounded-2xl", "mt-6 sm:mt-8 border p-3.5 sm:p-5", cardBgClass)}>
-          <div className={`flex flex-wrap items-center justify-between gap-3 border-b pb-3 font-sans ${isBlueprint ? "border-slate-100" : isBtop ? "border-[#1b253b]" : "border-zinc-800/80"}`}>
+          <div className={`flex flex-wrap items-center justify-between gap-3 border-b pb-3 font-sans ${isBlueprintDark ? "border-[#1d2d52]" : isBlueprintLight ? "border-slate-100" : isBtop ? "border-[#1b253b]" : "border-zinc-800/80"}`}>
             {/* Time range buttons */}
             <Tabs
               selectedKey={pingRange}
@@ -1363,7 +1452,7 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
 
             {/* Target filter hint */}
             <div className="flex items-center gap-2 text-xs">
-              <span className={`text-11 ${isBlueprint ? "text-slate-600" : isBtop ? "text-cyan-400/80 font-mono" : "text-zinc-500"}`}>
+              <span className={`text-11 ${isBlueprintDark ? "text-slate-400" : isBlueprintLight ? "text-slate-600" : isBtop ? "text-cyan-400/80 font-mono" : "text-zinc-500"}`}>
                 {isBtop ? "[ PING TARGET FILTER ]" : "点击下方节点可单选/多选对比"}
               </span>
               {hiddenTargets.size > 0 && (
@@ -1373,7 +1462,9 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
                   className={`text-11 font-semibold px-2 py-0.5 rounded-md border transition-all cursor-pointer active:scale-95 ${
                     isBtop
                       ? "bg-cyan-500/15 text-cyan-300 border-cyan-500/40 hover:bg-cyan-500/25 rounded-none font-mono"
-                      : isBlueprint
+                      : isBlueprintDark
+                      ? "bg-[#070e1f] text-cyan-300 border-[#1d2d52] hover:bg-[#132247]"
+                      : isBlueprintLight
                       ? "bg-indigo-50 text-indigo-600 border-indigo-200 hover:bg-indigo-100"
                       : "bg-indigo-950/50 text-indigo-400 border-indigo-800/60 hover:bg-indigo-900/50"
                   }`}
@@ -1398,12 +1489,16 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
                     isSelected
                       ? isBtop
                         ? "border-cyan-500/60 bg-[#0c1424] shadow-[0_0_12px_rgba(0,240,255,0.15)] ring-1 ring-cyan-500/40 text-cyan-200"
-                        : isBlueprint
+                        : isBlueprintDark
+                        ? "border-[#1d2d52] bg-[#070e1f] shadow-md ring-1 ring-cyan-500/30 text-slate-100"
+                        : isBlueprintLight
                         ? "border-slate-200/90 bg-white shadow-sm ring-1 ring-slate-100"
                         : "border-zinc-700 bg-zinc-950/80 shadow-md shadow-indigo-500/5 ring-1 ring-zinc-700/50"
                       : isBtop
                       ? "border-[#1b253b] bg-[#070b14]/60 opacity-40 hover:opacity-80 text-slate-400"
-                      : isBlueprint
+                      : isBlueprintDark
+                      ? "border-[#1d2d52]/60 bg-[#070e1f]/50 opacity-45 hover:opacity-80 text-slate-400"
+                      : isBlueprintLight
                       ? "border-slate-200/60 bg-slate-100/60 opacity-45 hover:opacity-80"
                       : "border-zinc-800/60 bg-zinc-950/30 opacity-45 hover:opacity-80"
                   )}
@@ -1418,26 +1513,26 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
                   <div className="flex items-center justify-between font-bold mb-1 pl-1.5">
                     <span className={`${
                       isSelected
-                        ? isBlueprint ? "text-slate-900 font-bold" : "text-zinc-100 font-bold"
-                        : isBlueprint ? "text-slate-400 line-through" : "text-zinc-500 line-through"
+                        ? isBlueprintDark ? "text-slate-100 font-bold" : isBlueprintLight ? "text-slate-900 font-bold" : "text-zinc-100 font-bold"
+                        : isBlueprintDark ? "text-slate-500 line-through" : isBlueprintLight ? "text-slate-400 line-through" : "text-zinc-500 line-through"
                     }`}>
                       {target.label}
                     </span>
                     {isSelected ? (
-                      <Eye className={`h-3 w-3 ${isBlueprint ? "text-slate-400" : "text-zinc-500"}`} />
+                      <Eye className={`h-3 w-3 ${isBlueprintDark ? "text-slate-400" : isBlueprintLight ? "text-slate-400" : "text-zinc-500"}`} />
                     ) : (
-                      <EyeOff className={`h-3 w-3 ${isBlueprint ? "text-slate-400" : "text-zinc-600"}`} />
+                      <EyeOff className={`h-3 w-3 ${isBlueprintDark ? "text-slate-500" : isBlueprintLight ? "text-slate-400" : "text-zinc-600"}`} />
                     )}
                   </div>
                   <div className={`text-xs pl-1.5 ${
                     isSelected
-                      ? isBlueprint ? "text-slate-600" : "text-zinc-400"
-                      : isBlueprint ? "text-slate-400" : "text-zinc-600"
+                      ? isBlueprintDark ? "text-slate-300" : isBlueprintLight ? "text-slate-600" : "text-zinc-400"
+                      : isBlueprintDark ? "text-slate-500" : isBlueprintLight ? "text-slate-400" : "text-zinc-600"
                   }`}>
                     <span className={`font-bold ${
                       isSelected
-                        ? isBlueprint ? "text-slate-900" : "text-zinc-100"
-                        : isBlueprint ? "text-slate-400" : "text-zinc-600"
+                        ? isBlueprintDark ? "text-slate-100" : isBlueprintLight ? "text-slate-900" : "text-zinc-100"
+                        : isBlueprintDark ? "text-slate-500" : isBlueprintLight ? "text-slate-400" : "text-zinc-600"
                     }`}>
                       {target.latency_ms.toFixed(0)}ms
                     </span>
@@ -1452,13 +1547,13 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
           </div>
 
           {/* Smooth peaks indicator */}
-          <div className={`mt-4 flex items-center gap-1.5 text-xs font-mono pl-1 ${isBlueprint ? "text-slate-600" : "text-zinc-400"}`}>
-            <span className={`font-semibold ${isBlueprint ? "text-slate-800" : "text-zinc-200"}`}>平滑峰值</span>
+          <div className={`mt-4 flex items-center gap-1.5 text-xs font-mono pl-1 ${isBlueprintDark ? "text-slate-400" : isBlueprintLight ? "text-slate-600" : "text-zinc-400"}`}>
+            <span className={`font-semibold ${isBlueprintDark ? "text-slate-200" : isBlueprintLight ? "text-slate-800" : "text-zinc-200"}`}>平滑峰值</span>
             <span
               className="cursor-help inline-flex items-center"
               title="已启用滑动均值平滑算法，过滤异常网络抖动尖刺，保持指标趋势清晰呈现"
             >
-              <Info className={`h-3.5 w-3.5 ${isBlueprint ? "text-slate-500 hover:text-slate-700" : "text-zinc-400 hover:text-zinc-200"}`} />
+              <Info className={`h-3.5 w-3.5 ${isBlueprintDark ? "text-slate-400 hover:text-slate-200" : isBlueprintLight ? "text-slate-500 hover:text-slate-700" : "text-zinc-400 hover:text-zinc-200"}`} />
             </span>
           </div>
 
@@ -1476,7 +1571,7 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
               />
             ) : (
               <div className={`h-[180px] rounded-xl border flex flex-col items-center justify-center font-mono text-xs ${
-                isBlueprint ? "bg-slate-50/50 border-slate-200 text-slate-500" : "bg-zinc-900/30 border-zinc-800 text-zinc-500"
+                isBlueprintDark ? "bg-[#070e1f]/60 border-[#1d2d52] text-slate-400" : isBlueprintLight ? "bg-slate-50/50 border-slate-200 text-slate-500" : "bg-zinc-900/30 border-zinc-800 text-zinc-500"
               }`}>
                 <span>已隐藏所有监测目标</span>
                 <button
@@ -1492,9 +1587,9 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
         </div>
 
         {/* 6. Footer */}
-        <div className={`mt-8 flex items-center justify-between text-xs font-mono pb-6 ${isBlueprint ? "text-slate-500" : isBtop ? "text-slate-400" : "text-zinc-500"}`}>
+        <div className={`mt-8 flex items-center justify-between text-xs font-mono pb-6 ${isBlueprintDark ? "text-slate-400" : isBlueprintLight ? "text-slate-500" : isBtop ? "text-slate-400" : "text-zinc-500"}`}>
           <div>CYBER PROBE · 高性能极简探针系统</div>
-          <div>Theme: {isBlueprint ? "Blueprint (架构图风格)" : isBtop ? "btop++ (终端极客风格)" : "Cyber Dark (极客暗黑)"}</div>
+          <div>Theme: {theme === "blueprint-dark" ? "Blueprint Dark (工程蓝图·暗色)" : isBlueprintLight ? "Blueprint (工程蓝图·亮色)" : isBtop ? "btop++ (终端极客风格)" : "Cyber Dark (极客暗黑)"}</div>
         </div>
       </div>
     </div>

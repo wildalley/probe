@@ -80,8 +80,10 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
     });
   };
 
-  const isBlueprint = theme === "blueprint";
-  const isBtop = theme === "btop";
+  const isBlueprintLight = theme === "blueprint";
+  const isBlueprintDark = theme === "blueprint-dark";
+  const isBlueprint = isBlueprintLight || isBlueprintDark;
+  const isBtop = theme === "btop" || theme === "btop-light";
 
   const renderProgressBar = (value: number, colorFallback: string) => {
     const safeVal = Math.min(100, Math.max(0, value));
@@ -114,7 +116,7 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
     return (
       <div
         className={`w-full overflow-hidden relative ${
-          isBlueprint ? "h-1.5 rounded-full bg-slate-200" : "h-1.5 rounded-full bg-zinc-800"
+          isBlueprintDark ? "h-1.5 rounded-full bg-[#16274a]" : isBlueprintLight ? "h-1.5 rounded-full bg-slate-200" : "h-1.5 rounded-full bg-zinc-800"
         }`}
       >
         <div
@@ -238,7 +240,9 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
       onMouseLeave={() => setOpacity(0)}
       onClick={() => onSelect(node)}
       className={`group relative cursor-pointer overflow-hidden border p-4 sm:p-5 transition-all duration-200 ${
-        isBlueprint
+        isBlueprintDark
+          ? "rounded-2xl border-[#1a2d54] bg-[#0a142c]/90 text-slate-100 shadow-lg hover:border-cyan-400/50"
+          : isBlueprintLight
           ? "rounded-2xl bg-white border-slate-200/90 text-slate-800 shadow-sm hover:border-slate-300 hover:shadow-md"
           : isBtop
           ? "rounded-none border-[#1b253b] bg-[#070b14] text-slate-100 shadow-[0_4px_20px_rgba(0,0,0,0.5)] hover:border-cyan-500/60 hover:shadow-[0_0_24px_rgba(0,240,255,0.15)] font-mono"
@@ -250,7 +254,9 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
         className="pointer-events-none absolute -inset-px transition-opacity duration-300"
         style={{
           opacity,
-          background: isBlueprint
+          background: isBlueprintDark
+            ? `radial-gradient(350px circle at ${position.x}px ${position.y}px, rgba(56, 189, 248, 0.12), transparent 80%)`
+            : isBlueprintLight
             ? `radial-gradient(350px circle at ${position.x}px ${position.y}px, rgba(99, 102, 241, 0.08), transparent 80%)`
             : isBtop
             ? `radial-gradient(350px circle at ${position.x}px ${position.y}px, rgba(0, 240, 255, 0.12), transparent 80%)`
@@ -264,8 +270,8 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
           size={110}
           duration={7}
           className="opacity-0 transition-opacity duration-500 group-hover:opacity-100"
-          colorFrom={isBlueprint ? "#6366f1" : isBtop ? "#00f0ff" : "#818cf8"}
-          colorTo={isBlueprint ? "#06b6d4" : isBtop ? "#d946ef" : "#22d3ee"}
+          colorFrom={isBlueprintDark ? "#38bdf8" : isBlueprintLight ? "#6366f1" : isBtop ? "#00f0ff" : "#818cf8"}
+          colorTo={isBlueprintDark ? "#818cf8" : isBlueprintLight ? "#06b6d4" : isBtop ? "#d946ef" : "#22d3ee"}
         />
       )}
 
@@ -305,7 +311,7 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
           />
           <span
             className={`truncate font-bold text-sm sm:text-base tracking-tight ${
-              isBlueprint ? "text-slate-900 font-sans" : isBtop ? "text-cyan-300 font-mono" : "text-zinc-100 font-sans"
+              isBlueprintDark ? "text-slate-100 font-sans" : isBlueprintLight ? "text-slate-900 font-sans" : isBtop ? "text-cyan-300 font-mono" : "text-zinc-100 font-sans"
             }`}
             title={node.name}
           >
@@ -319,10 +325,12 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
             onClick={toggleStar}
             className={`h-7 w-7 rounded-lg flex items-center justify-center transition-all cursor-pointer active:scale-90 ${
               isStarred
-                ? isBlueprint
+                ? isBlueprintLight
                   ? "bg-amber-50 text-amber-500"
                   : "bg-amber-500/15 text-amber-400"
-                : isBlueprint
+                : isBlueprintDark
+                ? "text-slate-400 hover:bg-[#16274a] hover:text-amber-400"
+                : isBlueprintLight
                 ? "text-slate-400 hover:bg-slate-100 hover:text-amber-500"
                 : "text-zinc-400 hover:bg-zinc-800/80 hover:text-amber-400"
             }`}
@@ -339,7 +347,7 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
               and is sized up to match the flag glyph beside it. */}
           <div
             className={`h-7 w-7 rounded-lg flex items-center justify-center ${
-              isBlueprint ? "text-slate-600" : "text-zinc-300"
+              isBlueprintDark ? "text-slate-300" : isBlueprintLight ? "text-slate-600" : "text-zinc-300"
             }`}
             title={`${node.system.os || "Linux"} (${node.system.kernel || ""})`}
           >
@@ -349,12 +357,12 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
           {/* 3. Region Flag Badge */}
           <div
             className={`h-7 px-1.5 rounded-lg flex items-center justify-center gap-1 text-xs font-mono font-bold ${
-              isBlueprint ? "text-slate-700" : "text-zinc-200"
+              isBlueprintDark ? "text-slate-200" : isBlueprintLight ? "text-slate-700" : "text-zinc-200"
             }`}
             title={node.region}
           >
             <span className="text-sm leading-none">{getRegionFlag(node.region)}</span>
-            <span className={`text-10 uppercase font-bold ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}>
+            <span className={`text-10 uppercase font-bold ${isBlueprintDark ? "text-slate-400" : isBlueprintLight ? "text-slate-500" : "text-zinc-400"}`}>
               {node.region || "DEF"}
             </span>
           </div>
@@ -366,10 +374,14 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
         <span
           className={`rounded-md px-2 py-0.5 text-11 font-sans font-medium border flex items-center gap-1 ${
             node.is_online
-              ? isBlueprint
+              ? isBlueprintDark
+                ? "bg-sky-950/40 border-sky-500/30 text-sky-300"
+                : isBlueprintLight
                 ? "bg-sky-50 border-sky-200/80 text-sky-700"
                 : "bg-sky-950/40 border-sky-500/30 text-sky-300"
-              : isBlueprint
+              : isBlueprintDark
+              ? "bg-rose-950/40 border-rose-500/30 text-rose-300"
+              : isBlueprintLight
               ? "bg-rose-50 border-rose-200 text-rose-600"
               : "bg-rose-950/40 border-rose-500/30 text-rose-300"
           }`}
@@ -380,7 +392,9 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
 
         <span
           className={`rounded-md px-2 py-0.5 text-11 font-sans font-medium border ${
-            isBlueprint
+            isBlueprintDark
+              ? "bg-indigo-950/40 border-indigo-500/30 text-indigo-300"
+              : isBlueprintLight
               ? "bg-indigo-50 border-indigo-200/80 text-indigo-700"
               : "bg-indigo-950/40 border-indigo-500/30 text-indigo-300"
           }`}
@@ -400,7 +414,9 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
               "rounded-md px-2 py-0.5 text-11 font-sans font-medium border flex items-center gap-1 cursor-pointer transition-all active:scale-95 group/note max-w-[140px] truncate",
               copiedNote
                 ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-600 dark:text-emerald-400"
-                : isBlueprint
+                : isBlueprintDark
+                ? "bg-amber-950/40 border-amber-500/30 text-amber-300 hover:bg-amber-900/50"
+                : isBlueprintLight
                 ? "bg-amber-50/90 border-amber-200/90 text-amber-700 hover:bg-amber-100/90 shadow-2xs"
                 : "bg-amber-950/40 border-amber-500/30 text-amber-300 hover:bg-amber-900/50"
             )}
@@ -419,7 +435,7 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
         <AgentVersionMark
           version={agentVersion}
           latestVersion={latestAgentVersion}
-          isBlueprint={isBlueprint}
+          isBlueprint={isBlueprintLight}
         />
       </div>
 
@@ -428,7 +444,7 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
         {/* CPU */}
         <div className="space-y-1">
           <div className="flex items-center justify-between text-xs">
-            <span className={`flex items-center gap-1.5 font-semibold ${isBlueprint ? "text-slate-700" : isBtop ? "text-cyan-400" : "text-zinc-300"}`}>
+            <span className={`flex items-center gap-1.5 font-semibold ${isBlueprintDark ? "text-slate-300" : isBlueprintLight ? "text-slate-700" : isBtop ? "text-cyan-400" : "text-zinc-300"}`}>
               <Cpu className="h-3.5 w-3.5 text-sky-500 shrink-0" />
               <span>{isBtop ? "[ CPU ]" : "CPU"}</span>
             </span>
@@ -436,7 +452,7 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
               <NumberTicker value={node.cpu} decimals={1} suffix="%" />
             </span>
           </div>
-          <div className={`text-10 truncate ${isBlueprint ? "text-slate-500" : isBtop ? "text-slate-400" : "text-zinc-400"}`}>
+          <div className={`text-10 truncate ${isBlueprintDark ? "text-slate-400" : isBlueprintLight ? "text-slate-500" : isBtop ? "text-slate-400" : "text-zinc-400"}`}>
             {loadStr}
           </div>
           {renderProgressBar(node.cpu, getBarColor(node.cpu))}
@@ -445,7 +461,7 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
         {/* 内存 */}
         <div className="space-y-1">
           <div className="flex items-center justify-between text-xs">
-            <span className={`flex items-center gap-1.5 font-semibold ${isBlueprint ? "text-slate-700" : isBtop ? "text-cyan-400" : "text-zinc-300"}`}>
+            <span className={`flex items-center gap-1.5 font-semibold ${isBlueprintDark ? "text-slate-300" : isBlueprintLight ? "text-slate-700" : isBtop ? "text-cyan-400" : "text-zinc-300"}`}>
               <Layers className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
               <span>{isBtop ? "[ 内存 ]" : "内存"}</span>
             </span>
@@ -453,7 +469,7 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
               <NumberTicker value={node.mem} decimals={1} suffix="%" />
             </span>
           </div>
-          <div className={`text-10 truncate ${isBlueprint ? "text-slate-500" : isBtop ? "text-slate-400" : "text-zinc-400"}`}>
+          <div className={`text-10 truncate ${isBlueprintDark ? "text-slate-400" : isBlueprintLight ? "text-slate-500" : isBtop ? "text-slate-400" : "text-zinc-400"}`}>
             {memSub}
           </div>
           {renderProgressBar(node.mem, getBarColor(node.mem))}
@@ -462,7 +478,7 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
         {/* 硬盘 */}
         <div className="space-y-1">
           <div className="flex items-center justify-between text-xs">
-            <span className={`flex items-center gap-1.5 font-semibold ${isBlueprint ? "text-slate-700" : isBtop ? "text-cyan-400" : "text-zinc-300"}`}>
+            <span className={`flex items-center gap-1.5 font-semibold ${isBlueprintDark ? "text-slate-300" : isBlueprintLight ? "text-slate-700" : isBtop ? "text-cyan-400" : "text-zinc-300"}`}>
               <HardDrive className="h-3.5 w-3.5 text-amber-500 shrink-0" />
               <span>{isBtop ? "[ 硬盘 ]" : "硬盘"}</span>
             </span>
@@ -470,7 +486,7 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
               <NumberTicker value={node.disk} decimals={1} suffix="%" />
             </span>
           </div>
-          <div className={`text-10 truncate ${isBlueprint ? "text-slate-500" : isBtop ? "text-slate-400" : "text-zinc-400"}`}>
+          <div className={`text-10 truncate ${isBlueprintDark ? "text-slate-400" : isBlueprintLight ? "text-slate-500" : isBtop ? "text-slate-400" : "text-zinc-400"}`}>
             {diskSub || `${formatBytes(node.system.disk_used || 0)} / ${formatBytes(node.system.disk_total || 0)}`}
           </div>
           {renderProgressBar(node.disk, getBarColor(node.disk))}
@@ -479,7 +495,7 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
         {/* 流量 */}
         <div className="space-y-1">
           <div className="flex items-center justify-between text-xs">
-            <span className={`flex items-center gap-1.5 font-semibold ${isBlueprint ? "text-slate-700" : isBtop ? "text-cyan-400" : "text-zinc-300"}`}>
+            <span className={`flex items-center gap-1.5 font-semibold ${isBlueprintDark ? "text-slate-300" : isBlueprintLight ? "text-slate-700" : isBtop ? "text-cyan-400" : "text-zinc-300"}`}>
               <ArrowUpDown className="h-3.5 w-3.5 text-purple-500 shrink-0" />
               <span>{isBtop ? "[ 流量 ]" : "流量"}</span>
             </span>
@@ -487,7 +503,7 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
               {quotaBytes > 0 ? <NumberTicker value={quotaPercent} decimals={1} suffix="%" /> : "0%"}
             </span>
           </div>
-          <div className={`text-10 truncate ${isBlueprint ? "text-slate-500" : isBtop ? "text-slate-400" : "text-zinc-400"}`}>
+          <div className={`text-10 truncate ${isBlueprintDark ? "text-slate-400" : isBlueprintLight ? "text-slate-500" : isBtop ? "text-slate-400" : "text-zinc-400"}`}>
             {formatBytes(usedTraffic)} / {quotaBytes > 0 ? formatBytes(quotaBytes) : "无限制"}
           </div>
           {quotaBytes > 0 ? renderProgressBar(quotaPercent, getBarColor(quotaPercent)) : renderProgressBar(0, "bg-blue-500")}
@@ -498,7 +514,13 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
       <div className="mt-3.5 grid grid-cols-3 gap-2 text-xs font-mono">
         {/* Real-time Rate */}
         <div className={`p-2 border ${
-          isBlueprint ? "rounded-lg bg-slate-50/80 border-slate-200/80" : isBtop ? "rounded-none bg-[#0b101c] border-[#1b253b]" : "rounded-lg bg-zinc-950/40 border-zinc-800/50"
+          isBlueprintDark
+            ? "rounded-lg bg-[#070e1f]/80 border-[#1a2d54] text-slate-100"
+            : isBlueprintLight
+            ? "rounded-lg bg-slate-50/80 border-slate-200/80"
+            : isBtop
+            ? "rounded-none bg-[#0b101c] border-[#1b253b]"
+            : "rounded-lg bg-zinc-950/40 border-zinc-800/50"
         }`}>
           <div className={`flex items-center justify-between font-semibold truncate ${isBtop ? "text-pink-400" : "text-emerald-600 dark:text-emerald-400"}`}>
             <span className="flex items-center gap-1">
@@ -518,13 +540,19 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
 
         {/* Cumulative Tx / Rx */}
         <div className={`p-2 rounded-lg border ${
-          isBlueprint ? "bg-slate-50/80 border-slate-200/80" : isBtop ? "bg-[#0b101c] border-[#1b253b]" : "bg-zinc-950/40 border-zinc-800/50"
+          isBlueprintDark
+            ? "bg-[#070e1f]/80 border-[#1a2d54] text-slate-100"
+            : isBlueprintLight
+            ? "bg-slate-50/80 border-slate-200/80"
+            : isBtop
+            ? "bg-[#0b101c] border-[#1b253b]"
+            : "bg-zinc-950/40 border-zinc-800/50"
         }`}>
-          <div className={`flex items-center gap-1 font-medium truncate ${isBlueprint ? "text-slate-700" : isBtop ? "text-slate-300" : "text-zinc-300"}`}>
+          <div className={`flex items-center gap-1 font-medium truncate ${isBlueprintDark ? "text-slate-200" : isBlueprintLight ? "text-slate-700" : isBtop ? "text-slate-300" : "text-zinc-300"}`}>
             <ArrowUp className="h-3 w-3 text-indigo-500 shrink-0" />
             <span className="truncate">{formatBytes(node.network.bytes_sent)}</span>
           </div>
-          <div className={`flex items-center gap-1 font-medium truncate mt-0.5 ${isBlueprint ? "text-slate-700" : isBtop ? "text-slate-300" : "text-zinc-300"}`}>
+          <div className={`flex items-center gap-1 font-medium truncate mt-0.5 ${isBlueprintDark ? "text-slate-200" : isBlueprintLight ? "text-slate-700" : isBtop ? "text-slate-300" : "text-zinc-300"}`}>
             <ArrowDown className="h-3 w-3 text-cyan-500 shrink-0" />
             <span className="truncate">{formatBytes(node.network.bytes_recv)}</span>
           </div>
@@ -532,9 +560,15 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
 
         {/* Expiry & Remaining Value */}
         <div className={`p-2 rounded-lg border ${
-          isBlueprint ? "bg-slate-50/80 border-slate-200/80" : isBtop ? "bg-[#0b101c] border-[#1b253b]" : "bg-zinc-950/40 border-zinc-800/50"
+          isBlueprintDark
+            ? "bg-[#070e1f]/80 border-[#1a2d54] text-slate-100"
+            : isBlueprintLight
+            ? "bg-slate-50/80 border-slate-200/80"
+            : isBtop
+            ? "bg-[#0b101c] border-[#1b253b]"
+            : "bg-zinc-950/40 border-zinc-800/50"
         }`}>
-          <div className="flex items-center gap-1 text-slate-700 dark:text-zinc-300 font-medium truncate">
+          <div className={`flex items-center gap-1 font-medium truncate ${isBlueprintDark ? "text-slate-200" : isBlueprintLight ? "text-slate-700" : "text-slate-700 dark:text-zinc-300"}`}>
             <Calendar className="h-3 w-3 text-amber-500 shrink-0" />
             <span className="truncate">
               {node.billing?.remaining_days && node.billing.remaining_days > 0
@@ -544,7 +578,7 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
                   : "未设到期"}
             </span>
           </div>
-          <div className="flex items-center gap-1 text-slate-700 dark:text-zinc-300 font-medium truncate mt-0.5">
+          <div className={`flex items-center gap-1 font-medium truncate mt-0.5 ${isBlueprintDark ? "text-slate-200" : isBlueprintLight ? "text-slate-700" : "text-slate-700 dark:text-zinc-300"}`}>
             <Coins className="h-3 w-3 text-cyan-500 shrink-0" />
             <span className="truncate">
               {node.billing?.remaining_value_native && node.billing.remaining_value_native > 0
@@ -557,14 +591,14 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
 
       {/* 5. Latency & Packet Loss Section (Per-target segmented chart) */}
       <div className={`mt-3.5 pt-3 border-t font-mono text-xs ${
-        isBlueprint ? "border-slate-100" : isBtop ? "border-[#1b253b]" : "border-zinc-800/60"
+        isBlueprintDark ? "border-[#1a2d54]" : isBlueprintLight ? "border-slate-100" : isBtop ? "border-[#1b253b]" : "border-zinc-800/60"
       }`}>
         {/* Summary Header */}
         <div className="grid grid-cols-2 gap-3 mb-2.5">
           {/* Latency Summary */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1.5">
-              <span className={isBlueprint ? "text-slate-600 font-medium" : "text-zinc-400"}>延迟</span>
+              <span className={isBlueprintDark ? "text-slate-400" : isBlueprintLight ? "text-slate-600 font-medium" : "text-zinc-400"}>延迟</span>
               {node.is_online && avgLatency !== null && (
                 <span className={cn("inline-flex items-center gap-1 px-1.5 py-0.2 rounded-full text-[10px] font-sans font-medium border", latencyQuality.badge)}>
                   <span className={cn("h-1.5 w-1.5 rounded-full", latencyQuality.dot)} />
@@ -580,7 +614,7 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
           {/* Packet Loss Summary */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1.5">
-              <span className={isBlueprint ? "text-slate-600 font-medium" : "text-zinc-400"}>丢包</span>
+              <span className={isBlueprintDark ? "text-slate-400" : isBlueprintLight ? "text-slate-600 font-medium" : "text-zinc-400"}>丢包</span>
               {node.is_online && (avgLoss === 0 || avgLoss === null) && (
                 <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[10px] font-sans font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
                   零丢包
@@ -595,7 +629,7 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
             <span className={`font-bold font-mono ${
               avgLoss !== null && avgLoss > 0
                 ? "text-rose-500 dark:text-rose-400"
-                : isBlueprint ? "text-slate-900" : "text-zinc-100"
+                : isBlueprintDark ? "text-slate-100" : isBlueprintLight ? "text-slate-900" : "text-zinc-100"
             }`}>
               {node.is_online && avgLoss !== null ? `${avgLoss.toFixed(1)}%` : "--"}
             </span>
@@ -606,7 +640,11 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
         {pings.length === 0 ? (
           <div className={cn(
             "text-[11px] py-2 text-center rounded-lg border border-dashed font-sans",
-            isBlueprint ? "border-slate-200 text-slate-400 bg-slate-50/50" : "border-zinc-800/80 text-zinc-500 bg-zinc-950/20"
+            isBlueprintDark
+              ? "border-[#1a2d54] text-slate-400 bg-[#070e1f]/50"
+              : isBlueprintLight
+              ? "border-slate-200 text-slate-400 bg-slate-50/50"
+              : "border-zinc-800/80 text-zinc-500 bg-zinc-950/20"
           )}>
             暂未配置监测目标
           </div>
@@ -622,7 +660,7 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
               let grade = "极速 (优)";
 
               if (!isOnline) {
-                baseColor = isBlueprint ? "bg-slate-300" : "bg-zinc-800";
+                baseColor = isBlueprintLight ? "bg-slate-300" : "bg-zinc-800";
                 latColor = "text-zinc-500";
                 grade = !node.is_online ? "节点离线" : "无响应";
               } else if (p.latency_ms >= 260) {
@@ -653,7 +691,7 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
               const segments = Array.from({ length: TOTAL_SEGMENTS }).map((_, sIdx) => {
                 if (!isOnline) {
                   return {
-                    color: isBlueprint ? "bg-slate-300" : "bg-zinc-800",
+                    color: isBlueprintLight ? "bg-slate-300" : "bg-zinc-800",
                     grade: !node.is_online ? "节点离线" : "无响应",
                   };
                 }
@@ -674,7 +712,9 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
                   key={p.target || idx}
                   className={cn(
                     "flex items-center justify-between gap-2 px-1.5 py-1 rounded-md text-xs transition-colors duration-150",
-                    isBlueprint
+                    isBlueprintDark
+                      ? "hover:bg-[#132247] text-slate-100"
+                      : isBlueprintLight
                       ? "hover:bg-slate-100/70 text-slate-800"
                       : isBtop
                       ? "hover:bg-[#121927] text-slate-200"
@@ -696,7 +736,7 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
                           : (p.color || (isOnline ? "#10b981" : "#71717a")),
                       }}
                     />
-                    <span className="truncate font-sans font-medium text-xs text-slate-800 dark:text-zinc-200" title={p.label}>
+                    <span className={cn("truncate font-sans font-medium text-xs", isBlueprintDark ? "text-slate-200" : isBlueprintLight ? "text-slate-800" : "text-slate-800 dark:text-zinc-200")} title={p.label}>
                       {p.label}
                     </span>
                   </div>
@@ -738,7 +778,7 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
                       ) : (
                         <span className={cn(
                           "text-[10px] font-mono font-medium opacity-80",
-                          isBlueprint ? "text-emerald-700" : "text-emerald-400"
+                          isBlueprintLight ? "text-emerald-700" : "text-emerald-400"
                         )}>
                           0%
                         </span>
@@ -758,7 +798,9 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
                 }}
                 className={cn(
                   "w-full py-1 text-center text-[11px] font-sans font-medium rounded-md transition-colors cursor-pointer mt-1",
-                  isBlueprint
+                  isBlueprintDark
+                    ? "text-cyan-400 hover:text-cyan-300 hover:bg-[#132247]"
+                    : isBlueprintLight
                     ? "text-indigo-600 hover:bg-indigo-50/80"
                     : "text-indigo-400 hover:text-indigo-300 hover:bg-white/[0.04]"
                 )}
@@ -780,7 +822,7 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
                 "px-2 py-0.5 rounded text-10 font-medium border transition-all",
                 isBtop
                   ? "bg-[#0b101c] border-[#1b253b] text-cyan-300 font-mono"
-                  : getTagStyle(tag, isBlueprint)
+                  : getTagStyle(tag, isBlueprintLight)
               )}
             >
               {isBtop ? `[ ${tag} ]` : tag}

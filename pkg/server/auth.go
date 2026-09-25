@@ -389,8 +389,14 @@ func extractSessionToken(c *gin.Context) string {
 	if cookie, err := c.Cookie(SessionCookieName); err == nil && cookie != "" {
 		return cookie
 	}
+	if cookie, err := c.Cookie("session_token"); err == nil && cookie != "" {
+		return cookie
+	}
 	if h := c.GetHeader("X-Probe-Session"); h != "" {
 		return h
+	}
+	if authHdr := c.GetHeader("Authorization"); strings.HasPrefix(authHdr, "Bearer ") {
+		return strings.TrimPrefix(authHdr, "Bearer ")
 	}
 	return ""
 }

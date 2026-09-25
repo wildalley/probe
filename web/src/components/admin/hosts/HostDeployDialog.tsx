@@ -20,7 +20,9 @@ export const HostDeployDialog: React.FC<HostDeployDialogProps> = ({
   onClose,
   onRegenerateToken,
 }) => {
-  const isBlueprint = theme === "blueprint";
+  const isDark = theme === "dark" || theme === "btop" || theme === "blueprint-dark";
+  const isLight = !isDark;
+  const isBlueprint = isLight;
 
   const [deployName, setDeployName] = useState("node-01");
   const [copiedId, setCopiedId] = useState<string | null>(null);

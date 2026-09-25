@@ -1,4 +1,6 @@
-export type ThemeMode = "dark" | "btop" | "blueprint";
+export type ThemeMode = "dark" | "btop" | "btop-light" | "blueprint" | "blueprint-dark";
+export type ThemePreset = "btop" | "blueprint";
+export type ColorMode = "light" | "dark" | "system";
 
 export interface PingStat {
   id?: number;
@@ -24,8 +26,12 @@ export interface BillingInfo {
   bandwidth_quota: number;
   /** 生效已用流量：校准基线 + 锚定后累计。缺省 0。 */
   bandwidth_used?: number;
+  bandwidth_used_up?: number;
+  bandwidth_used_down?: number;
   /** 服务端下发的实时网卡累计（bytes since boot），供校准 UI 展示。 */
   bandwidth_live?: number;
+  bandwidth_live_up?: number;
+  bandwidth_live_down?: number;
   provider: string;
   auto_renewal?: boolean;
   note?: string;
@@ -234,3 +240,28 @@ export interface NotificationLog {
   status: "success" | "failed";
   error_msg?: string;
 }
+
+export interface KomariTheme {
+  name: string;
+  short: string;
+  description: string;
+  version: string;
+  author: string;
+  url: string;
+  preview: string;
+  is_installed: boolean;
+  is_active: boolean;
+  download?: string;
+  sha256?: string;
+  configuration?: any;
+}
+
+export interface ThemesResponse {
+  active: string;
+  installed: KomariTheme[];
+}
+
+export interface ThemeMarketResponse {
+  themes: KomariTheme[];
+}
+

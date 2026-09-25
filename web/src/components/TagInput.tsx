@@ -27,7 +27,9 @@ const PRESET_TAGS = [
 ];
 
 export const TagInput: React.FC<TagInputProps> = ({ tags, onChange, theme = "dark" }) => {
-  const isBlueprint = theme === "blueprint";
+  const isDark = theme === "dark" || theme === "btop" || theme === "blueprint-dark";
+  const isLight = !isDark;
+  const isBlueprint = isLight;
   const [inputValue, setInputValue] = useState("");
 
   const addTag = (text: string) => {
@@ -133,29 +135,27 @@ export const TagInput: React.FC<TagInputProps> = ({ tags, onChange, theme = "dar
 
       {/* Preset recommendations */}
       <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-        <span className={`text-11 font-mono ${isBlueprint ? "text-slate-500 font-medium" : "text-zinc-400"}`}>
+        <span className={cn("text-xs font-medium", isBlueprint ? "text-slate-500" : "text-zinc-400")}>
           快捷推荐:
         </span>
         {PRESET_TAGS.map((preset) => {
           const isSelected = tags.includes(preset);
           return (
-            <Button
+            <button
               key={preset}
               type="button"
-              size="sm"
-              variant="ghost"
-              onPress={() => togglePreset(preset)}
+              onClick={() => togglePreset(preset)}
               className={cn(
-                "h-auto rounded-full border px-2 py-0.5 font-mono text-11 transition-all active:scale-95",
+                "h-auto rounded-md border px-2 py-0.5 font-sans text-xs font-medium transition-all active:scale-95 cursor-pointer",
                 isSelected
-                  ? "bg-indigo-600 border-indigo-500 text-white shadow-sm"
+                  ? "bg-indigo-600 border-indigo-600 text-white shadow-xs"
                   : isBlueprint
-                  ? "bg-slate-100/80 text-slate-700 border-slate-200 hover:bg-slate-200/80 hover:text-slate-900"
-                  : "bg-zinc-900 text-zinc-300 border-zinc-800 hover:bg-zinc-800 hover:text-zinc-100"
+                  ? "bg-slate-50 hover:bg-indigo-50 border-slate-200 hover:border-indigo-300 text-slate-600 hover:text-indigo-600"
+                  : "bg-zinc-900 hover:bg-zinc-800 border-zinc-800 hover:border-indigo-500/50 text-zinc-400 hover:text-indigo-300"
               )}
             >
               {isSelected ? `✓ ${preset}` : `+ ${preset}`}
-            </Button>
+            </button>
           );
         })}
       </div>

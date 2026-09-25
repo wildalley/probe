@@ -51,7 +51,9 @@ export const HostEditDialog: React.FC<HostEditDialogProps> = ({
   onClose,
   onSaved,
 }) => {
-  const isBlueprint = theme === "blueprint";
+  const isDark = theme === "dark" || theme === "btop" || theme === "blueprint-dark";
+  const isLight = !isDark;
+  const isBlueprint = isLight;
 
   const [draft, setDraft] = useState<NodeSettings>(() => toDraft(node));
   const [isSaving, setIsSaving] = useState(false);
@@ -162,7 +164,10 @@ export const HostEditDialog: React.FC<HostEditDialogProps> = ({
     }
   };
 
-  const labelCls = cn("block mb-1 font-medium", isBlueprint ? "text-slate-700" : "text-zinc-300");
+  const labelCls = cn(
+    "block mb-1 text-xs font-semibold tracking-tight font-sans",
+    isBlueprint ? "text-slate-700" : "text-zinc-300"
+  );
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-0 sm:p-4 lg:p-6 bg-black/75 backdrop-blur-sm animate-fade-in font-sans">
@@ -229,31 +234,46 @@ export const HostEditDialog: React.FC<HostEditDialogProps> = ({
           {/* Auto-identified region & provider */}
           <div
             className={cn(
-              "rounded-xl border p-3 flex flex-wrap items-center justify-between gap-3",
+              "rounded-xl border p-3 flex flex-wrap items-center justify-between gap-3 font-sans transition-colors",
               isBlueprint
-                ? "bg-indigo-50/50 border-indigo-200 text-slate-800"
-                : "bg-indigo-950/20 border-indigo-900/60 text-zinc-200"
+                ? "bg-slate-50/80 border-slate-200/90 text-slate-800"
+                : "bg-zinc-900/60 border-zinc-800 text-zinc-200"
             )}
           >
             <div className="flex flex-wrap items-center gap-3">
-              <div className="flex items-center gap-1.5 font-bold">
-                <Globe className="h-4 w-4 text-sky-500 shrink-0" />
-                <span className={isBlueprint ? "text-slate-700" : "text-zinc-300"}>归属地区:</span>
-                <Chip variant="soft" color="accent" size="sm" className="gap-1 font-bold">
+              <div className="flex items-center gap-1.5 text-xs font-semibold">
+                <Globe className="h-4 w-4 text-indigo-500 shrink-0" />
+                <span className={isBlueprint ? "text-slate-600" : "text-zinc-400"}>归属地区:</span>
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-semibold shadow-2xs",
+                    isBlueprint
+                      ? "bg-white border-slate-200 text-slate-800"
+                      : "bg-zinc-800 border-zinc-700 text-zinc-100"
+                  )}
+                >
                   <span className="text-sm leading-none">{getRegionFlag(draft.region || "")}</span>
                   <span className="leading-none">{draft.region || "自动识别中"}</span>
-                </Chip>
+                </span>
               </div>
 
-              <div className="flex items-center gap-1.5 font-bold">
-                <span className={isBlueprint ? "text-slate-700" : "text-zinc-300"}>服务商/线路:</span>
-                <Chip color="success" variant="soft" size="sm" className="font-bold">
+              <div className="flex items-center gap-1.5 text-xs font-semibold">
+                <span className={isBlueprint ? "text-slate-600" : "text-zinc-400"}>服务商/线路:</span>
+                <span
+                  className={cn(
+                    "inline-flex items-center px-2.5 py-1 rounded-lg border text-xs font-semibold shadow-2xs",
+                    isBlueprint
+                      ? "bg-white border-slate-200 text-slate-800"
+                      : "bg-zinc-800 border-zinc-700 text-zinc-100",
+                    !draft.provider && "italic text-slate-400 dark:text-zinc-500"
+                  )}
+                >
                   {draft.provider || "智能测定中..."}
-                </Chip>
+                </span>
               </div>
 
               {draft.public_ip && (
-                <span className={cn("text-11 font-mono", isBlueprint ? "text-slate-500" : "text-zinc-500")}>
+                <span className={cn("text-[11px] font-mono", isBlueprint ? "text-slate-500" : "text-zinc-500")}>
                   (出口 IP: {draft.public_ip})
                 </span>
               )}
@@ -266,10 +286,15 @@ export const HostEditDialog: React.FC<HostEditDialogProps> = ({
                 type="button"
                 onPress={handleAutoResolveGeo}
                 isDisabled={isResolvingGeo}
-                className="gap-1 font-medium"
+                className={cn(
+                  "gap-1 font-medium text-xs",
+                  isBlueprint
+                    ? "bg-white hover:bg-slate-100 border-slate-200 text-slate-700"
+                    : "bg-zinc-800 hover:bg-zinc-700 border-zinc-700 text-zinc-200"
+                )}
                 aria-label="根据该节点公网 IP 自动重新解析国家地区与网络线路"
               >
-                <Zap className={cn("h-3 w-3", isResolvingGeo && "animate-spin")} />
+                <Zap className={cn("h-3 w-3 text-indigo-500", isResolvingGeo && "animate-spin")} />
                 <span>{isResolvingGeo ? "识别中..." : "重新识别"}</span>
               </Button>
 
@@ -278,7 +303,7 @@ export const HostEditDialog: React.FC<HostEditDialogProps> = ({
                 size="sm"
                 type="button"
                 onPress={() => setShowManualOverride(!showManualOverride)}
-                className="text-10 text-slate-500 dark:text-zinc-400"
+                className="text-11 text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-200"
               >
                 {showManualOverride ? "收起手动覆盖" : "手动微调 ▾"}
               </Button>
@@ -520,12 +545,11 @@ export const HostEditDialog: React.FC<HostEditDialogProps> = ({
             取消
           </Button>
           <Button
-            variant="primary"
             size="sm"
             type="button"
             onPress={handleSave}
             isDisabled={isSaving}
-            className="font-medium"
+            className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs px-4 py-2 rounded-xl shadow-xs transition-colors cursor-pointer"
           >
             {isSaving ? "保存中..." : "保存主机设置"}
           </Button>

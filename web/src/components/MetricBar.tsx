@@ -19,8 +19,10 @@ export const MetricBar: React.FC<MetricBarProps> = ({
 }) => {
   const safeVal = Math.min(100, Math.max(0, isNaN(value) ? 0 : value));
   const colors = getSemanticColor(safeVal);
-  const isBlueprint = theme === "blueprint";
-  const isBtop = theme === "btop";
+  const isDark = theme === "dark" || theme === "btop" || theme === "blueprint-dark";
+  const isLight = !isDark;
+  const isBlueprint = isLight;
+  const isBtop = theme === "btop" || theme === "btop-light";
 
   const getBtopTextColor = (val: number) => {
     if (val >= 85) return "text-rose-400";

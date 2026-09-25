@@ -14,7 +14,9 @@ interface DatePickerProps {
 }
 
 export const DatePicker: React.FC<DatePickerProps> = ({ value, onChange, theme = "dark" }) => {
-  const isBlueprint = theme === "blueprint";
+  const isDark = theme === "dark" || theme === "btop" || theme === "blueprint-dark";
+  const isLight = !isDark;
+  const isBlueprint = isLight;
 
   // react-aria positions the popover against `triggerRef`, which it normally
   // supplies through GroupContext — i.e. only when a DateInputGroup renders the
@@ -65,7 +67,7 @@ export const DatePicker: React.FC<DatePickerProps> = ({ value, onChange, theme =
   };
 
   return (
-    <div className="space-y-2 font-mono">
+    <div className="space-y-2 font-sans">
       <div className="flex flex-wrap items-center gap-2">
         <HeroDatePicker
           value={dateValue}
@@ -188,8 +190,8 @@ export const DatePicker: React.FC<DatePickerProps> = ({ value, onChange, theme =
       </div>
 
       {/* Quick Presets */}
-      <div className="flex flex-wrap items-center gap-1.5">
-        <span className={`text-11 font-mono ${isBlueprint ? "text-slate-500 font-medium" : "text-zinc-400"}`}>
+      <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+        <span className={cn("text-xs font-medium", isBlueprint ? "text-slate-500" : "text-zinc-400")}>
           快捷设定:
         </span>
         {[
@@ -200,32 +202,33 @@ export const DatePicker: React.FC<DatePickerProps> = ({ value, onChange, theme =
           { label: "+2年", months: 24 },
           { label: "+3年", months: 36 },
         ].map((p) => (
-          <Button
+          <button
             key={p.label}
             type="button"
-            size="sm"
-            variant="secondary"
-            onPress={() => addPeriod(p.months)}
-            className="h-auto rounded-full px-2 py-0.5 font-mono text-11 active:scale-95"
+            onClick={() => addPeriod(p.months)}
+            className={cn(
+              "h-auto rounded-md border px-2 py-0.5 font-sans text-xs font-medium transition-all active:scale-95 cursor-pointer",
+              isBlueprint
+                ? "bg-slate-50 hover:bg-indigo-50 border-slate-200 hover:border-indigo-300 text-slate-600 hover:text-indigo-600"
+                : "bg-zinc-900 hover:bg-zinc-800 border-zinc-800 hover:border-indigo-500/50 text-zinc-400 hover:text-indigo-300"
+            )}
           >
             {p.label}
-          </Button>
+          </button>
         ))}
         {value && (
-          <Button
+          <button
             type="button"
-            size="sm"
-            variant="secondary"
-            onPress={() => onChange("")}
+            onClick={() => onChange("")}
             className={cn(
-              "h-auto rounded-full px-2 py-0.5 font-mono text-11 active:scale-95",
+              "h-auto rounded-md border px-2 py-0.5 font-sans text-xs font-medium transition-all active:scale-95 cursor-pointer",
               isBlueprint
-                ? "text-rose-600 hover:bg-rose-50"
-                : "text-rose-400 hover:bg-rose-950/50"
+                ? "bg-slate-50 hover:bg-rose-50 border-slate-200 hover:border-rose-200 text-rose-600"
+                : "bg-zinc-900 hover:bg-rose-950/40 border-zinc-800 hover:border-rose-800/50 text-rose-400"
             )}
           >
             清空/设为永久
-          </Button>
+          </button>
         )}
       </div>
     </div>

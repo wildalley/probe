@@ -18,7 +18,9 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
   onSubmit,
   theme,
 }) => {
-  const isBlueprint = theme === "blueprint";
+  const isDark = theme === "dark" || theme === "btop" || theme === "blueprint-dark";
+  const isLight = !isDark;
+  const isBlueprint = isLight;
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
