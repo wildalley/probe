@@ -8,17 +8,33 @@ services:
         # always agree. Export PROBE_VERSION=1.2.3 before `docker compose build`
         # on a release; the default marks an unstamped local build.
         VERSION: "${PROBE_VERSION:-dev}"
+
+        # Go module proxy used during the image build. Mainland-China friendly
+        # defaults; override from the host env for direct access, e.g.
+        #   GOPROXY=https://proxy.golang.org,direct GOSUMDB=sum.golang.org \
+        #   docker compose build
+        GOPROXY: "${GOPROXY:-https://goproxy.cn,direct}"
+        GOSUMDB: "${GOSUMDB:-sum.golang.google.cn}"
     image: cyber-probe-server:latest
     container_name: probe-server
     restart: unless-stopped
 
     ports:
-      # Host:container. Bind to 127.0.0.1 instead if a reverse proxy fronts this
-      # (recommended in production, so TLS terminates at the proxy and the
-      # session cookie gets its Secure attribute).
-      - "8080:8080"
+      # Host:container. Both sides follow PROBE_PORT (default 8080) together
+      # with the listen address and healthcheck below. Bind to 127.0.0.1
+      # instead if a reverse proxy fronts this (recommended in production, so
+      # TLS terminates at the proxy and the session cookie gets its Secure
+      # attribute):
+      #   127.0.0.1:${PROBE_PORT:-8080}:${PROBE_PORT:-8080}
+      - "${PROBE_PORT:-8080}:${PROBE_PORT:-8080}"
 
     environment:
+      # Container listen address. Defaults to the same PROBE_PORT that drives
+      # the ports mapping and the healthcheck, so one variable moves all three;
+      # overriding PROBE_SERVER_ADDR directly requires adjusting the ports
+      # mapping to match.
+      PROBE_SERVER_ADDR: ":${PROBE_PORT:-8080}"
+
       # Admin account, created on first boot only. Set a real password in .env —
       # leaving it unset makes the server generate one and print it once to the
       # container log, which then needs `docker compose logs` to recover.
@@ -56,7 +72,7 @@ services:
       - probe-themes:/app/themes
 
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/api/v1/auth/status"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:${PROBE_PORT:-8080}/api/v1/auth/status >/dev/null 2>&1 || exit 1"]
       interval: 30s
       timeout: 5s
       start_period: 10s

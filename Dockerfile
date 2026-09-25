@@ -25,6 +25,14 @@ FROM golang:1.27.1-alpine AS server
 
 WORKDIR /build
 
+# Go module downloads default to the goproxy.cn mirror, which is dramatically
+# faster from mainland China networks. ARG (not ENV) keeps them build-time only
+# and overridable per build, e.g.:
+#   docker compose build --build-arg GOPROXY=https://proxy.golang.org,direct \
+#                         --build-arg GOSUMDB=sum.golang.org
+ARG GOPROXY=https://goproxy.cn,direct
+ARG GOSUMDB=sum.golang.google.cn
+
 COPY go.mod go.sum ./
 RUN go mod download
 
