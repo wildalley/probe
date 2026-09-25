@@ -40,6 +40,7 @@
   - 原生内置主题管理器，完全兼容 Komari 主题生态；
   - 支持在管理后台一键拉取并安装官方市场主题，亦可上传第三方 ZIP 主题包；
   - 主题安装目录默认为工作目录下的 `themes/`，可用 `PROBE_THEMES_DIR` 指向可写路径（如挂载卷 `/data/themes`）；Docker 镜像已预置属主正确的 `/app/themes` 并由 compose 挂 named volume 持久化，镜像升级不再丢已装主题；
+  - **国内网络友好**：市场索引默认走 raw.githubusercontent.com，取不到时自动回退 jsDelivr 镜像；可用 `PROBE_THEME_MARKET_URL` 指向自建/CDN 市场源，`PROBE_THEME_ASSET_MIRROR` 可为 GitHub 主题包下载配置加速前缀或 `{url}` 模板（自带 SHA256 的主题包下载后仍会校验完整性）；
   - 独立管理后台页面（`/admin`），主题切换与管理操作彻底解耦。
 - **现代前端技术栈与移动端深度适配**：基于 React 19、Tailwind CSS 4 与 HeroUI 构建。重构了移动端全屏响应式体验：导航顶栏自适应紧凑折叠与抽屉菜单彻底杜绝内容遮挡，地区支持横向平滑滚动筛选；管理后台全面采用移动端全屏抽屉排版防溢出，详情页主机切换下拉采用居中防越界浮层与毛玻璃遮罩。
 - **uPlot 毫秒级时序图**：体积仅 30KB，微秒级渲染上万点数据；全功能 **Hover 垂直标尺 + 毛玻璃浮动指示气泡**，实时展示精确时间与数值。
@@ -347,6 +348,8 @@ PROBE_TRUSTED_PROXIES="127.0.0.1,10.0.0.0/8"
 | `PROBE_DB_PATH` | `-db` | `probe.db` | SQLite 数据文件路径 |
 | `PROBE_PUBLIC_VIEW` | `-public` | `false` | 置为 `true` 等同于加 `-public`，开放匿名只读看板 |
 | `PROBE_THEMES_DIR` | — | 工作目录下 `themes` | 主题（插件包）安装目录；工作目录只读或权限受限（如非特权容器）时指向可写路径 |
+| `PROBE_THEME_MARKET_URL` | — | 上游市场（失败自动回退 jsDelivr） | 主题市场索引 `v1.json` 的自定义地址；设置后不再使用内置镜像回退 |
+| `PROBE_THEME_ASSET_MIRROR` | — | 不重写 | GitHub 主题包下载加速：前缀式（`https://gh-proxy.com/`）或含 `{url}` 的模板；只重写 github.com / githubusercontent.com 链接，带 SHA256 的包下载后仍校验完整性 |
 
 Agent 端可用环境变量（同样可用对应参数覆盖）：
 
