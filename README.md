@@ -43,6 +43,10 @@
   - **国内网络友好**：市场索引默认走 raw.githubusercontent.com，取不到时自动回退 jsDelivr 镜像；可用 `PROBE_THEME_MARKET_URL` 指向自建/CDN 市场源，`PROBE_THEME_ASSET_MIRROR` 可为 GitHub 主题包下载配置加速前缀或 `{url}` 模板（自带 SHA256 的主题包下载后仍会校验完整性）；
   - **指标与图标兼容**：实现 Komari 的 `public:queryMetrics` / `public:getPingMetricStats` RPC 与 `/api/recent/{uuid}` 历史接口（延迟/丢包图表与实例监控页依赖它们），OS 图标与地区旗帜在内置解析器找不到时回退到程序内嵌的通用图标，任何 Komari 主题都不会出现破图；
   - 独立管理后台页面（`/admin`），主题切换与管理操作彻底解耦。
+  - **Komari 兼容接口一览**（对主题开发者）：
+    - JSON-RPC 2.0（`/api/rpc2`，HTTP POST 与 WebSocket 双通道）：`common:getNodes`、`common:getNodesLatestStatus`、`common:getNodeRecentStatus`、`common:getRecords`、`common:getPublicInfo`、`common:getVersion`，以及指标类 `public:queryMetrics`（`ping.latency_ms` / `ping.loss` / `cpu.usage` / `memory.used` / `net.in.rate` / `net.out.rate` / `load.load1` 等，ping 序列按 `tags.task_id` 分组）、`public:getPingMetricStats`（每任务 loss/min/max/avg/latest/p50/p99/p99_p50_ratio）、`public:getPublicPingTasks`；
+    - REST 与 WebSocket：`/api/nodes`、`/api/recent/{uuid}`（最近 150 个状态点，记录形状与实时 WS 一致）、`/api/records/load`、`/api/records/ping`、`/api/task/ping`、`/api/public`、实时流 `/api/clients`（WS）；
+    - 静态资源：`/assets/flags/*`、`/assets/flags-4x3/*`、`/assets/logo/*`（OS 图标支持未哈希文件名解析与多主题目录回退，找不到时返回内嵌通用图标而非 404）。
 - **现代前端技术栈与移动端深度适配**：基于 React 19、Tailwind CSS 4 与 HeroUI 构建。重构了移动端全屏响应式体验：导航顶栏自适应紧凑折叠与抽屉菜单彻底杜绝内容遮挡，地区支持横向平滑滚动筛选；管理后台全面采用移动端全屏抽屉排版防溢出，详情页主机切换下拉采用居中防越界浮层与毛玻璃遮罩。
 - **uPlot 毫秒级时序图**：体积仅 30KB，微秒级渲染上万点数据；全功能 **Hover 垂直标尺 + 毛玻璃浮动指示气泡**，实时展示精确时间与数值。
 - **主机卡片双段胶囊网络监测条**：双段 40 槽位对称胶囊条设计，左半段对齐呈现目标名称与实时延迟（如 44ms），右半段呈现丢包率百分比（如 0%）；下半部分对称排列 20+20 个圆角状态胶囊条。平稳状态呈沉稳深绿（`#268462`），轻度升高波动呈现高亮鲜蓝（`#316aea`）；Hover 悬浮精准弹出带小尖角指针的 Tooltip 浮层气泡（显示 `HH:mm · X ms`），同行其余胶囊条自动半透明淡化聚焦，内置边界智能约束防止卡片边缘裁剪。
