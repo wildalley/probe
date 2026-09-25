@@ -1,6 +1,7 @@
 package server
 
 import (
+	_ "embed"
 	"log"
 	"net/http"
 	"os"
@@ -9,6 +10,19 @@ import (
 	"sync"
 
 	"github.com/gin-gonic/gin"
+)
+
+// Built-in neutral fallbacks served when no installed theme carries the
+// requested asset. Third-party themes reference these icons through unhashed
+// /assets/logo/... URLs and depend on other installed themes to supply them —
+// a deployment without e.g. ServerStatus would otherwise render broken images
+// for every OS icon the active theme does not bundle itself.
+var (
+	//go:embed assets_fallback/generic-os.svg
+	genericOSIcon []byte
+
+	//go:embed assets_fallback/generic-flag.svg
+	genericFlagAsset []byte
 )
 
 var (
@@ -125,7 +139,11 @@ func (s *Server) handleFlagAsset(tm *ThemeManager) gin.HandlerFunc {
 			}
 		}
 
-		c.Status(http.StatusNotFound)
+		// Nothing on disk: serve the built-in neutral flag rather than a 404
+		// that turns into a broken image in the theme.
+		c.Header("Cache-Control", "public, max-age=86400")
+		c.Header("Content-Type", "image/svg+xml")
+		_, _ = c.Writer.Write(genericFlagAsset)
 	}
 }
 
@@ -239,7 +257,9 @@ func (s *Server) handleLogoAsset(tm *ThemeManager) gin.HandlerFunc {
 			}
 		}
 
-		log.Printf("[AssetsResolver] Logo not found: %s", raw)
-		c.Status(http.StatusNotFound)
+		log.Printf("[AssetsResolver] Logo not found in any installed theme: %s — serving built-in generic icon", raw)
+		c.Header("Cache-Control", "public, max-age=86400")
+		c.Header("Content-Type", "image/svg+xml")
+		_, _ = c.Writer.Write(genericOSIcon)
 	}
 }
