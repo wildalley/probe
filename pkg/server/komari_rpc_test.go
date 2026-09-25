@@ -405,3 +405,115 @@ func TestKomariRecentEndpoint(t *testing.T) {
 		t.Fatalf("ram = %v", ram)
 	}
 }
+
+// TestKomariGetRecordsPing covers common:getRecords type=ping, the endpoint
+// themes like leonetlab poll for every client's ping history at once. Rows
+// must carry the real task id — a hardcoded id merged all targets into one
+// zig-zag series — and unknown targets are dropped rather than misattributed.
+func TestKomariGetRecordsPing(t *testing.T) {
+	srv, cleanup := setupTestServerForRPC(t)
+	defer cleanup()
+
+	target := &model.PingTargetConfig{Label: "Google", Target: "8.8.8.8", Protocol: "tcp", Interval: 60, Enabled: true}
+	if err := srv.storage.AddPingTarget(target); err != nil {
+		t.Fatal(err)
+	}
+
+	now := time.Now().Unix()
+	if err := srv.storage.InsertPingBatch([]*model.PingHistoryPoint{
+		{NodeID: "test-node-1", Timestamp: now - 60, Target: "8.8.8.8", Label: "Google", LatencyMs: 12, PacketLoss: 0},
+		{NodeID: "test-node-1", Timestamp: now - 30, Target: "9.9.9.9", Label: "Unconfigured", LatencyMs: 99, PacketLoss: 0},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	res, rpcErr := srv.executeRPCMethod("common:getRecords", map[string]interface{}{
+		"type": "ping", "hours": 1, "maxCount": 4000,
+	})
+	if rpcErr != nil {
+		t.Fatalf("rpc error: %v", rpcErr)
+	}
+	payload := res.(gin.H)
+	rows, ok := payload["records"].([]komariPingRecordRow)
+	if !ok || len(rows) != 1 {
+		t.Fatalf("expected exactly 1 attributed record, got %+v", payload["records"])
+	}
+	r := rows[0]
+	if r.Client != "test-node-1" || r.TaskID != target.ID || r.Value != 12 {
+		t.Fatalf("record = %+v", r)
+	}
+	if _, err := time.Parse(time.RFC3339, r.Time); err != nil {
+		t.Fatalf("time %q not RFC3339: %v", r.Time, err)
+	}
+	if _, ok := payload["tasks"].([]KomariPingTask); !ok {
+		t.Fatalf("tasks missing from response: %+v", payload)
+	}
+
+	// A uuid filter restricts the rows to that client.
+	res, _ = srv.executeRPCMethod("common:getRecords", map[string]interface{}{
+		"type": "ping", "hours": 1, "uuid": "other-node",
+	})
+	if rows := res.(gin.H)["records"].([]komariPingRecordRow); len(rows) != 0 {
+		t.Fatalf("uuid filter leaked rows: %+v", rows)
+	}
+}
+
+// TestKomariRecordsPingRESTTaskID pins the REST /api/records/ping task ids:
+// every row must resolve through the configured tasks, never a constant.
+func TestKomariRecordsPingRESTTaskID(t *testing.T) {
+	srv, cleanup := setupTestServerForRPC(t)
+	defer cleanup()
+
+	target := &model.PingTargetConfig{Label: "Cloudflare", Target: "1.1.1.1", Protocol: "icmp", Interval: 60, Enabled: true}
+	if err := srv.storage.AddPingTarget(target); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().Unix()
+	if err := srv.storage.InsertPingBatch([]*model.PingHistoryPoint{
+		{NodeID: "test-node-1", Timestamp: now - 30, Target: "1.1.1.1", Label: "Cloudflare", LatencyMs: 8, PacketLoss: 0},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/records/ping?uuid=test-node-1&hours=1", nil)
+	rec := httptest.NewRecorder()
+	srv.router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	var body struct {
+		Data struct {
+			Records []struct {
+				TaskID int64   `json:"task_id"`
+				Value  float64 `json:"value"`
+			} `json:"records"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if len(body.Data.Records) != 1 || body.Data.Records[0].TaskID != target.ID || body.Data.Records[0].Value != 8 {
+		t.Fatalf("records = %+v", body.Data.Records)
+	}
+}
+
+// TestKomariLatestStatusTimeIsRFC3339 pins the time format of
+// common:getNodesLatestStatus: an epoch-seconds number read as milliseconds
+// rendered every node's 最后上报 as a January 1970 date.
+func TestKomariLatestStatusTimeIsRFC3339(t *testing.T) {
+	srv, cleanup := setupTestServerForRPC(t)
+	defer cleanup()
+
+	res, rpcErr := srv.executeRPCMethod("common:getNodesLatestStatus", nil)
+	if rpcErr != nil {
+		t.Fatalf("rpc error: %v", rpcErr)
+	}
+	statusMap := res.(map[string]KomariRpcNodeStatus)
+	st, ok := statusMap["test-node-1"]
+	if !ok {
+		t.Fatalf("node missing: %+v", statusMap)
+	}
+	if _, err := time.Parse(time.RFC3339, st.Time); err != nil {
+		t.Fatalf("time %q not RFC3339: %v", st.Time, err)
+	}
+}

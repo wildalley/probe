@@ -252,7 +252,9 @@ type KomariRpcNodeStatus struct {
 	ConnectionsUDP int     `json:"connections_udp"`
 	Uptime         uint64  `json:"uptime"`
 	Process        int     `json:"process"`
-	Time           int64   `json:"time"`
+	// Time is RFC3339: themes construct Date objects from it directly, and an
+	// epoch-seconds number read as milliseconds lands in January 1970.
+	Time           string  `json:"time"`
 }
 
 // KomariPingTask represents a ping monitoring task in Komari format.

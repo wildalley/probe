@@ -454,6 +454,11 @@ func (s *Server) handleKomariRecordsPing(c *gin.Context) {
 		return
 	}
 
+	// Rows carry the target label, not the task id; themes chart one series
+	// per task_id, so hardcoding 1 here interleaved every target into a single
+	// zig-zag line. Resolve each row through the configured tasks instead.
+	lookup := s.komariPingTaskLookup()
+
 	type KomariPingRecord struct {
 		TaskID int64   `json:"task_id"`
 		Time   string  `json:"time"`
@@ -464,8 +469,12 @@ func (s *Server) handleKomariRecordsPing(c *gin.Context) {
 
 	records := make([]KomariPingRecord, 0, len(history))
 	for _, p := range history {
+		task, ok := lookup.resolve(p)
+		if !ok {
+			continue
+		}
 		records = append(records, KomariPingRecord{
-			TaskID: 1,
+			TaskID: task.ID,
 			Time:   time.Unix(p.Timestamp, 0).UTC().Format(time.RFC3339),
 			Value:  p.LatencyMs,
 			Loss:   p.PacketLoss,
@@ -842,10 +851,7 @@ func (s *Server) getKomariRecords(params interface{}) interface{} {
 	}
 
 	if recType == "ping" {
-		return gin.H{
-			"records": []interface{}{},
-			"tasks":   s.getKomariRPCPingTasks(),
-		}
+		return s.getKomariPingRecords(params)
 	}
 
 	if uuid != "" {
@@ -875,7 +881,7 @@ func (s *Server) getKomariRPCNodesLatestStatus() map[string]KomariRpcNodeStatus 
 			Disk:         n.System.DiskUsed,
 			NetTotalUp:   n.Network.BytesSent,
 			NetTotalDown: n.Network.BytesRecv,
-			Time:         n.LastSeen,
+			Time:         time.Unix(n.LastSeen, 0).UTC().Format(time.RFC3339),
 		}
 		if n.IsOnline {
 			st.CPU = n.CPU
@@ -1505,4 +1511,78 @@ func (s *Server) handleKomariRecent(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "", "data": records})
+}
+
+// komariPingRecordRow is one legacy ping sample in the Komari record shape.
+type komariPingRecordRow struct {
+	Client string  `json:"client"`
+	TaskID int64   `json:"task_id"`
+	Time   string  `json:"time"`
+	Value  float64 `json:"value"`
+	Loss   float64 `json:"loss,omitempty"`
+}
+
+// getKomariPingRecords serves common:getRecords type=ping. Themes such as
+// leonetlab poll this without a uuid to chart every client at once, grouping
+// the rows by client and task_id — an empty records list renders as an empty
+// 网络质量 panel with "-" everywhere.
+func (s *Server) getKomariPingRecords(params interface{}) interface{} {
+	hours := 1
+	maxCount := 4000
+	var uuid string
+	if raw, err := json.Marshal(params); err == nil {
+		var p struct {
+			Hours    int    `json:"hours"`
+			MaxCount int    `json:"maxCount"`
+			UUID     string `json:"uuid"`
+		}
+		if err := json.Unmarshal(raw, &p); err == nil {
+			if p.Hours > 0 {
+				hours = p.Hours
+			}
+			if p.MaxCount > 0 {
+				maxCount = p.MaxCount
+			}
+			uuid = p.UUID
+		}
+	}
+	if hours > 720 {
+		hours = 720
+	}
+	if maxCount > 50000 {
+		maxCount = 50000
+	}
+
+	end := time.Now().Unix()
+	start := end - int64(hours*3600)
+
+	history, err := s.storage.GetPingHistoryRange(start, end, maxCount)
+	records := make([]komariPingRecordRow, 0, len(history))
+	if err == nil {
+		lookup := s.komariPingTaskLookup()
+		for _, pt := range history {
+			if uuid != "" && pt.NodeID != uuid {
+				continue
+			}
+			task, ok := lookup.resolve(pt)
+			if !ok {
+				// The row's target is not a configured task; without an id the
+				// theme cannot attribute it, so it is dropped rather than
+				// merged into a bogus task 1.
+				continue
+			}
+			records = append(records, komariPingRecordRow{
+				Client: pt.NodeID,
+				TaskID: task.ID,
+				Time:   time.Unix(pt.Timestamp, 0).UTC().Format(time.RFC3339),
+				Value:  pt.LatencyMs,
+				Loss:   pt.PacketLoss,
+			})
+		}
+	}
+
+	return gin.H{
+		"records": records,
+		"tasks":   s.getKomariRPCPingTasks(),
+	}
 }

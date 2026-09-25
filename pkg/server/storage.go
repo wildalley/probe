@@ -620,6 +620,41 @@ func (s *Storage) GetPingHistory(nodeID string, start, end int64) ([]*model.Ping
 	return points, nil
 }
 
+// GetPingHistoryRange retrieves recent ping points across ALL nodes in the
+// window, newest first and capped at limit — the shape the Komari
+// common:getRecords ping query expects (it pulls every client at once).
+func (s *Storage) GetPingHistoryRange(start, end int64, limit int) ([]*model.PingHistoryPoint, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if limit <= 0 {
+		limit = 4000
+	}
+	rows, err := s.db.Query(`
+		SELECT node_id, timestamp, target, label, latency_ms, packet_loss
+		FROM ping_points
+		WHERE timestamp >= ? AND timestamp <= ?
+		ORDER BY timestamp DESC
+		LIMIT ?`, start, end, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var points []*model.PingHistoryPoint
+	for rows.Next() {
+		p := &model.PingHistoryPoint{}
+		if err := rows.Scan(&p.NodeID, &p.Timestamp, &p.Target, &p.Label, &p.LatencyMs, &p.PacketLoss); err == nil {
+			points = append(points, p)
+		}
+	}
+	// Caller-friendly chronological order.
+	for i, j := 0, len(points)-1; i < j; i, j = i+1, j-1 {
+		points[i], points[j] = points[j], points[i]
+	}
+	return points, nil
+}
+
 // PruneOldHistory deletes historical records older than given timestamp to prevent database bloat.
 func (s *Storage) PruneOldHistory(beforeTimestamp int64) (int64, error) {
 	s.mu.Lock()
