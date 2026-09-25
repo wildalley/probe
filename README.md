@@ -350,6 +350,7 @@ PROBE_TRUSTED_PROXIES="127.0.0.1,10.0.0.0/8"
 | `PROBE_TRUSTED_PROXIES` | — | 不信任任何代理 | 反向代理的地址或网段，多个用逗号分隔。只有列入的来源才允许通过 `X-Forwarded-For` 覆盖客户端 IP |
 | `PROBE_ALLOW_PRIVATE_TARGETS` | — | `false` | 置为 `1` 后允许延迟探测目标与 Webhook 指向内网地址；内网探测还需在对应 Agent 上设置 |
 | `PROBE_SERVER_ADDR` | `-addr` | `:8080` | 监听地址与端口 |
+| `PROBE_PORT` | — | — | 仅端口的简写（纯数字或 `:端口`），等价 `-addr :端口`；`PROBE_SERVER_ADDR` 未设置时生效。Docker 部署用它可以同时改端口与健康检查 |
 | `PROBE_DB_PATH` | `-db` | `probe.db` | SQLite 数据文件路径 |
 | `PROBE_PUBLIC_VIEW` | `-public` | `false` | 置为 `true` 等同于加 `-public`，开放匿名只读看板 |
 | `PROBE_THEMES_DIR` | — | 工作目录下 `themes` | 主题（插件包）安装目录；工作目录只读或权限受限（如非特权容器）时指向可写路径 |
