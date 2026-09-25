@@ -4,11 +4,12 @@
   <img src="https://img.shields.io/badge/Agent%20RAM-5~10MB-emerald?style=flat-square&logo=go" alt="Agent RAM" />
   <img src="https://img.shields.io/badge/Agent%20CPU-~0%25-blue?style=flat-square&logo=linux" alt="Agent CPU" />
   <img src="https://img.shields.io/badge/UI%20Engine-uPlot%20%2B%20React%2019-violet?style=flat-square&logo=react" alt="Frontend" />
-  <img src="https://img.shields.io/badge/Themes-Cyber%20Dark%20%7C%20Blueprint-indigo?style=flat-square" alt="Themes" />
+  <img src="https://img.shields.io/badge/Native%20Theme-btop%2B%2B%20Terminal-cyan?style=flat-square&logo=linux" alt="btop++" />
+  <img src="https://img.shields.io/badge/Theme%20Market-Komari%20Compatible-emerald?style=flat-square" alt="Komari Themes" />
   <img src="https://img.shields.io/badge/License-MIT-gray?style=flat-square" alt="License" />
 </p>
 
-> **全端深度响应式适配 · 极简轻量 Agent · 纯内存事件分发 Hub · 双主题赛博/蓝图看板 · 财务汇率与网络质量图表**  
+> **原生 btop++ 极客终端全屏架构 · 兼容 Komari 主题市场生态 · 极简轻量 Agent · 纯内存事件分发 Hub · 财务汇率与网络质量图表**  
 > 一款专为极客、运维与 VPS 玩家打造的高性能、低开销自研服务器探针系统。
 
 ---
@@ -30,8 +31,16 @@
 - **单二进制全内置**：Web 前端基于 `//go:embed` 完整编译进单一二进制，无须额外安装 Nginx 或配置反向代理即可直接运行。
 
 ### 3. 极客视觉与交互系统 (Web Dashboard)
+- **原生 btop++ 4 视窗终端拟真布局（官方默认）**：
+  - 深度还原 Linux 顶级终端监控工具 btop++ 视觉范式，纯直角硬朗形态、全等宽字体、盲文点阵（`⡇⡎⡍⣹⣽⣻⣷⣾⣿`）波形图谱与 18 格/10 格分段霓虹量表；
+  - `[1] hosts`（集群多节点聚合列表）、`[2] monitor`（拟真单机 4 象限监控）、`[3] details`（全屏深度诊断）三重视图自由穿梭；
+  - 双色终端外观：🌙 **暗色终端（btop++ Dark）** 与 ☀️ **浅色终端（btop++ Light）** 即时切换；
+  - 提供独立通用插件包，全兼容 **Komari 监控** 与 **Cyber Probe** 系统。开源仓库：[wildalley/komari-theme-btop](https://github.com/wildalley/komari-theme-btop)。
+- **全生态主题扩展（Komari Theme Market）**：
+  - 原生内置主题管理器，完全兼容 Komari 主题生态；
+  - 支持在管理后台一键拉取并安装官方市场主题，亦可上传第三方 ZIP 主题包；
+  - 独立管理后台页面（`/admin`），主题切换与管理操作彻底解耦。
 - **现代前端技术栈与移动端深度适配**：基于 React 19、Tailwind CSS 4 与 HeroUI 构建。重构了移动端全屏响应式体验：导航顶栏自适应紧凑折叠与抽屉菜单彻底杜绝内容遮挡，地区支持横向平滑滚动筛选；管理后台全面采用移动端全屏抽屉排版防溢出，详情页主机切换下拉采用居中防越界浮层与毛玻璃遮罩。
-- **双主题支持**：**赛博暗黑（Cyber Dark）** 与 **蓝图工程（Geek Blueprint）**，全面优化强对比度与视觉层次，一键平滑切换。
 - **uPlot 毫秒级时序图**：体积仅 30KB，微秒级渲染上万点数据；全功能 **Hover 垂直标尺 + 毛玻璃浮动指示气泡**，实时展示精确时间与数值。
 - **主机卡片双段胶囊网络监测条**：双段 40 槽位对称胶囊条设计，左半段对齐呈现目标名称与实时延迟（如 44ms），右半段呈现丢包率百分比（如 0%）；下半部分对称排列 20+20 个圆角状态胶囊条。平稳状态呈沉稳深绿（`#268462`），轻度升高波动呈现高亮鲜蓝（`#316aea`）；Hover 悬浮精准弹出带小尖角指针的 Tooltip 浮层气泡（显示 `HH:mm · X ms`），同行其余胶囊条自动半透明淡化聚焦，内置边界智能约束防止卡片边缘裁剪。
 - **网络质量监测系统 (Network Probes)**：支持 ICMP / TCP / HTTP 探测（Google、电信、联通、移动、YouTube、ChatGPT、Claude 等），按目标展示实时延迟与丢包分布。
@@ -59,6 +68,34 @@
 ---
 
 ## 📝 开发记录与后续计划
+
+### 2026-09-25 · btop++ 原生默认化、主题中心升级、界面规范统一与独立开源包发布
+
+- **btop++ 视觉体系收敛与作用域隔离**：
+  - 全面清理冗余的旧版 Blueprint 视图与深层外链跳转，确立 `btop++` 为 Probe 原生唯一官方默认看板；
+  - 将终端等宽字体与 2px 尖角规则严格限定在 `.btop-terminal` 仪表盘作用域内，**彻底杜绝全局样式对管理后台和弹窗表单的污染**。
+- **现代化后台管理面板与色彩体系规范（Slate + Indigo）**：
+  - 移除全局下拉浮层脏紫覆盖，恢复统一高质感的现代浮层（亮色模式下纯白 `#ffffff` + 浅 Slate 边框 + Indigo 选中反馈；暗色模式下沉浸 `#18181b`）；
+  - **主机配置弹窗全面重构**：统一归属地与线路卡片为中性 Slate/白底胶囊，表单标签统一恢复无衬线字体，到期时间与特性标签快捷预设统一样式，主保存按钮对齐全局 Indigo 主色；
+  - **修复 Select 下拉符号碰撞 Bug**：修正单位下拉选择器触发按钮尺寸与内边距，并在全局 CSS 强制预留 `padding-right: 1.85rem` 安全避让间距与垂直居中，消除下拉项的粗蓝焦点边框；
+  - **修复主题卡片角标显示缺陷**：修复「探针主题与扩展中心」选中原生主题时右上角对勾指示器被预览框遮挡只剩残缺小圆弧的问题，升级为标准浮动角标（`-top-2.5 -right-2.5` + `z-20` + `ring-2 ring-white shadow-md`）。
+- **独立主题仓库与 Komari 市场互通**：
+  - 开源独立主题项目 [wildalley/komari-theme-btop](https://github.com/wildalley/komari-theme-btop)，发布 `v1.0.0` 规范发行包并推送最新样式补丁；
+  - 成功向 upstream `komari-monitor/theme-market` 提交主题中心上架申请（PR #114）；
+  - Probe 管理后台支持一键安装本地插件包与官方市场动态拉取。
+- **管理后台解耦**：管理后台独立为沉浸式全屏抽屉与独立配置路由，避免在非原生主题下进入后台返回旧列表页。
+
+### 2026-09-24 · btop++ 完整极客终端主题重构
+
+- **全新终端主题支持**：前端引入 `ThemeMode = "dark" | "btop" | "blueprint"` 三主题架构，主题状态跨会话持久化存储，支持登录页与看板内随时即时切换。
+- **登录控制台拟真化 (`LoginScreen`)**：
+  - 新增免登录右上角即时主题切换器，未登录访客也能无缝体验三套主题。
+  - `btop++` 模式重塑为 CRT 拟物终端窗口（终端三色点控制、`[ USERNAME ] ❯` / `[ PASSWORD ] ❯` 命令行提示符、荧光高亮按钮 `[ ↵ EXECUTE LOGIN (ENTER) ]` 与状态行）。
+- **界面架构与视觉范式深度改造**：
+  - **排版与形态**：全局强制注入等宽字体（`font-mono`），卡片与弹窗采用纯直角硬朗形态（`rounded-none`），全面引入 Unicode 字符画窗口框（`┌─ ... ─┐`、`└─ ... ─┘`）。
+  - **离散分段式霓虹量表**：彻底替换现代平滑进度条为 18 格与 10 格分段式霓虹发光仪表条（青蓝 $\rightarrow$ 翠绿 $\rightarrow$ 橙黄 $\rightarrow$ 霓虹粉红）。
+  - **实时火花线**：上行与下行网速集成 6 阶动态微型 ASCII/Unicode 柱状图（` ▂▃▄▅▆▇█`）。
+  - **终端方括号风格**：主机标签、地区筛选芯片（`[ ALL ]`、`[ HK ]`）、详情页统计面板与弹窗全面 terminal-bracket 字符化。
 
 ### 2026-09-18 · 首页主机卡片监测目标全新重构
 
@@ -143,7 +180,7 @@
   ┌────────────────────────────────────────────────────────┐
   │    Web Dashboard (React 19 + Tailwind 4 + HeroUI)     │
   │                                                        │
-  │  • 赛博暗黑 / 蓝图工程双主题，高对比度与网格微光纹理       │
+  │  • 赛博暗黑 / btop++ 终端 / 蓝图工程三套主题，即时平滑切换 │
   │  • uPlot 极速时序图 (带垂直光标指示与毛玻璃 Hover Tooltip)│
   │  • 网站延迟丢包质量监测 (Google / Cloudflare / 电信等)  │
   │  • 财务汇率月度总览、剩余价值折算、流量配额进度计算       │

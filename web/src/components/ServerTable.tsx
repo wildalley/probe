@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { motion } from "framer-motion";
 import { ArrowDown, ArrowUp, Activity, Clock, Server, Star } from "lucide-react";
-import { NodeState } from "../types";
+import { NodeState, ThemeMode } from "../types";
 import { formatBytes, splitRate, getSemanticColor } from "../utils/format";
 import { getRegionFlag } from "../utils/flags";
 import { agentVersionOf } from "../utils/agentVersion";
@@ -13,7 +13,7 @@ import { NumberTicker } from "./ui/NumberTicker";
 interface ServerTableProps {
   nodes: NodeState[];
   onSelect: (node: NodeState) => void;
-  theme?: "blueprint" | "dark";
+  theme?: ThemeMode;
   /** 服务端会下发的 Agent 版本，用作比较基准；缺省则不做版本判断。 */
   latestAgentVersion?: string;
 }
@@ -46,28 +46,69 @@ const RateCell: React.FC<{ bytesPerSec: number; className?: string }> = ({ bytes
 };
 
 /** Percentage + bar cell, shared by the CPU / RAM / DISK columns. */
-const MetricCell: React.FC<{ percent: number; isBlueprint: boolean }> = ({ percent, isBlueprint }) => {
+const MetricCell: React.FC<{ percent: number; isBlueprintLight: boolean; isBlueprintDark?: boolean; isBtop?: boolean }> = ({ percent, isBlueprintLight, isBlueprintDark, isBtop }) => {
   const colors = getSemanticColor(percent);
+  const safeVal = Math.min(100, Math.max(0, percent));
   return (
     <div className="flex items-center gap-2">
       <NumberTicker
         value={percent}
         decimals={1}
         suffix="%"
-        className={cn("w-12 font-semibold", colors.text)}
+        className={cn(
+          "w-12 font-semibold font-mono",
+          isBtop
+            ? percent >= 85
+              ? "text-rose-400"
+              : percent >= 70
+              ? "text-amber-400"
+              : "text-cyan-400"
+            : colors.text
+        )}
       />
-      <div className={cn("h-1.5 w-16 overflow-hidden rounded-full", isBlueprint ? "bg-slate-200" : "bg-zinc-800")}>
+      {isBtop ? (
+        <div className="flex items-center gap-[2px] w-20 py-0.5 select-none" title={`${safeVal.toFixed(1)}%`}>
+          {Array.from({ length: 10 }).map((_, i) => {
+            const active = safeVal >= (i + 1) * 10 - 5;
+            const blockColor =
+              i >= 8
+                ? "bg-rose-500 shadow-[0_0_4px_rgba(244,63,94,0.7)]"
+                : i >= 6
+                ? "bg-amber-400 shadow-[0_0_4px_rgba(251,191,36,0.6)]"
+                : "bg-cyan-400 shadow-[0_0_4px_rgba(0,240,255,0.6)]";
+            return (
+              <div
+                key={i}
+                className={`h-2 flex-1 rounded-none transition-all duration-150 ${
+                  active ? blockColor : "bg-[#0d1424] border border-[#1b253b]/80"
+                }`}
+              />
+            );
+          })}
+        </div>
+      ) : (
         <div
-          className={cn("h-full rounded-full transition-all duration-500", colors.bar)}
-          style={{ width: `${Math.min(100, Math.max(0, percent))}%` }}
-        />
-      </div>
+          className={cn(
+            "h-1.5 w-16 overflow-hidden rounded-full",
+            isBlueprintDark ? "bg-[#16274a]" : isBlueprintLight ? "bg-slate-200" : "bg-zinc-800"
+          )}
+        >
+          <div
+            className={cn("h-full rounded-full transition-all duration-500", colors.bar)}
+            style={{ width: `${safeVal}%` }}
+          />
+        </div>
+      )}
     </div>
   );
 };
 
 export const ServerTable: React.FC<ServerTableProps> = ({ nodes, onSelect, theme = "dark", latestAgentVersion }) => {
-  const isBlueprint = theme === "blueprint";
+  const isBlueprintLight = theme === "blueprint";
+  const isBlueprintDark = theme === "blueprint-dark";
+  const isBtopDark = theme === "btop";
+  const isBtopLight = theme === "btop-light";
+  const isBtop = isBtopDark || isBtopLight;
   const [, setStarTrigger] = useState(0);
 
   const toggleStar = (e: React.MouseEvent, nodeId: string) => {
@@ -83,8 +124,12 @@ export const ServerTable: React.FC<ServerTableProps> = ({ nodes, onSelect, theme
     <div
       className={cn(
         "overflow-x-auto rounded-xl border transition-colors",
-        isBlueprint
+        isBlueprintDark
+          ? "border-[#1d2d52] bg-[#0a142c]/90 text-slate-100 shadow-[0_4px_20px_rgba(0,0,0,0.5)]"
+          : isBlueprintLight
           ? "border-slate-200/90 bg-white shadow-sm"
+          : isBtop
+          ? "border-[#1b253b] bg-[#070b14]/90 shadow-[0_4px_20px_rgba(0,0,0,0.5)] font-mono"
           : "border-zinc-800 bg-zinc-900/60 backdrop-blur-md"
       )}
     >
@@ -93,26 +138,30 @@ export const ServerTable: React.FC<ServerTableProps> = ({ nodes, onSelect, theme
         <thead
           className={cn(
             "border-b text-xs",
-            isBlueprint
+            isBlueprintDark
+              ? "border-[#1d2d52] bg-[#0b152d] font-semibold text-slate-200"
+              : isBlueprintLight
               ? "border-slate-200 bg-slate-50/90 font-semibold text-slate-700"
+              : isBtop
+              ? "border-[#1b253b] bg-[#0b101c] text-cyan-400 font-bold"
               : "border-zinc-800 bg-zinc-950/60 text-zinc-400"
           )}
         >
           <tr>
-            <th className="px-4 py-3">STATUS</th>
-            <th className="px-4 py-3">NODE / REGION</th>
-            <th className="px-4 py-3">OS / KERNEL</th>
-            <th className="px-4 py-3">PRICING</th>
-            <th className="px-4 py-3">CPU</th>
-            <th className="px-4 py-3">RAM</th>
-            <th className="px-4 py-3">DISK</th>
-            <th className="px-4 py-3">DOWN / UP RATE</th>
-            <th className="px-4 py-3">TOTAL TRANSFER</th>
-            <th className="px-4 py-3">TCP</th>
-            <th className="px-4 py-3">UPTIME</th>
+            <th className="px-4 py-3">{isBtop ? "[ STATUS ]" : "STATUS"}</th>
+            <th className="px-4 py-3">{isBtop ? "[ NODE / REGION ]" : "NODE / REGION"}</th>
+            <th className="px-4 py-3">{isBtop ? "[ OS / KERNEL ]" : "OS / KERNEL"}</th>
+            <th className="px-4 py-3">{isBtop ? "[ PRICING ]" : "PRICING"}</th>
+            <th className="px-4 py-3">{isBtop ? "[ CPU ]" : "CPU"}</th>
+            <th className="px-4 py-3">{isBtop ? "[ RAM ]" : "RAM"}</th>
+            <th className="px-4 py-3">{isBtop ? "[ DISK ]" : "DISK"}</th>
+            <th className="px-4 py-3">{isBtop ? "[ DOWN / UP ]" : "DOWN / UP RATE"}</th>
+            <th className="px-4 py-3">{isBtop ? "[ TRANSFER ]" : "TOTAL TRANSFER"}</th>
+            <th className="px-4 py-3">{isBtop ? "[ TCP ]" : "TCP"}</th>
+            <th className="px-4 py-3">{isBtop ? "[ UPTIME ]" : "UPTIME"}</th>
           </tr>
         </thead>
-        <tbody className={cn("divide-y", isBlueprint ? "divide-slate-100" : "divide-zinc-800/60")}>
+        <tbody className={cn("divide-y", isBlueprintDark ? "divide-[#1d2d52]/60" : isBlueprintLight ? "divide-slate-100" : isBtop ? "divide-[#1b253b]/50" : "divide-zinc-800/60")}>
           {nodes.map((node, idx) => {
             let isStarred = false;
             try {
@@ -129,7 +178,7 @@ export const ServerTable: React.FC<ServerTableProps> = ({ nodes, onSelect, theme
                 onClick={() => onSelect(node)}
                 className={cn(
                   "cursor-pointer transition-colors",
-                  isBlueprint ? "hover:bg-slate-50/80" : "hover:bg-zinc-800/40"
+                  isBlueprintDark ? "hover:bg-[#132247]/70" : isBlueprintLight ? "hover:bg-slate-50/80" : isBtop ? "hover:bg-[#121927]" : "hover:bg-zinc-800/40"
                 )}
               >
                 {/* Status Beacon & Star */}
@@ -141,10 +190,12 @@ export const ServerTable: React.FC<ServerTableProps> = ({ nodes, onSelect, theme
                       className={cn(
                         "flex h-6 w-6 cursor-pointer items-center justify-center rounded-md transition-all active:scale-90",
                         isStarred
-                          ? isBlueprint
+                          ? isBlueprintLight
                             ? "bg-amber-50 text-amber-500"
                             : "bg-amber-500/15 text-amber-400"
-                          : isBlueprint
+                          : isBlueprintDark
+                          ? "text-slate-400 hover:bg-[#16274a] hover:text-amber-400"
+                          : isBlueprintLight
                           ? "text-slate-300 hover:bg-slate-100 hover:text-amber-500"
                           : "text-zinc-500 hover:bg-zinc-800/80 hover:text-amber-400"
                       )}
@@ -169,14 +220,14 @@ export const ServerTable: React.FC<ServerTableProps> = ({ nodes, onSelect, theme
                 {/* Node Name & Region with Flag */}
                 <td className="whitespace-nowrap px-4 py-3">
                   <div className="flex items-center gap-2">
-                    <Server className={cn("h-3.5 w-3.5", isBlueprint ? "text-slate-400" : "text-zinc-400")} />
-                    <span className={cn("font-semibold", isBlueprint ? "text-slate-900" : "text-zinc-200")}>
+                    <Server className={cn("h-3.5 w-3.5", isBlueprintDark ? "text-cyan-400" : isBlueprintLight ? "text-slate-400" : "text-zinc-400")} />
+                    <span className={cn("font-semibold", isBlueprintDark ? "text-slate-100" : isBlueprintLight ? "text-slate-900" : "text-zinc-200")}>
                       {node.name}
                     </span>
                     <span
                       className={cn(
                         "flex items-center gap-1 rounded px-1 py-0.5 text-10",
-                        isBlueprint ? "text-slate-600" : "text-zinc-400"
+                        isBlueprintDark ? "text-slate-300 bg-[#0b152d] border border-[#1d2d52]" : isBlueprintLight ? "text-slate-600 bg-slate-100" : "text-zinc-400 bg-zinc-800"
                       )}
                     >
                       <span className="text-sm leading-none">{getRegionFlag(node.region)}</span>
@@ -192,7 +243,7 @@ export const ServerTable: React.FC<ServerTableProps> = ({ nodes, onSelect, theme
                     <span
                       className={cn(
                         "inline-block max-w-[140px] truncate",
-                        isBlueprint ? "text-slate-600" : "text-zinc-400"
+                        isBlueprintDark ? "text-slate-300" : isBlueprintLight ? "text-slate-600" : "text-zinc-400"
                       )}
                     >
                       {node.system.os || "Linux"}
@@ -200,7 +251,7 @@ export const ServerTable: React.FC<ServerTableProps> = ({ nodes, onSelect, theme
                     <AgentVersionMark
                       version={agentVersionOf(node.system)}
                       latestVersion={latestAgentVersion}
-                      isBlueprint={isBlueprint}
+                      isBlueprint={isBlueprintLight}
                     />
                   </div>
                 </td>
@@ -209,40 +260,40 @@ export const ServerTable: React.FC<ServerTableProps> = ({ nodes, onSelect, theme
                 <td className="whitespace-nowrap px-4 py-3">
                   {node.billing ? (
                     <div className="flex flex-col">
-                      <span className={cn("font-semibold", isBlueprint ? "text-indigo-600" : "text-indigo-400")}>
+                      <span className={cn("font-semibold", isBlueprintDark ? "text-cyan-400" : isBlueprintLight ? "text-indigo-600" : "text-indigo-400")}>
                         {node.billing.currency || "$"}
                         {node.billing.price != null && node.billing.price > 0
                           ? node.billing.price
                           : node.billing.price_per_month || 0}
                         /{getCycleLabel(node.billing.billing_cycle)}
                       </span>
-                      <span className={cn("text-10", isBlueprint ? "text-slate-400" : "text-zinc-500")}>
+                      <span className={cn("text-10", isBlueprintDark ? "text-slate-400" : isBlueprintLight ? "text-slate-400" : "text-zinc-500")}>
                         {node.billing.remaining_days ? `剩 ${node.billing.remaining_days} 天` : "未设到期"}
                       </span>
                     </div>
                   ) : (
-                    <span className="text-slate-400">--</span>
+                    <span className={isBlueprintDark ? "text-slate-500" : "text-slate-400"}>--</span>
                   )}
                 </td>
 
                 <td className="whitespace-nowrap px-4 py-3">
-                  <MetricCell percent={node.cpu} isBlueprint={isBlueprint} />
+                  <MetricCell percent={node.cpu} isBlueprintLight={isBlueprintLight} isBlueprintDark={isBlueprintDark} isBtop={isBtop} />
                 </td>
                 <td className="whitespace-nowrap px-4 py-3">
-                  <MetricCell percent={node.mem} isBlueprint={isBlueprint} />
+                  <MetricCell percent={node.mem} isBlueprintLight={isBlueprintLight} isBlueprintDark={isBlueprintDark} isBtop={isBtop} />
                 </td>
                 <td className="whitespace-nowrap px-4 py-3">
-                  <MetricCell percent={node.disk} isBlueprint={isBlueprint} />
+                  <MetricCell percent={node.disk} isBlueprintLight={isBlueprintLight} isBlueprintDark={isBlueprintDark} isBtop={isBtop} />
                 </td>
 
                 {/* Ingress / Egress Rates with Icons */}
                 <td className="whitespace-nowrap px-4 py-3">
                   <div className="flex flex-col gap-0.5">
-                    <div className="flex items-center gap-1 text-cyan-500">
+                    <div className={cn("flex items-center gap-1", isBtop ? "text-cyan-400" : "text-cyan-500")}>
                       <ArrowDown className="h-3 w-3 shrink-0" />
                       <RateCell bytesPerSec={node.rate_down} />
                     </div>
-                    <div className="flex items-center gap-1 text-indigo-500">
+                    <div className={cn("flex items-center gap-1", isBtop ? "text-pink-400" : "text-indigo-500")}>
                       <ArrowUp className="h-3 w-3 shrink-0" />
                       <RateCell bytesPerSec={node.rate_up} />
                     </div>
@@ -250,7 +301,7 @@ export const ServerTable: React.FC<ServerTableProps> = ({ nodes, onSelect, theme
                 </td>
 
                 {/* Cumulative Rx / Tx / Quota */}
-                <td className={cn("whitespace-nowrap px-4 py-3", isBlueprint ? "text-slate-700" : "text-zinc-300")}>
+                <td className={cn("whitespace-nowrap px-4 py-3", isBlueprintDark ? "text-slate-200" : isBlueprintLight ? "text-slate-700" : "text-zinc-300")}>
                   <div className="flex items-center gap-1 text-11">
                     <ArrowDown className="h-3 w-3 shrink-0 text-cyan-500" />
                     <span>{formatBytes(node.network.bytes_recv)}</span>
@@ -263,7 +314,7 @@ export const ServerTable: React.FC<ServerTableProps> = ({ nodes, onSelect, theme
                     <div
                       className={cn(
                         "mt-1 text-10 font-semibold",
-                        isBlueprint ? "text-blue-600" : "text-blue-400"
+                        isBlueprintDark ? "text-cyan-400" : isBlueprintLight ? "text-blue-600" : "text-blue-400"
                       )}
                     >
                       配额: {formatBytes(node.billing.bandwidth_quota)}
@@ -275,7 +326,7 @@ export const ServerTable: React.FC<ServerTableProps> = ({ nodes, onSelect, theme
                 <td
                   className={cn(
                     "whitespace-nowrap px-4 py-3",
-                    isBlueprint ? "font-semibold text-slate-800" : "text-zinc-200"
+                    isBlueprintDark ? "font-semibold text-slate-100" : isBlueprintLight ? "font-semibold text-slate-800" : "text-zinc-200"
                   )}
                 >
                   <div className="flex items-center gap-1">
@@ -285,9 +336,9 @@ export const ServerTable: React.FC<ServerTableProps> = ({ nodes, onSelect, theme
                 </td>
 
                 {/* Uptime */}
-                <td className={cn("whitespace-nowrap px-4 py-3", isBlueprint ? "text-slate-600" : "text-zinc-400")}>
+                <td className={cn("whitespace-nowrap px-4 py-3", isBlueprintDark ? "text-slate-300" : isBlueprintLight ? "text-slate-600" : "text-zinc-400")}>
                   <div className="flex items-center gap-1">
-                    <Clock className={cn("h-3 w-3", isBlueprint ? "text-slate-500" : "text-zinc-400")} />
+                    <Clock className={cn("h-3 w-3", isBlueprintDark ? "text-slate-400" : isBlueprintLight ? "text-slate-500" : "text-zinc-400")} />
                     <span>{node.uptime_str || "0m"}</span>
                   </div>
                 </td>

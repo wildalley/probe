@@ -1,43 +1,113 @@
 import React, { useEffect, useState, useMemo, useRef } from "react";
-import { NodeState, SystemSummary, WSEvent } from "./types";
-import { Header } from "./components/Header";
-import { ServerCard } from "./components/ServerCard";
-import { ServerTable } from "./components/ServerTable";
-import { NodeDetailView } from "./components/NodeDetailView";
+import { ColorMode, NodeState, SystemSummary, ThemeMode, ThemePreset, WSEvent } from "./types";
+import { BtopTerminalView } from "./components/BtopTerminalView";
 import { AddNodeModal } from "./components/AddNodeModal";
 import { AdminModal } from "./components/AdminModal";
 import { LoginScreen } from "./components/LoginScreen";
 import { ChangePasswordModal } from "./components/ChangePasswordModal";
+import { ThemeManagerModal } from "./components/ThemeManagerModal";
 import { useAuth } from "./hooks/useAuth";
-import { Button } from "@heroui/react";
-import { Server, Activity, ShieldCheck, Terminal, Cpu } from "lucide-react";
-import { BlurFade } from "./components/ui/BlurFade";
-import { Ripple } from "./components/ui/Ripple";
+import { Activity } from "lucide-react";
 import { AnimatedShinyText } from "./components/ui/AnimatedShinyText";
 
 export function App() {
-  const [theme, setTheme] = useState<"blueprint" | "dark">(() => {
-    const saved = localStorage.getItem("cyber_probe_theme");
-    return saved === "blueprint" || saved === "dark" ? saved : "dark";
+  const isAdminRoute = typeof window !== "undefined" && window.location.pathname.startsWith("/admin");
+
+  // 1. Theme Preset: btop++ (Official Native Terminal View)
+  const [themePreset, setThemePreset] = useState<ThemePreset>("btop");
+
+  // 2. Color Mode: "light" | "dark" | "system"
+  const [colorMode, setColorMode] = useState<ColorMode>(() => {
+    const savedMode = localStorage.getItem("cyber_probe_color_mode");
+    if (savedMode === "light" || savedMode === "dark" || savedMode === "system") {
+      return savedMode;
+    }
+    return "dark";
   });
 
-  const isBlueprint = theme === "blueprint";
+  // 3. System preference listener for real-time dark/light syncing
+  const [systemPrefersDark, setSystemPrefersDark] = useState<boolean>(() => {
+    if (typeof window !== "undefined" && window.matchMedia) {
+      return window.matchMedia("(prefers-color-scheme: dark)").matches;
+    }
+    return true;
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const handler = (e: MediaQueryListEvent) => setSystemPrefersDark(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+
+  // 4. Effective dark mode calculation
+  const effectiveDark = colorMode === "system" ? systemPrefersDark : colorMode === "dark";
+
+  // 5. Derived active ThemeMode
+  const theme: ThemeMode = useMemo(() => {
+    return effectiveDark ? "btop" : "btop-light";
+  }, [effectiveDark]);
+
+  const isBtopLight = theme === "btop-light";
+  const isBtopDark = theme === "btop";
+  const isBtop = true;
+  const isDark = effectiveDark;
+
+  const [isThemeModalOpen, setIsThemeModalOpen] = useState(false);
+
+  useEffect(() => {
+    localStorage.setItem("cyber_probe_theme_preset", themePreset);
+  }, [themePreset]);
+
+  useEffect(() => {
+    localStorage.setItem("cyber_probe_color_mode", colorMode);
+  }, [colorMode]);
 
   useEffect(() => {
     localStorage.setItem("cyber_probe_theme", theme);
-    if (theme === "dark") {
-      document.documentElement.classList.add("dark");
-      document.documentElement.classList.remove("blueprint");
-      document.documentElement.setAttribute("data-theme", "dark");
+    document.documentElement.classList.remove("dark", "blueprint", "blueprint-dark", "btop", "btop-light");
+    if (theme === "btop-light") {
+      document.documentElement.classList.add("btop-light");
+      document.documentElement.setAttribute("data-theme", "btop-light");
     } else {
-      document.documentElement.classList.remove("dark");
-      document.documentElement.classList.add("blueprint");
-      document.documentElement.setAttribute("data-theme", "light");
+      document.documentElement.classList.add("dark", "btop");
+      document.documentElement.setAttribute("data-theme", "btop");
     }
   }, [theme]);
 
+  const cycleColorMode = () => {
+    setColorMode((prev) => {
+      if (prev === "light") return "dark";
+      if (prev === "dark") return "system";
+      return "light";
+    });
+  };
+
   const toggleTheme = () => {
-    setTheme((prev) => (prev === "dark" ? "blueprint" : "dark"));
+    setColorMode((prev) => {
+      const isCurrentlyDark = prev === "system" ? systemPrefersDark : prev === "dark";
+      return isCurrentlyDark ? "light" : "dark";
+    });
+  };
+
+  const handleSelectTheme = (newTheme: ThemeMode) => {
+    if (newTheme === "blueprint") {
+      setThemePreset("blueprint");
+      setColorMode("light");
+    } else if (newTheme === "blueprint-dark") {
+      setThemePreset("blueprint");
+      setColorMode("dark");
+    } else if (newTheme === "btop-light") {
+      setThemePreset("btop");
+      setColorMode("light");
+    } else if (newTheme === "btop") {
+      setThemePreset("btop");
+      setColorMode("dark");
+    } else if (newTheme === "dark") {
+      setThemePreset("blueprint");
+      setColorMode("dark");
+    }
   };
 
   const auth = useAuth();
@@ -49,7 +119,18 @@ export function App() {
   const [wsConnected, setWsConnected] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedRegion, setSelectedRegion] = useState("ALL");
-  const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
+  const [viewMode, setViewMode] = useState<"grid" | "table">(() => {
+    const saved = localStorage.getItem("cyber_probe_view_mode");
+    return saved === "table" ? "table" : "grid";
+  });
+
+  useEffect(() => {
+    localStorage.setItem("cyber_probe_view_mode", viewMode);
+  }, [viewMode]);
+
+  const handleSelectThemePreset = (preset: ThemePreset) => {
+    setThemePreset(preset);
+  };
   const [selectedNode, setSelectedNode] = useState<NodeState | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
@@ -59,7 +140,7 @@ export function App() {
   const [guestMode, setGuestMode] = useState(false);
 
   // Gate everything behind the login screen until we know the session state.
-  const showLogin = auth.ready && !auth.authenticated && !(auth.publicView && guestMode);
+  const showLogin = !isAdminRoute && auth.ready && !auth.authenticated && !(auth.publicView && guestMode);
 
   // Admin surfaces stay hidden for anonymous viewers.
   const canManage = auth.authenticated;
@@ -315,17 +396,15 @@ export function App() {
   if (!auth.ready) {
     return (
       <div className={`min-h-screen flex items-center justify-center ${
-        isBlueprint ? "blueprint-grid bg-slate-100/50" : "cyber-grid bg-zinc-950"
+        isBtopLight ? "btop-light-grid bg-[#ebe7ee]" : "btop-grid bg-[#06080d]"
       }`}>
-        <div className={`flex items-center gap-3 font-sans text-xs ${
-          isBlueprint ? "text-slate-500" : "text-zinc-400"
+        <div className={`flex items-center gap-3 font-mono text-xs ${
+          isBtopLight ? "text-slate-600" : "text-slate-400"
         }`}>
-          <Activity className="h-4 w-4 animate-pulse text-indigo-500" />
-          {/* Short cycle: the probe usually resolves in well under a second, so
-              the default 8s sweep would never be seen. */}
+          <Activity className="h-4 w-4 animate-pulse text-cyan-400" />
           <AnimatedShinyText
             duration="2.2s"
-            shimmerColor={isBlueprint ? "via-slate-900/45" : "via-white/85"}
+            shimmerColor={isBtopLight ? "via-slate-900/45" : "via-cyan-300/85"}
           >
             正在校验会话...
           </AnimatedShinyText>
@@ -334,14 +413,71 @@ export function App() {
     );
   }
 
+  // Dedicated Admin Console Route (/admin)
+  if (isAdminRoute) {
+    if (!auth.authenticated) {
+      return (
+        <div className={`min-h-screen ${
+          isBtopLight ? "btop-light-grid bg-[#ebe7ee]" : "btop-grid bg-[#06080d]"
+        }`}>
+          <LoginScreen
+            onLogin={auth.login}
+            theme={theme}
+            onSelectTheme={handleSelectTheme}
+            onToggleTheme={toggleTheme}
+            allowPublicView={true}
+            guestButtonLabel="返回监控主页"
+            onContinueAsGuest={() => {
+              window.location.href = "/?_t=" + Date.now();
+            }}
+          />
+        </div>
+      );
+    }
+
+    return (
+      <div className={`min-h-screen w-full flex flex-col font-sans transition-colors ${
+        isBtopLight ? "bg-slate-100 text-slate-900" : "bg-[#06080d] text-zinc-100"
+      }`}>
+        <AdminModal
+          isOpen={true}
+          isStandalone={true}
+          onClose={() => {
+            window.location.href = "/?_t=" + Date.now();
+          }}
+          nodes={Array.from(nodes.values())}
+          theme={theme}
+          onRefreshNodes={fetchNodes}
+          currentPreset={themePreset}
+          onSelectPreset={handleSelectThemePreset}
+          colorMode={colorMode}
+          onSelectColorMode={setColorMode}
+          onToggleTheme={toggleTheme}
+          onLogout={auth.logout}
+          onOpenPasswordModal={() => setIsPasswordModalOpen(true)}
+          username={auth.username}
+        />
+        <ChangePasswordModal
+          isOpen={isPasswordModalOpen}
+          forced={auth.mustChangePassword}
+          onClose={() => setIsPasswordModalOpen(false)}
+          onSubmit={auth.changePassword}
+          theme={theme}
+        />
+      </div>
+    );
+  }
+
   if (showLogin) {
     return (
       <div className={`min-h-screen ${
-        isBlueprint ? "blueprint-grid bg-slate-100/50" : "cyber-grid bg-zinc-950"
+        isBtopLight ? "btop-light-grid bg-[#ebe7ee]" : "btop-grid bg-[#06080d]"
       }`}>
         <LoginScreen
           onLogin={auth.login}
           theme={theme}
+          onSelectTheme={handleSelectTheme}
+          onToggleTheme={toggleTheme}
           allowPublicView={auth.publicView}
           onContinueAsGuest={() => setGuestMode(true)}
         />
@@ -350,172 +486,61 @@ export function App() {
   }
 
   return (
-    <div className={`min-h-screen flex flex-col transition-colors duration-200 ${
-      isBlueprint
-        ? "blueprint-grid text-slate-800 bg-slate-100/50 selection:bg-indigo-500/20 selection:text-indigo-900"
-        : "cyber-grid text-zinc-100 bg-zinc-950 selection:bg-indigo-500/30 selection:text-indigo-200"
-    }`}>
-      {selectedNode ? (
-        /* Detailed Comprehensive Node View matching user screenshots */
-        <NodeDetailView
-          node={selectedNode}
-          nodesList={filteredNodes}
-          onBack={() => setSelectedNode(null)}
-          onSelectNode={setSelectedNode}
-          theme={theme}
-          onToggleTheme={toggleTheme}
-          latestAgentVersion={latestAgentVersion}
-        />
-      ) : (
-        <>
-          {/* Top Header */}
-          <Header
-            summary={summary}
-            wsConnected={wsConnected}
-            searchQuery={searchQuery}
-            onSearchChange={setSearchQuery}
-            selectedRegion={selectedRegion}
-            onRegionChange={setSelectedRegion}
-            regions={regions}
-            regionCounts={regionCounts}
-            viewMode={viewMode}
-            onViewModeChange={setViewMode}
-            onOpenAddModal={() => setIsAddModalOpen(true)}
-            onOpenAdminModal={() => setIsAdminModalOpen(true)}
-            theme={theme}
-            onToggleTheme={toggleTheme}
-            canManage={canManage}
-            username={auth.username}
-            onLogout={auth.logout}
-            onOpenPasswordModal={() => setIsPasswordModalOpen(true)}
-            onRequestLogin={() => setGuestMode(false)}
-          />
+    <div className={`min-h-screen ${isBtopLight ? "bg-[#ebe7ee] text-[#2b2735]" : "bg-[#0c0e17] text-[#e2e8f0]"}`}>
+      <BtopTerminalView
+        nodes={filteredNodes.length > 0 ? filteredNodes : Array.from(nodes.values())}
+        theme={theme}
+        onSelectTheme={handleSelectTheme}
+        onToggleTheme={toggleTheme}
+        onOpenAdminModal={() => {
+          window.location.href = "/admin";
+        }}
+        onOpenAddModal={() => setIsAddModalOpen(true)}
+        onOpenPasswordModal={() => setIsPasswordModalOpen(true)}
+        onOpenThemeModal={() => setIsThemeModalOpen(true)}
+        canManage={canManage}
+        username={auth.username}
+        onLogout={auth.logout}
+        latestAgentVersion={latestAgentVersion}
+      />
 
-          {/* Main Content Area */}
-          <main className="flex-1 mx-auto max-w-[1600px] w-full px-3.5 py-4 sm:px-6 sm:py-6 lg:px-8">
-            {filteredNodes.length > 0 ? (
-              viewMode === "grid" ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4 sm:gap-5">
-                  {filteredNodes.map((node, i) => (
-                    <BlurFade
-                      key={node.node_id}
-                      // Cap the stagger so a large fleet doesn't leave the last
-                      // cards waiting seconds to appear.
-                      delay={Math.min(i * 0.05, 0.5)}
-                      yOffset={10}
-                    >
-                      <ServerCard
-                        node={node}
-                        onSelect={setSelectedNode}
-                        theme={theme}
-                        latestAgentVersion={latestAgentVersion}
-                      />
-                    </BlurFade>
-                  ))}
-                </div>
-              ) : (
-                <ServerTable
-                  nodes={filteredNodes}
-                  onSelect={setSelectedNode}
-                  theme={theme}
-                  latestAgentVersion={latestAgentVersion}
-                />
-              )
-            ) : (
-              <div className={`relative flex flex-col items-center justify-center overflow-hidden rounded-2xl border border-dashed p-12 text-center ${
-                isBlueprint ? "border-slate-200/90 bg-white/70 text-slate-600 shadow-sm" : "border-zinc-800 bg-zinc-900/30 text-zinc-200"
-              }`}>
-                {/* Breathing rings hint that the hub is listening for agents */}
-                <Ripple className="opacity-70" />
-
-                <div className={`relative flex h-14 w-14 items-center justify-center rounded-2xl border mb-4 ${
-                  isBlueprint ? "bg-slate-100 border-slate-200 text-slate-500" : "bg-zinc-800/60 border-zinc-700/40 text-zinc-400"
-                }`}>
-                  <Server className="h-7 w-7" />
-                </div>
-                <h3 className={`relative text-base font-semibold ${isBlueprint ? "text-slate-900" : "text-zinc-200"}`}>
-                  {nodesList.length === 0 ? (
-                    /* Only while waiting for a first agent: the sweep reinforces
-                       the Ripple behind it ("the hub is listening"). A filter
-                       miss is a settled result, so it stays static. */
-                    <AnimatedShinyText
-                      duration="4s"
-                      shimmerColor={isBlueprint ? "via-slate-900/35" : "via-white/70"}
-                    >
-                      暂无接入的主机节点
-                    </AnimatedShinyText>
-                  ) : (
-                    "未找到匹配的主机"
-                  )}
-                </h3>
-                <p className={`relative mt-1 max-w-md text-xs font-sans ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}>
-                  {nodesList.length === 0
-                    ? canManage
-                      ? "当前暂无 Agent 探针向服务端 Hub 上报数据。点击下方按钮一键部署第一台探针。"
-                      : "当前暂无 Agent 探针向服务端 Hub 上报数据。"
-                    : "没有符合当前搜索关键字或地区筛选条件的主机节点。"}
-                </p>
-                {nodesList.length === 0 && canManage && (
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    onPress={() => setIsAddModalOpen(true)}
-                    className="relative mt-5 gap-2 rounded-xl font-sans text-xs font-medium shadow-lg shadow-indigo-600/25"
-                  >
-                    <Terminal className="h-4 w-4" />
-                    <span>一键部署首台探针</span>
-                  </Button>
-                )}
-              </div>
-            )}
-          </main>
-        </>
-      )}
-
-      {/* Footer */}
-      <footer className={`border-t py-6 text-center text-xs font-mono mt-auto transition-colors ${
-        isBlueprint ? "border-slate-200 bg-white/80 text-slate-500" : "border-zinc-900 bg-zinc-950 text-zinc-400"
-      }`}>
-        <div className="mx-auto max-w-[1600px] px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <div>
-            CYBER PROBE · 高性能自研探针系统 (Go + Gin + SQLite + React + uPlot)
-          </div>
-          <div className={`flex items-center gap-4 ${isBlueprint ? "text-slate-400" : "text-zinc-500"}`}>
-            <span>RAM: 5-10MB</span>
-            <span>·</span>
-            <span>CPU: ~0%</span>
-            <span>·</span>
-            <span>Outbound WSS</span>
-          </div>
-        </div>
-      </footer>
-
-      {/* Add / Deploy Node Modal. The install command embeds an agent token, so
-          it stays behind a session even though the dialog itself is inert. */}
+      {/* Global Admin Modals accessible from btop terminal menu */}
+      <AdminModal
+        isOpen={isAdminModalOpen}
+        onClose={() => setIsAdminModalOpen(false)}
+        nodes={Array.from(nodes.values())}
+        theme={theme}
+        onRefreshNodes={fetchNodes}
+        currentPreset={themePreset}
+        onSelectPreset={handleSelectThemePreset}
+        colorMode={colorMode}
+        onSelectColorMode={setColorMode}
+        onToggleTheme={toggleTheme}
+        onLogout={auth.logout}
+        onOpenPasswordModal={() => setIsPasswordModalOpen(true)}
+        username={auth.username}
+      />
       <AddNodeModal
         isOpen={canManage && isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
         theme={theme}
       />
-
-      {/* Admin Management Modal. Gated on `canManage` as well as the open flag so
-          a logout (or an expired session) closes it instead of leaving a console
-          on screen whose every request the server would now reject. */}
-      <AdminModal
-        isOpen={canManage && isAdminModalOpen}
-        onClose={() => setIsAdminModalOpen(false)}
-        nodes={Array.from(nodes.values())}
-        theme={theme}
-        onRefreshNodes={fetchNodes}
-      />
-
-      {/* Password rotation. Not dismissable while the bootstrap password stands. */}
       <ChangePasswordModal
         isOpen={canManage && isPasswordModalOpen}
         forced={auth.mustChangePassword}
         onClose={() => setIsPasswordModalOpen(false)}
         onSubmit={auth.changePassword}
         theme={theme}
+      />
+      <ThemeManagerModal
+        isOpen={isThemeModalOpen}
+        onClose={() => setIsThemeModalOpen(false)}
+        currentPreset={themePreset}
+        onSelectPreset={handleSelectThemePreset}
+        colorMode={colorMode}
+        onSelectColorMode={setColorMode}
+        theme={theme}
+        canManage={canManage}
       />
     </div>
   );

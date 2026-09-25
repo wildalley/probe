@@ -152,10 +152,58 @@
     overflow-x: hidden;
   }
 
-  html.blueprint body,
+  html.btop body,
+  html[data-theme="btop"] body {
+    font-family: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
+    background-color: #06080d;
+    color: #e2e8f0;
+  }
+
+  /* Terminal styling strictly scoped to the btop-terminal dashboard */
+  .btop-terminal,
+  .btop-terminal * {
+    font-family: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  }
+
+  /* Enforce crisp sharp terminal window corners strictly in btop terminal view */
+  .btop-terminal .rounded-2xl,
+  .btop-terminal .rounded-xl,
+  .btop-terminal .rounded-lg,
+  .btop-terminal .rounded-md {
+    border-radius: 2px !important;
+  }
+
+  /* Inverted terminal reverse-video text selection */
+  .btop .btop-terminal ::selection,
+  [data-theme="btop"] .btop-terminal ::selection {
+    background: #00f0ff !important;
+    color: #06080d !important;
+  }
+
+  html.btop-light body,
+  html[data-theme="btop-light"] body {
+    background-color: #ebe7ee;
+    color: #2b2735;
+  }
+
+  /* Inverted terminal reverse-video text selection for btop-light */
+  .btop-light .btop-terminal ::selection,
+  [data-theme="btop-light"] .btop-terminal ::selection {
+    background: #7c5c99 !important;
+    color: #ffffff !important;
+  }
+
+  html.blueprint:not(.dark):not(.blueprint-dark) body,
+  html[data-theme="blueprint-light"] body,
   html[data-theme="light"] body {
     background-color: #f8fafc;
     color: #0f172a;
+  }
+
+  html.blueprint-dark body,
+  html[data-theme="blueprint-dark"] body {
+    background-color: #070e1e;
+    color: #e2e8f0;
   }
 }
 
@@ -260,6 +308,17 @@
   font-weight: 600;
 }
 
+
+.list-box-item:focus,
+.list-box-item:focus-visible,
+[data-slot="list-box-item"]:focus,
+[data-slot="list-box-item"]:focus-visible,
+[data-slot="list-box-item"][data-focused="true"],
+[data-slot="list-box-item"][data-focus-visible="true"] {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
 .list-box-item__indicator {
   color: #4338ca !important;
 }
@@ -268,10 +327,25 @@
   color: #a5b4fc !important;
 }
 
-/* Select Trigger Borders */
+/* Select Trigger & Indicator */
 .select__trigger,
 [data-slot="select-trigger"] {
+  position: relative !important;
   border: 1px solid #cbd5e1;
+}
+.select__trigger:has(.select__indicator),
+[data-slot="select-trigger"]:has([data-slot="select-indicator"]),
+[data-slot="select-trigger"]:has([data-slot="select-default-indicator"]) {
+  padding-right: 1.85rem !important;
+}
+.select__indicator,
+[data-slot="select-indicator"],
+[data-slot="select-default-indicator"] {
+  position: absolute !important;
+  right: 0.5rem !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  pointer-events: none !important;
 }
 .select__trigger:hover,
 [data-slot="select-trigger"]:hover {
@@ -380,13 +454,45 @@
     linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
 }
 
-/* Blueprint architecture graph paper background pattern */
+/* btop++ terminal retro-grid pattern */
+.btop-grid {
+  background-color: #06080d;
+  background-size: 32px 32px;
+  background-image:
+    linear-gradient(to right, rgba(0, 240, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(0, 240, 255, 0.04) 1px, transparent 1px);
+}
+
+/* btop++ light terminal paper-grid pattern */
+.btop-light-grid {
+  background-color: #ebe7ee;
+  background-size: 32px 32px;
+  background-image:
+    linear-gradient(to right, rgba(124, 92, 153, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(124, 92, 153, 0.05) 1px, transparent 1px);
+}
+
+/* Blueprint architecture graph paper background pattern (Light) */
 .blueprint-grid {
   background-color: #f1f5f9;
   background-size: 24px 24px;
   background-image:
     linear-gradient(to right, rgba(203, 213, 225, 0.5) 1px, transparent 1px),
     linear-gradient(to bottom, rgba(203, 213, 225, 0.5) 1px, transparent 1px);
+}
+
+/* Blueprint architecture graph paper background pattern (Cyanotype Dark) */
+.blueprint-grid-dark {
+  background-color: #070e1e;
+  background-size: 24px 24px;
+  background-image:
+    linear-gradient(to right, rgba(56, 189, 248, 0.08) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(56, 189, 248, 0.08) 1px, transparent 1px);
+}
+
+html.blueprint-dark body {
+  background-color: #070e1e;
+  color: #e2e8f0;
 }
 
 /* Subtle ambient radial glow behind header */
@@ -402,12 +508,22 @@
 ::-webkit-scrollbar-track {
   background: rgba(24, 24, 27, 0.5);
 }
+html.btop ::-webkit-scrollbar-track {
+  background: #06080d;
+}
 ::-webkit-scrollbar-thumb {
   background: #3f3f46;
   border-radius: 3px;
 }
+html.btop ::-webkit-scrollbar-thumb {
+  background: #1b253b;
+  border: 1px solid rgba(0, 240, 255, 0.2);
+}
 ::-webkit-scrollbar-thumb:hover {
   background: #52525b;
+}
+html.btop ::-webkit-scrollbar-thumb:hover {
+  background: #25334e;
 }
 
 /* uPlot styles */

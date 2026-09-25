@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { X, KeyRound, ShieldAlert, AlertCircle, Check, Eye, EyeOff } from "lucide-react";
+import { ThemeMode } from "../types";
 
 interface ChangePasswordModalProps {
   isOpen: boolean;
@@ -7,7 +8,7 @@ interface ChangePasswordModalProps {
   forced?: boolean;
   onClose: () => void;
   onSubmit: (currentPassword: string, newPassword: string) => Promise<{ ok: boolean; error?: string }>;
-  theme: "blueprint" | "dark";
+  theme?: ThemeMode;
 }
 
 export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
@@ -17,7 +18,9 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
   onSubmit,
   theme,
 }) => {
-  const isBlueprint = theme === "blueprint";
+  const isDark = theme === "dark" || theme === "btop" || theme === "blueprint-dark";
+  const isLight = !isDark;
+  const isBlueprint = isLight;
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");

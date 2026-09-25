@@ -1,3 +1,7 @@
+export type ThemeMode = "dark" | "btop" | "btop-light" | "blueprint" | "blueprint-dark";
+export type ThemePreset = "btop" | "blueprint";
+export type ColorMode = "light" | "dark" | "system";
+
 export interface PingStat {
   id?: number;
   target: string;
@@ -251,3 +255,28 @@ export interface NotificationLog {
   status: "success" | "failed";
   error_msg?: string;
 }
+
+export interface KomariTheme {
+  name: string;
+  short: string;
+  description: string;
+  version: string;
+  author: string;
+  url: string;
+  preview: string;
+  is_installed: boolean;
+  is_active: boolean;
+  download?: string;
+  sha256?: string;
+  configuration?: any;
+}
+
+export interface ThemesResponse {
+  active: string;
+  installed: KomariTheme[];
+}
+
+export interface ThemeMarketResponse {
+  themes: KomariTheme[];
+}
+

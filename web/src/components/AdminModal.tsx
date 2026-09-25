@@ -31,6 +31,13 @@ import {
   AlertTriangle,
   CheckCircle2,
   Info,
+  Palette,
+  ArrowLeft,
+  Sun,
+  Moon,
+  LogOut,
+  KeyRound,
+  UserCircle,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -40,14 +47,18 @@ import {
   TokenItem,
   NotificationSettings,
   NotificationLog,
+  ThemeMode,
+  ThemePreset,
+  ColorMode,
 } from "../types";
 import { Button, Chip, Input, ListBox, Select, Switch, Tabs } from "@heroui/react";
 import { cn } from "../lib/utils";
 import { HostTable } from "./admin/hosts/HostTable";
 import { HostEditDialog } from "./admin/hosts/HostEditDialog";
 import { HostDeployDialog } from "./admin/hosts/HostDeployDialog";
+import { ThemeManagerPanel } from "./ThemeManagerModal";
 
-type TabKey = "hosts" | "network" | "billing" | "tokens" | "notifications";
+type TabKey = "hosts" | "network" | "billing" | "tokens" | "notifications" | "themes";
 
 /** Rows of notification history per page. The server caps a page at 200. */
 const LOG_PAGE_SIZE = 50;
@@ -56,8 +67,17 @@ interface AdminModalProps {
   isOpen: boolean;
   onClose: () => void;
   nodes: NodeState[];
-  theme?: "blueprint" | "dark";
+  theme?: ThemeMode;
   onRefreshNodes?: () => void;
+  isStandalone?: boolean;
+  currentPreset?: ThemePreset;
+  onSelectPreset?: (preset: ThemePreset) => void;
+  colorMode?: ColorMode;
+  onSelectColorMode?: (mode: ColorMode) => void;
+  onToggleTheme?: () => void;
+  onLogout?: () => void;
+  onOpenPasswordModal?: () => void;
+  username?: string | null;
 }
 
 const WEBHOOK_FORMAT_OPTIONS = [
@@ -115,8 +135,24 @@ export const AdminModal: React.FC<AdminModalProps> = ({
   nodes,
   theme = "dark",
   onRefreshNodes,
+  isStandalone = false,
+  currentPreset,
+  onSelectPreset,
+  colorMode,
+  onSelectColorMode,
+  onToggleTheme,
+  onLogout,
+  onOpenPasswordModal,
+  username,
 }) => {
-  const isBlueprint = theme === "blueprint";
+  const isDark = theme === "btop" || theme === "blueprint-dark" || theme === "dark";
+  const isLight = !isDark;
+  const isBlueprintLight = theme === "blueprint";
+  const isBlueprintDark = theme === "blueprint-dark";
+  const isBlueprint = isLight;
+  const isBtopLight = theme === "btop-light";
+  const isBtopDark = theme === "btop";
+  const isBtop = isBtopLight || isBtopDark;
   const [activeTab, setActiveTab] = useState<TabKey>("hosts");
 
   // --- Notifications State ---
@@ -310,6 +346,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
   }[] = [
     { key: "hosts", icon: Server, label: "主机管理", shortLabel: "主机", badge: nodes.length },
     { key: "network", icon: Activity, label: "网络延迟与丢包检测", shortLabel: "网络监测", badge: pingTargets.length },
+    { key: "themes", icon: Palette, label: "探针主题与扩展中心", shortLabel: "主题中心" },
     { key: "billing", icon: Coins, label: "财务计费与实时汇率", shortLabel: "财务汇率" },
     { key: "tokens", icon: Key, label: "通信鉴权 Token", shortLabel: "Token", badge: tokens.length },
     { key: "notifications", icon: Bell, label: "自定义通知与告警", shortLabel: "告警通知", badge: "NEW", badgeTone: "new" },
@@ -324,9 +361,9 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     }
   };
 
-  // Load Data on open
+  // Load Data on open or in standalone mode
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen && !isStandalone) return;
 
     // Load Ping Targets
     fetch("/api/v1/ping-targets")
@@ -603,19 +640,53 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     totalRemainingValueCNY += n.billing?.remaining_value || 0;
   });
 
+  if (!isOpen && !isStandalone) return null;
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 lg:p-6 bg-black/80 backdrop-blur-md animate-fade-in font-sans">
+    <div
+      className={
+        isStandalone
+          ? `min-h-screen w-full flex flex-col font-sans transition-colors ${
+              isBlueprintDark
+                ? "bg-[#070e1e] text-slate-100"
+                : isBlueprintLight
+                ? "bg-slate-100 text-slate-900"
+                : isBtopLight
+                ? "bg-[#ebe7ee] text-slate-900"
+                : isBtop
+                ? "bg-[#06080d] text-zinc-100"
+                : "bg-zinc-950 text-zinc-100"
+            }`
+          : "fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 lg:p-6 bg-black/80 backdrop-blur-md animate-fade-in font-sans"
+      }
+    >
       <div
-        className={`relative flex flex-col w-full max-w-[1440px] h-[100dvh] sm:h-[92vh] rounded-none sm:rounded-2xl border-0 sm:border shadow-2xl overflow-hidden transition-colors ${
-          isBlueprint
-            ? "bg-slate-50 border-slate-200/90 text-slate-900"
-            : "bg-zinc-950 border-zinc-800 text-zinc-100"
-        }`}
+        className={
+          isStandalone
+            ? `relative flex flex-col w-full flex-1 max-w-[1700px] mx-auto overflow-hidden sm:border-x shadow-xs transition-colors ${
+                isLight
+                  ? "bg-slate-50 border-slate-200/90 text-slate-900"
+                  : isBlueprintDark
+                  ? "bg-[#070e1e] border-[#1d2d52] text-slate-100"
+                  : "bg-zinc-950 border-zinc-800 text-zinc-100"
+              }`
+            : `relative flex flex-col w-full max-w-[1440px] h-[100dvh] sm:h-[92vh] rounded-none sm:rounded-2xl border-0 sm:border shadow-2xl overflow-hidden transition-colors ${
+                isLight
+                  ? "bg-slate-50 border-slate-200/90 text-slate-900"
+                  : isBlueprintDark
+                  ? "bg-[#070e1e] border-[#1d2d52] text-slate-100"
+                  : "bg-zinc-950 border-zinc-800 text-zinc-100"
+              }`
+        }
       >
-        {/* Modal Header */}
+        {/* Header */}
         <div
           className={`flex items-center justify-between px-3.5 py-2.5 sm:px-6 sm:py-3.5 border-b shrink-0 ${
-            isBlueprint ? "bg-white border-slate-200/80" : "bg-zinc-900/90 border-zinc-800"
+            isLight
+              ? "bg-white border-slate-200/80"
+              : isBlueprintDark
+              ? "bg-[#091124] border-[#1d2d52]"
+              : "bg-zinc-900/90 border-zinc-800"
           }`}
         >
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
@@ -632,27 +703,102 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                 </span>
               </div>
               <p className={`hidden sm:block text-xs font-sans mt-0.5 truncate ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}>
-                主机管理 · 网络延迟丢包监控 · 财务定价与实时汇率 · 自定义多渠道通知
+                主机管理 · 网络延迟丢包监控 · 探针主题中心 · 财务与实时汇率 · 多渠道通知
               </p>
             </div>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            isIconOnly
-            onPress={onClose}
-            className="text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 shrink-0"
-            aria-label="关闭"
-          >
-            <X className="h-4 w-4" />
-          </Button>
+
+          {isStandalone ? (
+            <div className="flex items-center gap-2">
+              <a
+                href={"/?_t=" + Date.now()}
+                onClick={(e) => {
+                  e.currentTarget.href = "/?_t=" + Date.now();
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-sans font-medium shadow-md shadow-indigo-600/20 active:scale-95 transition-all cursor-pointer"
+                title="返回监控前台"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                <span className="hidden sm:inline">返回监控前台</span>
+                <span className="sm:hidden">前台</span>
+              </a>
+
+              {onToggleTheme && (
+                <button
+                  onClick={onToggleTheme}
+                  className={`p-2 rounded-xl border text-xs transition-all cursor-pointer ${
+                    isDark
+                      ? "border-zinc-800 bg-zinc-900 text-cyan-400 hover:border-zinc-700"
+                      : "border-slate-200 bg-white text-amber-500 hover:bg-slate-50"
+                  }`}
+                  title="切换色彩明暗"
+                >
+                  {isDark ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+                </button>
+              )}
+
+              {onOpenPasswordModal && (
+                <button
+                  onClick={onOpenPasswordModal}
+                  className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-sans transition-all cursor-pointer ${
+                    isDark
+                      ? "border-zinc-800 bg-zinc-900 text-zinc-300 hover:text-white"
+                      : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                  }`}
+                  title="修改管理密码"
+                >
+                  <KeyRound className="h-3.5 w-3.5 text-indigo-500" />
+                  <span>改密</span>
+                </button>
+              )}
+
+              {username && (
+                <div
+                  className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-mono ${
+                    isDark ? "border-zinc-800 bg-zinc-900/60 text-zinc-300" : "border-slate-200 bg-slate-100 text-slate-700"
+                  }`}
+                >
+                  <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                  <span>{username}</span>
+                </div>
+              )}
+
+              {onLogout && (
+                <button
+                  onClick={onLogout}
+                  className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl border text-xs font-sans text-rose-500 transition-all cursor-pointer ${
+                    isDark ? "border-rose-500/20 bg-rose-500/10 hover:bg-rose-500/20" : "border-rose-200 bg-rose-50 hover:bg-rose-100"
+                  }`}
+                  title="退出登录"
+                >
+                  <LogOut className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">退出</span>
+                </button>
+              )}
+            </div>
+          ) : (
+            <Button
+              variant="ghost"
+              size="sm"
+              isIconOnly
+              onPress={onClose}
+              className="text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 shrink-0"
+              aria-label="关闭"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          )}
         </div>
 
         {/* Tab Navigation */}
         <div
           className={cn(
             "px-2.5 sm:px-6 border-b shrink-0 overflow-x-auto no-scrollbar",
-            isBlueprint ? "bg-white border-slate-200/80" : "bg-zinc-900/60 border-zinc-800"
+            isLight
+              ? "bg-white border-slate-200/80"
+              : isBlueprintDark
+              ? "bg-[#070e1f] border-[#1d2d52]"
+              : "bg-zinc-900/60 border-zinc-800"
           )}
         >
           <Tabs
@@ -665,7 +811,14 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                 <Tabs.Tab
                   key={key}
                   id={key}
-                  className="h-10 sm:h-11 w-auto shrink-0 gap-1.5 sm:gap-2 whitespace-nowrap text-xs font-sans px-2 sm:px-3"
+                  className={cn(
+                    "h-10 sm:h-11 w-auto shrink-0 gap-1.5 sm:gap-2 whitespace-nowrap text-xs font-sans px-2 sm:px-3 font-medium transition-colors",
+                    isLight
+                      ? "text-slate-600 data-[selected=true]:text-indigo-600 hover:text-slate-900"
+                      : isBlueprintDark
+                      ? "text-slate-400 data-[selected=true]:text-cyan-300 hover:text-slate-200"
+                      : "text-zinc-400 data-[selected=true]:text-zinc-100 hover:text-zinc-200"
+                  )}
                 >
                   <Icon className="h-3.5 w-3.5 shrink-0" />
                   <span className="sm:hidden">{shortLabel}</span>
@@ -676,7 +829,9 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                         "rounded-full px-1.5 py-0.5",
                         badgeTone === "new"
                           ? "text-9 font-bold bg-indigo-50 text-indigo-600 border border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-400 dark:border-indigo-800"
-                          : "text-10 font-mono bg-slate-100 text-slate-600 border border-slate-200/60 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700/60"
+                          : isDark
+                          ? "text-10 font-mono bg-zinc-800 text-zinc-400 border border-zinc-700/60"
+                          : "text-10 font-mono bg-slate-100 text-slate-600 border border-slate-200/60"
                       )}
                     >
                       {badge}
@@ -1069,6 +1224,20 @@ export const AdminModal: React.FC<AdminModalProps> = ({
             </div>
           )}
 
+          {/* TAB: THEMES & EXTENSIONS */}
+          {activeTab === "themes" && (
+            <div className="space-y-5 animate-fade-in">
+              <ThemeManagerPanel
+                currentPreset={currentPreset || "btop"}
+                onSelectPreset={onSelectPreset || (() => {})}
+                colorMode={colorMode || "dark"}
+                onSelectColorMode={onSelectColorMode || (() => {})}
+                theme={theme}
+                isEmbedded={true}
+                canManage={true}
+              />
+            </div>
+          )}
 
           {/* TAB 3: BILLING & EXCHANGE RATES */}
           {activeTab === "billing" && (

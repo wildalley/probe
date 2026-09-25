@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -51,13 +52,14 @@ func (s *Server) clientUpgrader(c *gin.Context) websocket.Upgrader {
 
 // Server encapsulates the HTTP/WebSocket router and business dependencies.
 type Server struct {
-	router      *gin.Engine
-	hub         *Hub
-	storage     *Storage
-	downsampler *Downsampler
-	notifier    *Notifier
-	distFS      fs.FS
-	auth        *AuthManager
+	router       *gin.Engine
+	hub          *Hub
+	storage      *Storage
+	downsampler  *Downsampler
+	notifier     *Notifier
+	distFS       fs.FS
+	auth         *AuthManager
+	themeManager *ThemeManager
 
 	// privateMode requires a login even for read-only telemetry views.
 	privateMode bool
@@ -86,14 +88,15 @@ func NewServer(hub *Hub, storage *Storage, downsampler *Downsampler, notifier *N
 	})
 
 	s := &Server{
-		router:      router,
-		hub:         hub,
-		storage:     storage,
-		downsampler: downsampler,
-		notifier:    notifier,
-		distFS:      distFS,
-		auth:        auth,
-		privateMode: privateMode,
+		router:       router,
+		hub:          hub,
+		storage:      storage,
+		downsampler:  downsampler,
+		notifier:     notifier,
+		distFS:       distFS,
+		auth:         auth,
+		themeManager: NewThemeManager(storage, "themes"),
+		privateMode:  privateMode,
 	}
 
 	// PROBE_ALLOWED_ORIGINS is a comma-separated list, e.g.
@@ -217,21 +220,119 @@ func (s *Server) setupRoutes() {
 		admin.GET("/geoip/lookup", s.handleGeoIPLookup)
 	}
 
-	// Static Assets / Embedded SPA
-	if s.distFS != nil {
-		fileServer := http.FileServer(http.FS(s.distFS))
-		s.router.NoRoute(func(c *gin.Context) {
-			path := c.Request.URL.Path
-			// If API route or websocket, return 404
-			if strings.HasPrefix(path, "/api") || strings.HasPrefix(path, "/ws") {
-				c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
-				return
-			}
+	// Register Komari Compatibility & Theme Management Routes
+	s.setupKomariRoutes(s.themeManager)
 
-			// Try to open the file
+	// Static Assets / Embedded SPA & Komari Theme Routing
+	var fileServer http.Handler
+	if s.distFS != nil {
+		fileServer = http.FileServer(http.FS(s.distFS))
+	}
+
+	s.router.NoRoute(func(c *gin.Context) {
+		path := c.Request.URL.Path
+		// If API route or websocket, return 404
+		if strings.HasPrefix(path, "/api") || strings.HasPrefix(path, "/ws") {
+			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+			return
+		}
+
+		isAdminRoute := strings.HasPrefix(path, "/admin") || strings.HasPrefix(path, "/terminal")
+		activeTheme := s.themeManager.GetActiveTheme()
+
+		// Helper to prevent aggressive browser caching of HTML entry points
+		disableHTMLCache := func() {
+			c.Writer.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate, max-age=0")
+			c.Writer.Header().Set("Pragma", "no-cache")
+			c.Writer.Header().Set("Expires", "0")
+			c.Request.Header.Del("If-Modified-Since")
+			c.Request.Header.Del("If-None-Match")
+		}
+
+		// Handle Service Worker requests (/sw.js)
+		if path == "/sw.js" {
+			disableHTMLCache()
+			c.Writer.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+			// If active theme provides sw.js, serve it
+			if activeTheme != "builtin" && !isAdminRoute {
+				themeDir, err := s.themeManager.GetThemeDirPath(activeTheme)
+				if err == nil {
+					swCandidate := filepath.Join(themeDir, "dist", "sw.js")
+					if fi, err := os.Stat(swCandidate); err == nil && !fi.IsDir() {
+						http.ServeFile(c.Writer, c.Request, swCandidate)
+						return
+					}
+				}
+			}
+			// When active theme has no service worker, unregister any legacy service worker immediately
+			c.String(http.StatusOK, `self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', () => {
+  caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k))));
+  self.registration.unregister();
+});`)
+			return
+		}
+
+		// When a Komari theme is active, serve that theme's dist/
+		// (Preserve /admin and /terminal for built-in Probe management)
+		if activeTheme != "builtin" && !isAdminRoute {
+			themeDir, err := s.themeManager.GetThemeDirPath(activeTheme)
+			if err == nil {
+				distDir := filepath.Join(themeDir, "dist")
+				if fi, err := os.Stat(distDir); err != nil || !fi.IsDir() {
+					distDir = themeDir
+				}
+				relFile := strings.TrimPrefix(path, "/")
+				if relFile != "" {
+					candidate := filepath.Join(distDir, relFile)
+					if fi, err := os.Stat(candidate); err == nil && !fi.IsDir() {
+						if strings.HasSuffix(candidate, ".html") {
+							disableHTMLCache()
+						}
+						http.ServeFile(c.Writer, c.Request, candidate)
+						return
+					}
+					// If this asset is not in theme dist, check if it's in built-in dist
+					if s.distFS != nil {
+						if f, err := s.distFS.Open(relFile); err == nil {
+							_ = f.Close()
+							fileServer.ServeHTTP(c.Writer, c.Request)
+							return
+						}
+					}
+					// If this asset is a national flag, check if an installed theme carries it
+					if strings.HasPrefix(relFile, "assets/flags/") {
+						flagFile := filepath.Join(s.themeManager.themesDir, "ServerStatus", "dist", relFile)
+						if fi, err := os.Stat(flagFile); err == nil && !fi.IsDir() {
+							http.ServeFile(c.Writer, c.Request, flagFile)
+							return
+						}
+					}
+					// If it has a file extension and was not found, return 404 instead of HTML
+					if filepath.Ext(relFile) != "" {
+						c.Status(http.StatusNotFound)
+						return
+					}
+				}
+
+				// SPA fallback to theme's dist/index.html
+				indexPath := filepath.Join(distDir, "index.html")
+				if fi, err := os.Stat(indexPath); err == nil && !fi.IsDir() {
+					disableHTMLCache()
+					http.ServeFile(c.Writer, c.Request, indexPath)
+					return
+				}
+			}
+		}
+
+		// Fallback to built-in embedded Probe SPA
+		if s.distFS != nil && fileServer != nil {
 			trimmedPath := strings.TrimPrefix(path, "/")
 			if trimmedPath == "" {
 				trimmedPath = "index.html"
+			}
+			if trimmedPath == "index.html" || strings.HasSuffix(trimmedPath, ".html") {
+				disableHTMLCache()
 			}
 			f, err := s.distFS.Open(trimmedPath)
 			if err == nil {
@@ -241,19 +342,19 @@ func (s *Server) setupRoutes() {
 			}
 
 			// Fallback to index.html for SPA routing
+			disableHTMLCache()
 			c.Request.URL.Path = "/"
 			fileServer.ServeHTTP(c.Writer, c.Request)
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"service": "probe-server",
+			"version": version.Version,
+			"status":  "running",
+			"note":    "Web frontend is running separately or not embedded.",
 		})
-	} else {
-		s.router.GET("/", func(c *gin.Context) {
-			c.JSON(http.StatusOK, gin.H{
-				"service": "probe-server",
-				"version": version.Version,
-				"status":  "running",
-				"note":    "Web frontend is running separately or not embedded.",
-			})
-		})
-	}
+	})
 }
 
 // handleAgentWS handles long connections from probe agents.

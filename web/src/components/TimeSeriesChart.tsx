@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useMemo } from "react";
 import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
+import { ThemeMode } from "../types";
 
 export interface ChartSeries {
   label: string;
@@ -17,7 +18,7 @@ interface TimeSeriesChartProps {
   title?: string;
   icon?: React.ReactNode;
   headerRight?: React.ReactNode;
-  theme?: "blueprint" | "dark";
+  theme?: ThemeMode;
   legendPosition?: "top" | "bottom" | "both" | "none";
   yAxisLabel?: string;
   height?: number;
@@ -54,7 +55,14 @@ export const TimeSeriesChart: React.FC<TimeSeriesChartProps> = ({
   const wrapperRef = useRef<HTMLDivElement>(null);
   const plotRef = useRef<uPlot | null>(null);
 
-  const isBlueprint = theme === "blueprint";
+  const isDark = theme === "dark" || theme === "btop" || theme === "blueprint-dark";
+  const isLight = !isDark;
+  const isBlueprintLight = isLight;
+  const isBlueprintDark = theme === "blueprint-dark";
+  const isBlueprint = isBlueprintLight || isBlueprintDark;
+  const isBtopDark = theme === "btop";
+  const isBtopLight = theme === "btop-light";
+  const isBtop = isBtopDark;
 
   const [tooltip, setTooltip] = useState<TooltipState>({
     show: false,
@@ -113,7 +121,7 @@ export const TimeSeriesChart: React.FC<TimeSeriesChartProps> = ({
           show: true,
           size: 3.5,
           fill: s.color,
-          stroke: isBlueprint ? "#ffffff" : "#09090b",
+          stroke: isBlueprintDark ? "#070e1f" : isBlueprintLight ? "#ffffff" : isBtop ? "#06080d" : "#09090b",
           width: 1,
         },
         value: (_: uPlot, v: number | null) => {
@@ -131,7 +139,7 @@ export const TimeSeriesChart: React.FC<TimeSeriesChartProps> = ({
         drag: { x: false, y: false },
         points: {
           size: 6,
-          fill: isBlueprint ? "#2563eb" : "#ffffff",
+          fill: isBlueprintDark ? "#38bdf8" : isBlueprintLight ? "#2563eb" : isBtop ? "#00f0ff" : "#ffffff",
         },
       },
       legend: {
@@ -139,23 +147,35 @@ export const TimeSeriesChart: React.FC<TimeSeriesChartProps> = ({
       },
       axes: [
         {
-          stroke: isBlueprint ? "#94a3b8" : "#71717a",
+          stroke: isBlueprintDark ? "#38bdf8" : isBlueprintLight ? "#94a3b8" : isBtop ? "#38bdf8" : "#71717a",
           grid: {
-            stroke: isBlueprint ? "rgba(226, 232, 240, 0.8)" : "rgba(255, 255, 255, 0.04)",
+            stroke: isBlueprintDark
+              ? "rgba(56, 189, 248, 0.08)"
+              : isBlueprintLight
+              ? "rgba(226, 232, 240, 0.8)"
+              : isBtop
+              ? "rgba(0, 240, 255, 0.08)"
+              : "rgba(255, 255, 255, 0.04)",
             width: 1,
           },
-          ticks: { stroke: isBlueprint ? "#cbd5e1" : "#3f3f46", width: 1 },
+          ticks: { stroke: isBlueprintDark ? "#1d2d52" : isBlueprintLight ? "#cbd5e1" : isBtop ? "#1b253b" : "#3f3f46", width: 1 },
           font: "10px JetBrains Mono, monospace",
           gap: 4,
           size: 24,
         },
         {
-          stroke: isBlueprint ? "#94a3b8" : "#71717a",
+          stroke: isBlueprintDark ? "#38bdf8" : isBlueprintLight ? "#94a3b8" : isBtop ? "#38bdf8" : "#71717a",
           grid: {
-            stroke: isBlueprint ? "rgba(226, 232, 240, 0.8)" : "rgba(255, 255, 255, 0.04)",
+            stroke: isBlueprintDark
+              ? "rgba(56, 189, 248, 0.08)"
+              : isBlueprintLight
+              ? "rgba(226, 232, 240, 0.8)"
+              : isBtop
+              ? "rgba(0, 240, 255, 0.08)"
+              : "rgba(255, 255, 255, 0.04)",
             width: 1,
           },
-          ticks: { stroke: isBlueprint ? "#cbd5e1" : "#3f3f46", width: 1 },
+          ticks: { stroke: isBlueprintDark ? "#1d2d52" : isBlueprintLight ? "#cbd5e1" : isBtop ? "#1b253b" : "#3f3f46", width: 1 },
           font: "10px JetBrains Mono, monospace",
           gap: 4,
           size: 54,
@@ -197,7 +217,7 @@ export const TimeSeriesChart: React.FC<TimeSeriesChartProps> = ({
         plotRef.current = null;
       }
     };
-  }, [effectiveTimestamps, effectiveSeriesList, height, isBlueprint]);
+  }, [effectiveTimestamps, effectiveSeriesList, height, isBlueprint, isBtop]);
 
   // Robust Native Hover Event Handlers
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -276,7 +296,7 @@ export const TimeSeriesChart: React.FC<TimeSeriesChartProps> = ({
             className="h-2 w-2 rounded-full inline-block shrink-0"
             style={{ backgroundColor: s.color }}
           />
-          <span className={isBlueprint ? "text-slate-600 font-medium" : "text-zinc-400"}>
+          <span className={isBlueprintDark ? "text-slate-300" : isBlueprintLight ? "text-slate-600 font-medium" : "text-zinc-400"}>
             {s.label}
           </span>
         </button>
@@ -286,9 +306,15 @@ export const TimeSeriesChart: React.FC<TimeSeriesChartProps> = ({
 
   return (
     <div
-      className={`rounded-xl border p-3.5 transition-all overflow-hidden ${
-        isBlueprint
+      className={`border p-3.5 transition-all overflow-hidden ${
+        isBtop ? "rounded-none" : "rounded-xl"
+      } ${
+        isBlueprintDark
+          ? "border-[#1d2d52] bg-[#0b152d]/90 shadow-[0_4px_20px_rgba(0,0,0,0.4)] text-slate-100"
+          : isBlueprintLight
           ? "border-slate-200/90 bg-white shadow-sm"
+          : isBtop
+          ? "border-[#1b253b] bg-[#070b14]/90 shadow-[0_4px_20px_rgba(0,0,0,0.5)] font-mono"
           : "border-zinc-800/80 bg-zinc-950/80 shadow-inner"
       }`}
     >
@@ -296,28 +322,30 @@ export const TimeSeriesChart: React.FC<TimeSeriesChartProps> = ({
       {(title || headerRight) && (
         <div
           className={`mb-2 flex items-center justify-between gap-2 pb-2 border-b ${
-            isBlueprint ? "border-slate-100" : "border-zinc-800/60"
+            isBlueprintDark ? "border-[#1d2d52]" : isBlueprintLight ? "border-slate-100" : isBtop ? "border-[#1b253b]" : "border-zinc-800/60"
           }`}
         >
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 min-w-0">
+            {isBtop && <span className="text-cyan-500 font-mono text-xs select-none">┌─</span>}
             {icon && <span className="shrink-0">{icon}</span>}
             {title && (
               <span
-                className={`text-xs font-mono font-bold tracking-tight ${
-                  isBlueprint ? "text-slate-800" : "text-zinc-200"
+                className={`text-xs font-mono font-bold tracking-tight truncate ${
+                  isBlueprintDark ? "text-slate-100" : isBlueprintLight ? "text-slate-800" : isBtop ? "text-cyan-300" : "text-zinc-200"
                 }`}
               >
-                {title}
+                {isBtop ? `[ ${title} ]` : title}
               </span>
             )}
           </div>
           {headerRight && (
             <div
-              className={`text-xs font-mono font-semibold ${
-                isBlueprint ? "text-slate-600" : "text-zinc-300"
+              className={`text-xs font-mono font-semibold shrink-0 flex items-center gap-1.5 ${
+                isBlueprintDark ? "text-slate-300" : isBlueprintLight ? "text-slate-600" : isBtop ? "text-cyan-400" : "text-zinc-300"
               }`}
             >
               {headerRight}
+              {isBtop && <span className="text-cyan-500 font-mono text-xs select-none">─┐</span>}
             </div>
           )}
         </div>
@@ -330,7 +358,7 @@ export const TimeSeriesChart: React.FC<TimeSeriesChartProps> = ({
       {yAxisLabel && (
         <div
           className={`text-10 font-mono mb-1 ${
-            isBlueprint ? "text-slate-500 font-medium" : "text-zinc-400"
+            isBlueprintDark ? "text-slate-400 font-medium" : isBlueprintLight ? "text-slate-500 font-medium" : isBtop ? "text-cyan-400/80" : "text-zinc-400"
           }`}
         >
           {yAxisLabel}
@@ -352,7 +380,13 @@ export const TimeSeriesChart: React.FC<TimeSeriesChartProps> = ({
             className="absolute top-0 bottom-6 pointer-events-none border-r border-dashed z-20"
             style={{
               left: `${tooltip.x}px`,
-              borderColor: isBlueprint ? "rgba(99, 102, 241, 0.6)" : "rgba(165, 180, 252, 0.5)",
+              borderColor: isBlueprintDark
+                ? "rgba(56, 189, 248, 0.6)"
+                : isBlueprintLight
+                ? "rgba(99, 102, 241, 0.6)"
+                : isBtop
+                ? "rgba(0, 240, 255, 0.7)"
+                : "rgba(165, 180, 252, 0.5)",
             }}
           />
         )}
@@ -361,8 +395,12 @@ export const TimeSeriesChart: React.FC<TimeSeriesChartProps> = ({
         {tooltip.show && (
           <div
             className={`absolute z-30 pointer-events-none rounded-xl border p-2.5 shadow-2xl font-mono text-xs transition-all duration-75 backdrop-blur-xl ${
-              isBlueprint
+              isBlueprintDark
+                ? "bg-[#070e1f]/95 border-[#1d2d52] text-slate-100 shadow-[0_0_20px_rgba(0,0,0,0.8)]"
+                : isBlueprintLight
                 ? "bg-white/95 border-slate-200/90 text-slate-800 shadow-slate-300/80"
+                : isBtop
+                ? "bg-[#080c14]/95 border-[#1b253b] text-slate-100 shadow-[0_0_20px_rgba(0,240,255,0.15)]"
                 : "bg-zinc-900/95 border-zinc-700/80 text-zinc-100 shadow-black/90"
             }`}
             style={{
@@ -373,7 +411,13 @@ export const TimeSeriesChart: React.FC<TimeSeriesChartProps> = ({
           >
             <div
               className={`font-bold text-10 mb-1.5 pb-1 border-b flex items-center justify-between ${
-                isBlueprint ? "border-slate-100 text-slate-500" : "border-zinc-800 text-zinc-400"
+                isBlueprintDark
+                  ? "border-[#1d2d52] text-slate-400"
+                  : isBlueprintLight
+                  ? "border-slate-100 text-slate-500"
+                  : isBtop
+                  ? "border-[#1b253b] text-cyan-400"
+                  : "border-zinc-800 text-zinc-400"
               }`}
             >
               <span>时间戳</span>
@@ -389,7 +433,7 @@ export const TimeSeriesChart: React.FC<TimeSeriesChartProps> = ({
                     />
                     <span
                       className={`truncate max-w-[85px] ${
-                        isBlueprint ? "text-slate-600 font-medium" : "text-zinc-400"
+                        isBlueprintDark ? "text-slate-300" : isBlueprintLight ? "text-slate-600 font-medium" : "text-zinc-400"
                       }`}
                     >
                       {item.label}
@@ -397,7 +441,7 @@ export const TimeSeriesChart: React.FC<TimeSeriesChartProps> = ({
                   </span>
                   <span
                     className={`font-bold font-mono ${
-                      isBlueprint ? "text-slate-900" : "text-zinc-100"
+                      isBlueprintDark ? "text-slate-100" : isBlueprintLight ? "text-slate-900" : "text-zinc-100"
                     }`}
                   >
                     {item.valStr}
@@ -411,6 +455,14 @@ export const TimeSeriesChart: React.FC<TimeSeriesChartProps> = ({
 
       {/* Bottom Legend */}
       {(legendPosition === "bottom" || legendPosition === "both") && renderLegend()}
+
+      {/* Terminal bottom frame in btop mode */}
+      {isBtop && (
+        <div className="mt-1.5 flex items-center justify-between text-[10px] text-[#1b253b] font-mono select-none">
+          <span>└──────────────────────────</span>
+          <span>┘</span>
+        </div>
+      )}
     </div>
   );
 };
