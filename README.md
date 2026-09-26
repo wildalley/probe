@@ -44,13 +44,13 @@
   - **指标与图标兼容**：实现 Komari 的 `public:queryMetrics` / `public:getPingMetricStats` RPC 与 `/api/recent/{uuid}` 历史接口（延迟/丢包图表与实例监控页依赖它们），OS 图标与地区旗帜在内置解析器找不到时回退到程序内嵌的通用图标，任何 Komari 主题都不会出现破图；
   - 独立管理后台页面（`/admin`），主题切换与管理操作彻底解耦。
   - **Komari 兼容接口一览**（对主题开发者）：
-    - JSON-RPC 2.0（`/api/rpc2`，HTTP POST 与 WebSocket 双通道）：`common:getNodes`、`common:getNodesLatestStatus`、`common:getNodeRecentStatus`、`common:getRecords`、`common:getPublicInfo`、`common:getVersion`，以及指标类 `public:queryMetrics`（`ping.latency_ms` / `ping.loss` / `cpu.usage` / `memory.used` / `net.in.rate` / `net.out.rate` / `load.load1` 等，ping 序列按 `tags.task_id` 分组）、`public:getPingMetricStats`（每任务 loss/min/max/avg/latest/p50/p99/p99_p50_ratio）、`public:getPublicPingTasks`；
+    - JSON-RPC 2.0（`/api/rpc2`，HTTP POST 与 WebSocket 双通道）：`common:getNodes`、`common:getNodesLatestStatus`、`common:getNodeRecentStatus`、`common:getRecords`、`common:getPublicInfo`、`common:getVersion`，以及指标类 `public:queryMetrics`（`ping.latency_ms` / `ping.loss` / `cpu.usage` / `memory.used` / `net.in.rate` / `net.out.rate` / `load.load1` 等，ping 序列按 `tags.task_id` 分组；`ping.loss` 为**丢包事件语义**——干净桶 `0`、丢包桶 `100`，且丢包桶不下发延迟样本，对齐上游「全丢桶无延迟样本」约定。窗口平均丢包率仅从 stats 与实时卡片下发。注意：`ping.loss` 事件依赖 Agent 上报的丢失位，建议 Agent 与服务端一同升级，否则丢包标记不显示）、`public:getPingMetricStats`（每任务 loss/min/max/avg/latest/p50/p99/p99_p50_ratio）、`public:getPublicPingTasks`；
     - REST 与 WebSocket：`/api/nodes`、`/api/recent/{uuid}`（最近 150 个状态点，记录形状与实时 WS 一致）、`/api/records/load`、`/api/records/ping`、`/api/task/ping`、`/api/public`、实时流 `/api/clients`（WS）；
     - 静态资源：`/assets/flags/*`、`/assets/flags-4x3/*`、`/assets/logo/*`（OS 图标支持未哈希文件名解析与多主题目录回退，找不到时返回内嵌通用图标而非 404）。
 - **现代前端技术栈与移动端深度适配**：基于 React 19、Tailwind CSS 4 与 HeroUI 构建。重构了移动端全屏响应式体验：导航顶栏自适应紧凑折叠与抽屉菜单彻底杜绝内容遮挡，地区支持横向平滑滚动筛选；管理后台全面采用移动端全屏抽屉排版防溢出，详情页主机切换下拉采用居中防越界浮层与毛玻璃遮罩。
 - **uPlot 毫秒级时序图**：体积仅 30KB，微秒级渲染上万点数据；全功能 **Hover 垂直标尺 + 毛玻璃浮动指示气泡**，实时展示精确时间与数值。
 - **主机卡片双段胶囊网络监测条**：双段 40 槽位对称胶囊条设计，左半段对齐呈现目标名称与实时延迟（如 44ms），右半段呈现丢包率百分比（如 0%）；下半部分对称排列 20+20 个圆角状态胶囊条。平稳状态呈沉稳深绿（`#268462`），轻度升高波动呈现高亮鲜蓝（`#316aea`）；Hover 悬浮精准弹出带小尖角指针的 Tooltip 浮层气泡（显示 `HH:mm · X ms`），同行其余胶囊条自动半透明淡化聚焦，内置边界智能约束防止卡片边缘裁剪。
-- **网络质量监测系统 (Network Probes)**：支持 ICMP / TCP / HTTP 探测（Google、电信、联通、移动、YouTube、ChatGPT、Claude 等），按目标展示实时延迟与丢包分布。
+- **网络质量监测系统 (Network Probes)**：支持 ICMP / TCP / HTTP 探测（Google、电信、联通、移动、YouTube、ChatGPT、Claude 等），按目标展示实时延迟与丢包分布。Agent 随每次上报携带「最近一次探测是否丢包」的事件位，历史时序按事件记录丢包——第三方主题的丢包标记精确到每次真实丢包，而不是被窗口平均恒置为正；
 - **设备全景详情页**：
   - CPU 与负载、物理内存与 Swap、实时网络吞吐、TCP/UDP 连接数、磁盘读写 IOPS、进程数等 6 组轻量时序图表。
   - 公网 IPv4 / IPv6 双栈展示，支持 **IP 地址一键脱敏隐藏** 与 **一键复制真实地址**。
