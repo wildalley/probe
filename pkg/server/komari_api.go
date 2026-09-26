@@ -134,6 +134,16 @@ func (s *Server) handleKomariNodes(c *gin.Context) {
 				MemoryTotal: n.System.MemTotal,
 				DiskTotal:   n.System.DiskTotal,
 			},
+			Price:            n.Billing.Price,
+			BillingCycle:     komariBillingCycleDays(n.Billing.BillingCycle),
+			AutoRenewal:      n.Billing.AutoRenewal,
+			Currency:         komariCurrencyCode(n.Billing.Currency),
+			ExpiredAt:        expiredOrNil(n.Billing.ExpiryDate),
+			Tags:             strings.Join(n.Tags, ","),
+			TrafficLimit:     n.Billing.BandwidthQuota,
+			TrafficLimitType: "sum",
+			Hidden:           false,
+			Weight:           0,
 		})
 	}
 
@@ -695,6 +705,66 @@ func (s *Server) executeRPCMethod(method string, params interface{}) (interface{
 	}
 }
 
+// komariBillingCycleDays converts Probe's billing cycle label into Komari's
+// cycle-day integer: -1 = one-time, 0 = unset, otherwise the period length in
+// days. Themes match ranges (27-32 → monthly, 360-370 → annual, ...) to derive
+// 月均/日均支出 and the remaining-value figure; a hardcoded 0 made every node
+// read as "no billing period" and those panels showed 不适用.
+func komariBillingCycleDays(cycle string) int {
+	switch strings.ToLower(strings.TrimSpace(cycle)) {
+	case "month":
+		return 30
+	case "quarter":
+		return 90
+	case "half_year":
+		return 180
+	case "year":
+		return 365
+	case "two_year":
+		return 730
+	case "three_year":
+		return 1095
+	case "one_time", "once":
+		return -1
+	default:
+		return 0
+	}
+}
+
+// komariCurrencyCode normalizes the operator's currency note into the ISO
+// code the themes' exchange-rate tables expect. Operators type "$" or "¥",
+// while the tables key on USD/CNY/...
+func komariCurrencyCode(currency string) string {
+	c := strings.TrimSpace(currency)
+	switch c {
+	case "", "$":
+		return "USD"
+	case "¥", "￥":
+		return "CNY"
+	case "€":
+		return "EUR"
+	case "£":
+		return "GBP"
+	case "HK$":
+		return "HKD"
+	case "JP¥", "JP￥":
+		return "JPY"
+	}
+	if len(c) == 3 {
+		return strings.ToUpper(c)
+	}
+	return c
+}
+
+// expiredOrNil serializes an unset expiry as JSON null — themes treat a
+// non-null value as a parseable date, and "" breaks their dayjs parsing.
+func expiredOrNil(date string) interface{} {
+	if strings.TrimSpace(date) == "" {
+		return nil
+	}
+	return date
+}
+
 // getKomariRPCNodes maps Probe node inventory to Komari common:getNodes representation (map keyed by UUID).
 func (s *Server) getKomariRPCNodes() map[string]KomariRpcNode {
 	nodes := s.hub.GetAllStates()
@@ -750,12 +820,12 @@ func (s *Server) getKomariRPCNodes() map[string]KomariRpcNode {
 			Weight:           0,
 			Price:            n.Billing.Price,
 			Tags:             tagsStr,
-			BillingCycle:     0,
-			Currency:         currency,
+			BillingCycle:     komariBillingCycleDays(n.Billing.BillingCycle),
+			Currency:         komariCurrencyCode(n.Billing.Currency),
 			Group:            group,
 			TrafficLimit:     n.Billing.BandwidthQuota,
 			TrafficLimitType: "sum",
-			ExpiredAt:        n.Billing.ExpiryDate,
+			ExpiredAt:        expiredOrNil(n.Billing.ExpiryDate),
 			CreatedAt:        createdStr,
 			UpdatedAt:        updatedStr,
 			IPv4:             n.System.PublicIP,

@@ -30,9 +30,9 @@ type KomariThemeItem struct {
 
 // KomariMarketPayload represents the official v1.json market structure.
 type KomariMarketPayload struct {
-	Schema    int                   `json:"schema"`
-	UpdatedAt string                `json:"updated_at"`
-	Themes    []KomariMarketTheme   `json:"themes"`
+	Schema    int                 `json:"schema"`
+	UpdatedAt string              `json:"updated_at"`
+	Themes    []KomariMarketTheme `json:"themes"`
 }
 
 // KomariMarketTheme is an individual entry in the Komari theme market.
@@ -50,9 +50,9 @@ type KomariMarketTheme struct {
 
 // KomariPublicResponse is returned by GET /api/public.
 type KomariPublicResponse struct {
-	Status  string                 `json:"status"`
-	Message string                 `json:"message"`
-	Data    KomariPublicData       `json:"data"`
+	Status  string           `json:"status"`
+	Message string           `json:"message"`
+	Data    KomariPublicData `json:"data"`
 }
 
 // KomariPublicData contains site & theme info for Komari frontends.
@@ -75,6 +75,20 @@ type KomariClient struct {
 	Remark    string       `json:"remark,omitempty"`
 	Version   string       `json:"version,omitempty"`
 	System    KomariSystem `json:"system"`
+	// Billing & quota. Komari themes derive 月均/日均支出, 总价值 and 剩余价值
+	// from these: billing_cycle is the period length in DAYS (-1 = one-time,
+	// 0 = unset), currency must be an ISO code the theme's rate table knows,
+	// and expired_at serializes as null when unset.
+	Price            float64     `json:"price"`
+	BillingCycle     int         `json:"billing_cycle"`
+	AutoRenewal      bool        `json:"auto_renewal"`
+	Currency         string      `json:"currency"`
+	ExpiredAt        interface{} `json:"expired_at"`
+	Tags             string      `json:"tags"`
+	TrafficLimit     uint64      `json:"traffic_limit"`
+	TrafficLimitType string      `json:"traffic_limit_type"`
+	Hidden           bool        `json:"hidden"`
+	Weight           int         `json:"weight"`
 }
 
 // KomariSystem represents node static hardware inventory.
@@ -134,13 +148,13 @@ type KomariLiveConnections struct {
 
 // KomariClientsWSResponse is the payload sent over WebSocket /api/clients.
 type KomariClientsWSResponse struct {
-	Status string                     `json:"status"`
-	Data   KomariClientsWSData        `json:"data"`
+	Status string              `json:"status"`
+	Data   KomariClientsWSData `json:"data"`
 }
 
 type KomariClientsWSData struct {
-	Online []string                              `json:"online"`
-	Data   map[string]KomariLiveNodeData         `json:"data"`
+	Online []string                      `json:"online"`
+	Data   map[string]KomariLiveNodeData `json:"data"`
 }
 
 // Helper to extract localized string from string or map[string]string.
@@ -203,34 +217,34 @@ type JSONRPCError struct {
 
 // KomariRpcNode represents a node in common:getNodes for modern Komari themes.
 type KomariRpcNode struct {
-	UUID             string  `json:"uuid"`
-	Name             string  `json:"name"`
-	CPUName          string  `json:"cpu_name"`
-	Virtualization   string  `json:"virtualization"`
-	Arch             string  `json:"arch"`
-	CPUCores         int     `json:"cpu_cores"`
-	OS               string  `json:"os"`
-	KernelVersion    string  `json:"kernel_version"`
-	GPUName          string  `json:"gpu_name"`
-	Region           string  `json:"region"`
-	MemTotal         uint64  `json:"mem_total"`
-	SwapTotal        uint64  `json:"swap_total"`
-	DiskTotal        uint64  `json:"disk_total"`
-	Version          string  `json:"version"`
-	Weight           int     `json:"weight"`
-	Price            float64 `json:"price"`
-	Tags             string  `json:"tags"`
-	BillingCycle     int     `json:"billing_cycle"`
-	Currency         string  `json:"currency"`
-	Group            string  `json:"group"`
-	TrafficLimit     uint64  `json:"traffic_limit"`
-	TrafficLimitType string  `json:"traffic_limit_type"`
-	ExpiredAt        string  `json:"expired_at"`
-	CreatedAt        string  `json:"created_at"`
-	UpdatedAt        string  `json:"updated_at"`
-	IPv4             string  `json:"ipv4"`
-	IPv6             string  `json:"ipv6"`
-	PublicRemark     string  `json:"public_remark"`
+	UUID             string      `json:"uuid"`
+	Name             string      `json:"name"`
+	CPUName          string      `json:"cpu_name"`
+	Virtualization   string      `json:"virtualization"`
+	Arch             string      `json:"arch"`
+	CPUCores         int         `json:"cpu_cores"`
+	OS               string      `json:"os"`
+	KernelVersion    string      `json:"kernel_version"`
+	GPUName          string      `json:"gpu_name"`
+	Region           string      `json:"region"`
+	MemTotal         uint64      `json:"mem_total"`
+	SwapTotal        uint64      `json:"swap_total"`
+	DiskTotal        uint64      `json:"disk_total"`
+	Version          string      `json:"version"`
+	Weight           int         `json:"weight"`
+	Price            float64     `json:"price"`
+	Tags             string      `json:"tags"`
+	BillingCycle     int         `json:"billing_cycle"`
+	Currency         string      `json:"currency"`
+	Group            string      `json:"group"`
+	TrafficLimit     uint64      `json:"traffic_limit"`
+	TrafficLimitType string      `json:"traffic_limit_type"`
+	ExpiredAt        interface{} `json:"expired_at"` // null when unset
+	CreatedAt        string      `json:"created_at"`
+	UpdatedAt        string      `json:"updated_at"`
+	IPv4             string      `json:"ipv4"`
+	IPv6             string      `json:"ipv6"`
+	PublicRemark     string      `json:"public_remark"`
 }
 
 // KomariRpcNodeStatus represents live node telemetry for common:getNodesLatestStatus.
@@ -254,7 +268,7 @@ type KomariRpcNodeStatus struct {
 	Process        int     `json:"process"`
 	// Time is RFC3339: themes construct Date objects from it directly, and an
 	// epoch-seconds number read as milliseconds lands in January 1970.
-	Time           string  `json:"time"`
+	Time string `json:"time"`
 }
 
 // KomariPingTask represents a ping monitoring task in Komari format.
@@ -267,5 +281,3 @@ type KomariPingTask struct {
 	Type      string   `json:"type"`
 	Interval  int      `json:"interval"`
 }
-
-

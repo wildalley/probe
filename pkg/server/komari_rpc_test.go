@@ -517,3 +517,111 @@ func TestKomariLatestStatusTimeIsRFC3339(t *testing.T) {
 		t.Fatalf("time %q not RFC3339: %v", st.Time, err)
 	}
 }
+
+// TestKomariBillingCycleDays pins the Probe-label → Komari cycle-day mapping.
+// Komari themes match day ranges (27-32 → monthly, 360-370 → annual, ...) to
+// derive 月均/日均支出 and remaining value; a hardcoded 0 made every finance
+// panel render 不适用.
+func TestKomariBillingCycleDays(t *testing.T) {
+	cases := map[string]int{
+		"month":      30,
+		"quarter":    90,
+		"half_year":  180,
+		"year":       365,
+		"two_year":   730,
+		"three_year": 1095,
+		"one_time":   -1,
+		"once":       -1,
+		"":           0,
+		"whatever":   0,
+	}
+	for cycle, want := range cases {
+		if got := komariBillingCycleDays(cycle); got != want {
+			t.Errorf("komariBillingCycleDays(%q) = %d, want %d", cycle, got, want)
+		}
+	}
+	// Every recognized period must land inside the theme's matching range.
+	ranges := map[string][2]int{
+		"month": {27, 32}, "quarter": {87, 95}, "half_year": {175, 185},
+		"year": {360, 370}, "two_year": {720, 750}, "three_year": {1080, 1150},
+	}
+	for cycle, r := range ranges {
+		if got := komariBillingCycleDays(cycle); got < r[0] || got > r[1] {
+			t.Errorf("cycle %q → %d days escapes the theme's range %v", cycle, got, r)
+		}
+	}
+}
+
+// TestKomariCurrencyCode pins the operator-note → ISO code normalization the
+// themes' exchange-rate tables require ($/¥ are not table keys).
+func TestKomariCurrencyCode(t *testing.T) {
+	cases := map[string]string{
+		"": "USD", "$": "USD", "¥": "CNY", "￥": "CNY", "€": "EUR", "£": "GBP",
+		"cny": "CNY", "USD": "USD", "HK$": "HKD", "AUD": "AUD",
+	}
+	for in, want := range cases {
+		if got := komariCurrencyCode(in); got != want {
+			t.Errorf("komariCurrencyCode(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// TestKomariNodesExposeBillingFields verifies /api/nodes carries the billing
+// fields Komari themes need, with the cycle in days and the expiry as null
+// when unset.
+func TestKomariNodesExposeBillingFields(t *testing.T) {
+	srv, cleanup := setupTestServerForRPC(t)
+	defer cleanup()
+
+	srv.storage.SaveNodeSettings(&model.NodeSettings{
+		NodeID:         "test-node-1",
+		Price:          20.17,
+		Currency:       "¥",
+		BillingCycle:   "year",
+		ExpiryDate:     "2026-10-22",
+		AutoRenewal:    true,
+		BandwidthQuota: 2000,
+	})
+	srv.hub.ReloadSettings()
+	srv.hub.IngestReport(&model.NodeReport{
+		NodeID:  "test-node-1",
+		Network: model.NetworkInfo{BytesSent: 100, BytesRecv: 200},
+	}, "192.0.2.1")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/nodes", nil)
+	rec := httptest.NewRecorder()
+	srv.router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	var body struct {
+		Data []map[string]interface{} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	var node map[string]interface{}
+	for _, n := range body.Data {
+		if n["uuid"] == "test-node-1" {
+			node = n
+		}
+	}
+	if node == nil {
+		t.Fatal("node missing from /api/nodes")
+	}
+	if node["price"].(float64) != 20.17 {
+		t.Fatalf("price = %v", node["price"])
+	}
+	if node["billing_cycle"].(float64) != 365 {
+		t.Fatalf("billing_cycle = %v, want 365 (year)", node["billing_cycle"])
+	}
+	if node["currency"] != "CNY" {
+		t.Fatalf("currency = %v, want CNY (¥ normalized)", node["currency"])
+	}
+	if node["expired_at"] != "2026-10-22" {
+		t.Fatalf("expired_at = %v", node["expired_at"])
+	}
+	if node["traffic_limit"].(float64) != 2000 {
+		t.Fatalf("traffic_limit = %v", node["traffic_limit"])
+	}
+}
