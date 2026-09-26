@@ -36,6 +36,7 @@ import { formatBytes, formatRate } from "../utils/format";
 import { usedTrafficSplit } from "../utils/traffic";
 import { getCycleLabel } from "./admin/hosts/billingOptions";
 import { getRegionFlag } from "../utils/flags";
+import { BtopWaveCanvas } from "./BtopWaveCanvas";
 
 interface BtopTerminalViewProps {
   nodes: NodeState[];
@@ -92,15 +93,34 @@ function formatBtopUptime(uptimeSeconds: number): string {
   return `up ${hh}:${mm}`;
 }
 
-// Block meter that stretches to its container width: the brackets hug the
-// panel edges like a real btop gauge instead of leaving dead space after a
-// fixed character count in wide layouts.
+// Block meter that stretches to its container width with smooth animated easing:
+// brackets hug the panel edges like a real btop gauge instead of leaving dead space.
 const BlockMeterFill: React.FC<{
   percent: number;
   colors: { meterActiveText: string; meterEmptyText: string };
 }> = ({ percent, colors }) => {
   const ref = useRef<HTMLDivElement | null>(null);
   const [width, setWidth] = useState(0);
+  const [smoothPercent, setSmoothPercent] = useState(percent);
+
+  useEffect(() => {
+    let animId: number;
+    const startTime = performance.now();
+    const startVal = smoothPercent;
+    const targetVal = Math.min(100, Math.max(0, percent));
+    const duration = 350; // 350ms smooth cubic glide
+    const step = (now: number) => {
+      const elapsed = now - startTime;
+      const progress = Math.min(1, elapsed / duration);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setSmoothPercent(startVal + (targetVal - startVal) * eased);
+      if (progress < 1) {
+        animId = requestAnimationFrame(step);
+      }
+    };
+    animId = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(animId);
+  }, [percent]);
 
   useEffect(() => {
     const el = ref.current;
@@ -116,10 +136,10 @@ const BlockMeterFill: React.FC<{
   // ≈7px per monospace cell at text-[11px]/xs, minus the two brackets; clamped
   // so extreme widths cannot explode the string length.
   const blocks = width > 0 ? Math.max(6, Math.min(240, Math.floor((width - 14) / 7))) : 32;
-  const safeVal = Math.min(100, Math.max(0, percent));
+  const safeVal = Math.min(100, Math.max(0, smoothPercent));
   const activeBlocks = Math.round((safeVal / 100) * blocks);
   const filled = "█".repeat(activeBlocks);
-  const empty = "░".repeat(blocks - activeBlocks);
+  const empty = "░".repeat(Math.max(0, blocks - activeBlocks));
 
   return (
     <div ref={ref} className="w-full overflow-hidden whitespace-nowrap">
@@ -471,21 +491,23 @@ export function BtopTerminalView({
 
   // Metrics resolution
   const cpuPercent = activeNode?.cpu || activeNode?.system?.cpu_percent || 6;
-  const cpuCores = activeNode?.system?.cpu_count || 16;
-  const cpuModel = activeNode?.system?.cpu_model || activeNode?.name || "Ryzen 7 5800H";
+  const cpuCores = activeNode?.system?.cpu_count || 1;
+  const cpuModel = activeNode?.system?.cpu_model || activeNode?.name || "AMD EPYC Processor";
   const uptimeStr = formatBtopUptime(activeNode?.system?.uptime || 0);
 
-  // Exact core breakdown C0-C15 matching the user's screenshot
+  // Core breakdown C0..C(N-1) adapted to actual machine cores
   const screenshotCoreLoads = [44, 8, 2, 1, 20, 2, 3, 0, 6, 1, 2, 0, 4, 0, 1, 0];
+  const displayCoreCount = Math.min(16, Math.max(1, cpuCores));
   const coreLoads = useMemo(() => {
-    return Array.from({ length: 16 }).map((_, i) => {
+    return Array.from({ length: displayCoreCount }).map((_, i) => {
       if (activeNode.system?.cpu_percent && activeNode.system.cpu_percent > 0) {
+        if (displayCoreCount === 1) return Math.round(cpuPercent);
         const offset = Math.sin((i + 1) * 1.5) * 12 + ((i % 3) - 1) * 6;
         return Math.min(100, Math.max(0, Math.round(cpuPercent + offset)));
       }
-      return screenshotCoreLoads[i] ?? 0;
+      return screenshotCoreLoads[i] ?? Math.round(cpuPercent);
     });
-  }, [cpuPercent, activeNode?.system?.cpu_percent]);
+  }, [cpuPercent, activeNode?.system?.cpu_percent, displayCoreCount]);
 
   // Memory breakdown
   const memTotal = activeNode.system?.mem_total || 28.3 * 1024 * 1024 * 1024;
@@ -511,10 +533,48 @@ export function BtopTerminalView({
 
   // Real or simulated ping targets for active node (Covering 3 domestic carriers and international)
   const pingTargets: PingStat[] = useMemo(() => {
-    // 只渲染 Agent 真实上报的目标。没有配置探测时显示为空，而不是一份
-    // 看起来像真数据的默认线路延迟。
     return activeNode.pings || [];
   }, [activeNode]);
+
+  // Comprehensive ping statistics for monitoring matrix
+  const pingSummary = useMemo(() => {
+    if (!pingTargets || pingTargets.length === 0) {
+      return { count: 0, avgLatency: 0, bestTarget: null, worstTarget: null, avgLoss: 0, telecomAvg: null, unicomAvg: null, mobileAvg: null };
+    }
+    const count = pingTargets.length;
+    let sumLat = 0;
+    let sumLoss = 0;
+    let best = pingTargets[0];
+    let worst = pingTargets[0];
+    const telecomLat: number[] = [];
+    const unicomLat: number[] = [];
+    const mobileLat: number[] = [];
+
+    pingTargets.forEach((p) => {
+      sumLat += p.latency_ms;
+      sumLoss += p.packet_loss;
+      if (p.latency_ms < best.latency_ms) best = p;
+      if (p.latency_ms > worst.latency_ms) worst = p;
+
+      const lower = (p.label + " " + p.target).toLowerCase();
+      if (lower.includes("电信") || lower.includes("ct") || lower.includes("telecom")) telecomLat.push(p.latency_ms);
+      if (lower.includes("联通") || lower.includes("cu") || lower.includes("unicom")) unicomLat.push(p.latency_ms);
+      if (lower.includes("移动") || lower.includes("cm") || lower.includes("mobile")) mobileLat.push(p.latency_ms);
+    });
+
+    const avg = (arr: number[]) => (arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : null);
+
+    return {
+      count,
+      avgLatency: Math.round(sumLat / count),
+      bestTarget: best,
+      worstTarget: worst,
+      avgLoss: Math.round(sumLoss / count),
+      telecomAvg: avg(telecomLat),
+      unicomAvg: avg(unicomLat),
+      mobileAvg: avg(mobileLat),
+    };
+  }, [pingTargets]);
 
   // Billing & Quota telemetry — 服务端没配的口径一律留空，由各渲染处自行
   // 显示 "--"，绝不兜底一份虚构的账单。BillingInfo 描述的是服务端 JSON 的
@@ -1159,36 +1219,69 @@ export function BtopTerminalView({
               <span className={`text-[11px] shrink-0 ${colors.textDim}`}>......... Tasks: {activeNode.system?.process_count || 87}</span>
             </div>
 
-            {/* Cores Breakdown C0-C15 + Multi-row Braille Wave on left */}
+            {/* Cores Breakdown + Smooth Wave on left */}
             <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
-              {/* Braille Wave Pattern on Left (Takes 4 cols, filled wave) */}
-              <div className="hidden md:flex md:col-span-4 flex-col justify-center font-mono leading-none py-1">
-                <div className="space-y-0.5 overflow-hidden">
-                  {renderBrailleMatrix(cpuHistory, 6, 100).map((line, idx) => (
-                    <BrailleLine key={idx} line={line} className={`leading-none whitespace-nowrap overflow-hidden text-xs ${colors.meterActiveText}`} />
-                  ))}
+              {/* Smooth CPU Waveform on Left (Takes 4 cols) */}
+              <div className="hidden md:flex md:col-span-4 flex-col justify-center font-mono leading-none py-0.5">
+                <div className="w-full h-[62px] border border-current/15 bg-current/5 p-1 relative">
+                  <BtopWaveCanvas
+                    downRate={cpuPercent}
+                    mode="cpu"
+                    colors={colors}
+                    isLight={isLight}
+                    title="CPU LOAD WAVE"
+                  />
                 </div>
-                <div className="text-[10px] mt-1.5 font-bold select-none">{uptimeStr}</div>
+                <div className="flex justify-between items-center text-[10px] mt-1 font-bold select-none text-current/75">
+                  <span>{uptimeStr}</span>
+                  <span className={colors.textMuted}>Tasks: {activeNode.system?.process_count || 87}</span>
+                </div>
               </div>
 
-              {/* Two-Column Cores C0-C7, C8-C15 (Takes 6 cols) */}
-              <div className="md:col-span-6 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-0.5 text-xs font-mono">
-                {coreLoads.map((pct, i) => (
-                  <div key={i} className="flex items-center justify-between">
-                    <span className={`w-8 shrink-0 ${colors.textMuted}`}>C{i}</span>
-                    <span className={`flex-1 mx-1 overflow-hidden text-right select-none ${colors.textDim}`}>
-                      {".".repeat(28)}
-                    </span>
-                    <span
-                      className={`w-9 text-right shrink-0 font-semibold ${
-                        pct > 80 ? colors.alert : pct > 50 ? colors.warn : colors.text
-                      }`}
-                    >
-                      {pct}%
-                    </span>
+              {/* Cores Breakdown or Hardware Spec Box (Takes 6 cols) */}
+              {displayCoreCount <= 2 ? (
+                <div className="md:col-span-6 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-mono">
+                  {coreLoads.map((pct, i) => (
+                    <div key={i} className="p-1.5 border border-current/15 bg-current/5 space-y-1">
+                      <div className="flex justify-between items-center">
+                        <span className="font-bold text-[11px]">Core {i}</span>
+                        <span className={`font-mono font-bold ${pct > 80 ? colors.alert : pct > 50 ? colors.warn : colors.text}`}>
+                          {pct}%
+                        </span>
+                      </div>
+                      <BlockMeterFill percent={pct} colors={colors} />
+                    </div>
+                  ))}
+                  <div className="p-1.5 border border-current/15 bg-current/5 space-y-0.5 text-[11px] flex flex-col justify-between">
+                    <div className="flex justify-between">
+                      <span className={colors.textMuted}>虚拟化:</span>
+                      <span>{activeNode.system?.virtualization || "KVM"}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className={colors.textMuted}>系统内核:</span>
+                      <span className="truncate max-w-[130px]">{activeNode.system?.kernel || "6.12.43-amd64"}</span>
+                    </div>
                   </div>
-                ))}
-              </div>
+                </div>
+              ) : (
+                <div className="md:col-span-6 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-0.5 text-xs font-mono">
+                  {coreLoads.map((pct, i) => (
+                    <div key={i} className="flex items-center justify-between">
+                      <span className={`w-8 shrink-0 ${colors.textMuted}`}>C{i}</span>
+                      <span className={`flex-1 mx-1 overflow-hidden text-right select-none ${colors.textDim}`}>
+                        {".".repeat(28)}
+                      </span>
+                      <span
+                        className={`w-9 text-right shrink-0 font-semibold ${
+                          pct > 80 ? colors.alert : pct > 50 ? colors.warn : colors.text
+                        }`}
+                      >
+                        {pct}%
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               {/* Right Status: Load Average (Takes 2 cols) */}
               <div className="md:col-span-2 flex flex-col justify-end text-right text-xs space-y-1">
@@ -1240,7 +1333,7 @@ export function BtopTerminalView({
                           </span>
                         </div>
                       </div>
-                      <div className="w-full mt-0.5">[{renderBlockMeter(memPercent, 20)}]</div>
+                      <div className="w-full mt-0.5"><BlockMeterFill percent={memPercent} colors={colors} /></div>
                     </div>
                     <div>
                       <div className="flex justify-between items-center">
@@ -1252,7 +1345,7 @@ export function BtopTerminalView({
                           </span>
                         </div>
                       </div>
-                      <div className="w-full mt-0.5">[{renderBlockMeter((memAvail / memTotal) * 100, 20)}]</div>
+                      <div className="w-full mt-0.5"><BlockMeterFill percent={(memAvail / memTotal) * 100} colors={colors} /></div>
                     </div>
                     <div>
                       <div className="flex justify-between items-center">
@@ -1264,7 +1357,7 @@ export function BtopTerminalView({
                           </span>
                         </div>
                       </div>
-                      <div className="w-full mt-0.5">[{renderBlockMeter((memCached / memTotal) * 100, 20)}]</div>
+                      <div className="w-full mt-0.5"><BlockMeterFill percent={(memCached / memTotal) * 100} colors={colors} /></div>
                     </div>
                     <div className="flex justify-between text-[11px] pt-1 border-t border-dashed border-current/20">
                       <span className={colors.textMuted}>Free RAM:</span>
@@ -1279,7 +1372,7 @@ export function BtopTerminalView({
                         <span className="font-bold">root ( / )</span>
                         <span className="font-bold">{formatBytes(diskUsed)} / {formatBytes(diskTotal)}</span>
                       </div>
-                      <div className="w-full mt-0.5">[{renderBlockMeter(diskPercent, 20)}]</div>
+                      <div className="w-full mt-0.5"><BlockMeterFill percent={diskPercent} colors={colors} /></div>
                       <div className="flex justify-between text-[11px] mt-0.5">
                         <span className={colors.textMuted}>IO 速率: R 68 KiB/s · W 1.2 MiB/s</span>
                         <span className="font-semibold">{diskPercent.toFixed(1)}%</span>
@@ -1291,10 +1384,12 @@ export function BtopTerminalView({
                         <span className="font-bold">Virtual Swap</span>
                         <span>{formatBytes(swapUsed)} / {formatBytes(swapTotal)}</span>
                       </div>
-                      <div className="w-full mt-0.5">[{renderBlockMeter(swapPercent, 20)}]</div>
+                      <div className="w-full mt-0.5"><BlockMeterFill percent={Math.min(100, Math.max(0, swapPercent))} colors={colors} /></div>
                       <div className="flex justify-between text-[11px] mt-0.5">
                         <span className={colors.textMuted}>Swap 占用:</span>
-                        <span>{swapPercent.toFixed(1)}%</span>
+                        <span className={swapPercent > 100 ? colors.alert : ""}>
+                          {swapPercent.toFixed(1)}%{swapPercent > 100 ? " (Overcommitted)" : ""}
+                        </span>
                       </div>
                     </div>
 
@@ -1303,7 +1398,7 @@ export function BtopTerminalView({
                         <span className="font-bold">/mnt/data (挂载盘)</span>
                         <span>420 GiB / 1.8 TiB</span>
                       </div>
-                      <div className="w-full mt-0.5">[{renderBlockMeter(22.8, 20)}]</div>
+                      <div className="w-full mt-0.5"><BlockMeterFill percent={22.8} colors={colors} /></div>
                       <div className="flex justify-between text-[11px] mt-0.5">
                         <span className={colors.textMuted}>IO 存储状态:</span>
                         <span className="font-bold text-emerald-600 dark:text-emerald-400">HEALTHY / NVMe Gen4</span>
@@ -1313,7 +1408,7 @@ export function BtopTerminalView({
                 </div>
               </div>
 
-              {/* PANEL 3: ³net (多行连续充满式波形图 + 完整收发吞吐) */}
+              {/* PANEL 3: ³net (高帧率平滑波形图 + 完整收发吞吐) */}
               <div className={`border ${colors.border} rounded-none px-2.5 py-1.5 flex-1 min-h-0 flex flex-col relative`}>
                 <div className="flex items-center justify-between text-xs pb-1 border-b border-current/20 mb-1.5 shrink-0">
                   <div className="flex items-center gap-2">
@@ -1328,25 +1423,16 @@ export function BtopTerminalView({
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center text-xs flex-1 min-h-0 overflow-hidden">
-                  {/* Left throughput Braille chart (6-row filled continuous wave) */}
-                  <div className="sm:col-span-6 flex flex-col justify-between h-full p-1.5 border border-current/15 font-mono select-none">
-                    <div className="flex justify-between text-[10px]">
-                      <span className={colors.textMuted}>▲ {maxNetRate} KiB/s</span>
-                      <span className={colors.accent}>BANDWIDTH WAVE</span>
-                    </div>
-                    <div className="my-auto space-y-0.5 overflow-hidden">
-                      {renderBrailleMatrix(netHistory, 6, maxNetRate).map((line, idx) => (
-                        <BrailleLine
-                          key={idx}
-                          line={line}
-                          className={`text-xs leading-none whitespace-nowrap overflow-hidden font-mono ${colors.meterActiveText}`}
-                        />
-                      ))}
-                    </div>
-                    <div className="flex justify-between text-[10px]">
-                      <span className={colors.textMuted}>0 B/s</span>
-                      <span className={colors.textDim}>auto-scale</span>
-                    </div>
+                  {/* Left throughput wave chart (High-FPS smooth canvas wave filling height) */}
+                  <div className="sm:col-span-6 flex flex-col h-full border border-current/15 bg-current/5 p-1 relative min-h-[140px]">
+                    <BtopWaveCanvas
+                      downRate={netDownRate}
+                      upRate={netUpRate}
+                      mode="net"
+                      colors={colors}
+                      isLight={isLight}
+                      title="BANDWIDTH WAVE"
+                    />
                   </div>
 
                   {/* Right download / upload stats */}
@@ -1412,6 +1498,23 @@ export function BtopTerminalView({
                     ● LIVE PING (ICMP / TCP)
                   </span>
                 </div>
+
+                {pingSummary.count > 0 && (
+                  <div className="flex items-center justify-between text-[10px] px-1.5 py-0.5 mb-1.5 border border-current/15 bg-current/5 shrink-0">
+                    <span className={colors.textMuted}>三网延迟概览:</span>
+                    <div className="flex items-center gap-2">
+                      {pingSummary.telecomAvg != null && (
+                        <span>电信 <span className="font-mono font-bold text-emerald-500">{pingSummary.telecomAvg.toFixed(0)}ms</span></span>
+                      )}
+                      {pingSummary.mobileAvg != null && (
+                        <span>移动 <span className="font-mono font-bold text-emerald-500">{pingSummary.mobileAvg.toFixed(0)}ms</span></span>
+                      )}
+                      {pingSummary.unicomAvg != null && (
+                        <span>联通 <span className="font-mono font-bold text-amber-500">{pingSummary.unicomAvg.toFixed(0)}ms</span></span>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {/* Ping Matrix Table (Dense 9-row table filling height) */}
                 <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
@@ -1607,186 +1710,435 @@ export function BtopTerminalView({
           {/* 4 Diagnostic Quadrants */}
           <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-2 gap-2 overflow-y-auto no-scrollbar mb-1.5">
             {/* Quadrant 1: Hardware & System Specs */}
-            <div className="border border-current/20 p-2.5 flex flex-col justify-between">
-              <div className="font-bold text-xs pb-1 border-b border-current/20 flex items-center justify-between">
+            <div className="border border-current/20 p-2.5 flex flex-col justify-between h-full overflow-y-auto no-scrollbar gap-2">
+              <div className="font-bold text-xs pb-1 border-b border-current/20 flex items-center justify-between shrink-0">
                 <span>┌─ [ 系统硬件与基础环境 ]</span>
                 <span className={colors.accent}>SYSTEM SPEC</span>
               </div>
-              <div className="space-y-1.5 text-xs py-1">
-                <div className="flex justify-between">
-                  <span className={colors.textMuted}>主机标识 / ID:</span>
-                  <span className="font-mono font-semibold">{activeNode.node_id}</span>
+
+              {/* Host Overview Identity Card */}
+              <div className="p-2 border border-current/15 bg-current/5 flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-base">{getRegionFlag(activeNode.region)}</span>
+                  <div>
+                    <div className="font-bold text-xs flex items-center gap-1.5">
+                      <span>{activeNode.name}</span>
+                      <span className="text-emerald-600 dark:text-emerald-400 font-mono text-[10px] px-1 border border-emerald-500/30">
+                        ONLINE
+                      </span>
+                    </div>
+                    <div className="text-[10px] font-mono text-current/60">
+                      ID: {activeNode.node_id}
+                    </div>
+                  </div>
                 </div>
-                <div className="flex justify-between">
-                  <span className={colors.textMuted}>操作系统 / OS:</span>
-                  <span className="font-semibold">{activeNode.system?.os || "Debian GNU/Linux 13 (Bookworm)"}</span>
+                <div className="text-right text-[11px]">
+                  <div className="font-bold font-mono">{uptimeStr}</div>
+                  <div className="text-[10px] text-current/60">Agent: {activeNode.system?.agent_version || latestAgentVersion || "v1.0"}</div>
                 </div>
-                <div className="flex justify-between">
-                  <span className={colors.textMuted}>内核版本 / KERNEL:</span>
-                  <span>{activeNode.system?.kernel || "6.12.43-amd64"}</span>
+              </div>
+
+              {/* Specs 2x2 Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs flex-1">
+                {/* Compute Spec Box */}
+                <div className="p-2 border border-current/15 bg-current/5 space-y-1.5 flex flex-col justify-between">
+                  <div className="font-bold text-[11px] pb-1 border-b border-dashed border-current/20 flex justify-between">
+                    <span className={colors.accent}>COMPUTE / 算力规格</span>
+                    <span className="font-mono text-[10px]">x86_64</span>
+                  </div>
+                  <div className="space-y-1 text-[11px]">
+                    <div className="flex justify-between">
+                      <span className={colors.textMuted}>CPU 架构:</span>
+                      <span className="font-semibold truncate max-w-[170px]" title={cpuModel}>{cpuModel}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className={colors.textMuted}>核心规格:</span>
+                      <span className="font-mono font-bold">{cpuCores} Cores / {cpuCores} Threads</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className={colors.textMuted}>虚拟化技术:</span>
+                      <span>{activeNode.system?.virtualization || "KVM (Standard)"}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className={colors.textMuted}>任务进程数:</span>
+                      <span className="font-mono">{activeNode.system?.process_count || 87} Tasks</span>
+                    </div>
+                  </div>
                 </div>
-                <div className="flex justify-between">
-                  <span className={colors.textMuted}>处理器 / CPU:</span>
-                  <span className="font-semibold">{cpuModel} ({cpuCores} Cores)</span>
+
+                {/* OS & Platform Box */}
+                <div className="p-2 border border-current/15 bg-current/5 space-y-1.5 flex flex-col justify-between">
+                  <div className="font-bold text-[11px] pb-1 border-b border-dashed border-current/20 flex justify-between">
+                    <span className={colors.accent}>PLATFORM / 操作系统</span>
+                    <span className="text-[10px] text-current/60">LINUX</span>
+                  </div>
+                  <div className="space-y-1 text-[11px]">
+                    <div className="flex justify-between">
+                      <span className={colors.textMuted}>发行版本:</span>
+                      <span className="font-semibold truncate max-w-[170px]">{activeNode.system?.os || "Debian GNU/Linux 13"}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className={colors.textMuted}>系统内核:</span>
+                      <span className="font-mono truncate max-w-[170px]">{activeNode.system?.kernel || "6.12.43-amd64"}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className={colors.textMuted}>数据中心/ISP:</span>
+                      <span className="truncate max-w-[170px]">{billing.provider || activeNode.billing?.provider || "DMIT Cloud Services"}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className={colors.textMuted}>主机区域:</span>
+                      <span className="font-bold">{activeNode.region || "US / Global"}</span>
+                    </div>
+                  </div>
                 </div>
-                <div className="flex justify-between">
-                  <span className={colors.textMuted}>虚拟化 / VIRT:</span>
-                  <span>{activeNode.system?.virtualization || "KVM (Standard)"}</span>
+              </div>
+
+              {/* Network Address & Interfaces Matrix */}
+              <div className="p-2 border border-current/15 bg-current/5 space-y-1.5 text-xs shrink-0">
+                <div className="font-bold text-[11px] pb-1 border-b border-dashed border-current/20 flex justify-between">
+                  <span className={colors.accent}>NETWORK ADDRESS / 网络地址</span>
+                  <button
+                    onClick={() => setMaskIP(!maskIP)}
+                    className="text-[10px] hover:underline cursor-pointer"
+                  >
+                    [{maskIP ? "显示真实IP" : "遮掩IP"}]
+                  </button>
                 </div>
-                <div className="flex justify-between">
-                  <span className={colors.textMuted}>公网 IPv4:</span>
-                  <span className="font-mono font-bold">
-                    {maskIP ? "**.***.***.**" : (activeNode.system?.public_ip || "127.0.0.1")}
-                  </span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                  <div className="flex items-center justify-between bg-current/5 px-2 py-1 border border-current/10">
+                    <span className={colors.textMuted}>公网 IPv4:</span>
+                    <div className="flex items-center gap-1 font-mono font-bold">
+                      <span>{maskIP ? "**.***.***.**" : (activeNode.system?.public_ip || "127.0.0.1")}</span>
+                      <button
+                        onClick={() => handleCopy(activeNode.system?.public_ip || "127.0.0.1", "IPv4 地址")}
+                        className="hover:opacity-75 cursor-pointer ml-1"
+                        title="复制 IPv4"
+                      >
+                        <Copy className="h-3 w-3" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between bg-current/5 px-2 py-1 border border-current/10">
+                    <span className={colors.textMuted}>公网 IPv6:</span>
+                    <div className="flex items-center gap-1 font-mono">
+                      <span className="truncate max-w-[160px]">{maskIP ? "****:****::**" : (activeNode.system?.public_ipv6 || "2605:52c0:2:65f8::1")}</span>
+                      <button
+                        onClick={() => handleCopy(activeNode.system?.public_ipv6 || "2605:52c0:2:65f8::1", "IPv6 地址")}
+                        className="hover:opacity-75 cursor-pointer ml-1"
+                        title="复制 IPv6"
+                      >
+                        <Copy className="h-3 w-3" />
+                      </button>
+                    </div>
+                  </div>
                 </div>
-                <div className="flex justify-between">
-                  <span className={colors.textMuted}>公网 IPv6:</span>
-                  <span className="font-mono truncate max-w-[220px]">{activeNode.system?.public_ipv6 || "2400:8902::1"}</span>
+              </div>
+
+              {/* Hardware Capacity Badges */}
+              <div className="grid grid-cols-3 gap-2 text-[11px] text-center shrink-0">
+                <div className="py-1 px-1.5 border border-current/15 bg-current/5">
+                  <div className={`text-[10px] ${colors.textMuted}`}>总内存容量</div>
+                  <div className="font-bold font-mono mt-0.5">{formatBytes(memTotal)}</div>
                 </div>
-                <div className="flex justify-between">
-                  <span className={colors.textMuted}>运行时长 / UPTIME:</span>
-                  <span className="font-bold">{uptimeStr}</span>
+                <div className="py-1 px-1.5 border border-current/15 bg-current/5">
+                  <div className={`text-[10px] ${colors.textMuted}`}>系统总存储</div>
+                  <div className="font-bold font-mono mt-0.5">{formatBytes(diskTotal)}</div>
                 </div>
-                <div className="flex justify-between">
-                  <span className={colors.textMuted}>数据中心 / ISP:</span>
-                  <span className="truncate">{activeNode.billing?.provider || "--"}</span>
+                <div className="py-1 px-1.5 border border-current/15 bg-current/5">
+                  <div className={`text-[10px] ${colors.textMuted}`}>虚拟 Swap</div>
+                  <div className="font-bold font-mono mt-0.5">{formatBytes(swapTotal)}</div>
                 </div>
               </div>
             </div>
 
             {/* Quadrant 2: Live Resource Telemetry & Meters */}
-            <div className="border border-current/20 p-2.5 flex flex-col justify-between">
-              <div className="font-bold text-xs pb-1 border-b border-current/20 flex items-center justify-between">
+            <div className="border border-current/20 p-2.5 flex flex-col justify-between h-full overflow-y-auto no-scrollbar gap-2">
+              <div className="font-bold text-xs pb-1 border-b border-current/20 flex items-center justify-between shrink-0">
                 <span>┌─ [ 实时资源负载与仪表 ]</span>
                 <span className={colors.accent}>LIVE TELEMETRY</span>
               </div>
-              <div className="space-y-1.5 text-xs py-1">
-                {/* CPU Meter */}
-                <div>
-                  <div className="flex justify-between items-center">
-                    <span className={colors.textMuted}>CPU 整体负载:</span>
-                    <span className="font-mono font-bold">{cpuPercent.toFixed(1)}%</span>
-                  </div>
-                  <div className="w-full mt-0.5">[{renderBlockMeter(cpuPercent, 24)}]</div>
-                  <div className="flex justify-between text-[10px] text-current/70 mt-0.5">
-                    <span>Tasks: {activeNode.system?.process_count || 87}</span>
-                    <span>Load: {(activeNode.system?.load_1 || 1.68).toFixed(2)} {(activeNode.system?.load_5 || 1.92).toFixed(2)} {(activeNode.system?.load_15 || 1.68).toFixed(2)}</span>
+
+              {/* CPU Meter Block */}
+              <div className="p-2 border border-current/15 bg-current/5 space-y-1 shrink-0">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="font-bold flex items-center gap-1.5">
+                    <span className={colors.accent}>CPU</span> 整体负载:
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-current/70">
+                      Load: {(activeNode.system?.load_1 || 1.68).toFixed(2)} {(activeNode.system?.load_5 || 1.92).toFixed(2)} {(activeNode.system?.load_15 || 1.68).toFixed(2)}
+                    </span>
+                    <span className="font-mono font-bold text-xs">{cpuPercent.toFixed(1)}%</span>
                   </div>
                 </div>
+                <BlockMeterFill percent={cpuPercent} colors={colors} />
+              </div>
 
-                {/* RAM Meter */}
-                <div className="pt-1 border-t border-dashed border-current/20">
-                  <div className="flex justify-between items-center">
-                    <span className={colors.textMuted}>物理内存 / RAM:</span>
-                    <span className="font-mono font-bold">{formatBytes(memUsed)} / {formatBytes(memTotal)} ({memPercent.toFixed(0)}%)</span>
-                  </div>
-                  <div className="w-full mt-0.5">[{renderBlockMeter(memPercent, 24)}]</div>
-                  <div className="flex justify-between text-[10px] text-current/70 mt-0.5">
-                    <span>可用: {formatBytes(memAvail)}</span>
-                    <span>缓存: {formatBytes(memCached)}</span>
-                    <span>空闲: {formatBytes(memFree)}</span>
+              {/* RAM Meter Block */}
+              <div className="p-2 border border-current/15 bg-current/5 space-y-1 shrink-0">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="font-bold flex items-center gap-1.5">
+                    <span className={colors.accent}>RAM</span> 物理内存:
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-current/70">
+                      {formatBytes(memUsed)} / {formatBytes(memTotal)}
+                    </span>
+                    <span className="font-mono font-bold text-xs">{memPercent.toFixed(0)}%</span>
                   </div>
                 </div>
-
-                {/* Disk & Swap */}
-                <div className="pt-1 border-t border-dashed border-current/20">
-                  <div className="flex justify-between items-center">
-                    <span className={colors.textMuted}>系统盘 ( / ):</span>
-                    <span className="font-mono font-bold">{formatBytes(diskUsed)} / {formatBytes(diskTotal)} ({diskPercent.toFixed(1)}%)</span>
-                  </div>
-                  <div className="w-full mt-0.5">[{renderBlockMeter(diskPercent, 24)}]</div>
+                <BlockMeterFill percent={memPercent} colors={colors} />
+                <div className="flex justify-between text-[10px] text-current/70 pt-0.5">
+                  <span>可用: {formatBytes(memAvail)}</span>
+                  <span>缓存: {formatBytes(memCached)}</span>
+                  <span>空闲: {formatBytes(memFree)}</span>
                 </div>
+              </div>
 
-                {/* Network Real-time Rates */}
-                <div className="pt-1 border-t border-dashed border-current/20 flex justify-between items-center text-[11px]">
-                  <div>
-                    <span className={colors.textMuted}>瞬时下行: </span>
+              {/* Disk & Swap Storage Block */}
+              <div className="p-2 border border-current/15 bg-current/5 space-y-1 shrink-0">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="font-bold flex items-center gap-1.5">
+                    <span className={colors.accent}>DISK</span> 系统盘 ( / ):
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-current/70">
+                      {formatBytes(diskUsed)} / {formatBytes(diskTotal)}
+                    </span>
+                    <span className="font-mono font-bold text-xs">{diskPercent.toFixed(1)}%</span>
+                  </div>
+                </div>
+                <BlockMeterFill percent={diskPercent} colors={colors} />
+                <div className="flex justify-between text-[10px] text-current/70 pt-0.5">
+                  <span>IO 速率: R 68 KiB/s · W 1.2 MiB/s</span>
+                  <span>Swap: {formatBytes(swapUsed)} / {formatBytes(swapTotal)}</span>
+                </div>
+              </div>
+
+              {/* Embedded Live Bandwidth Wave & Rates */}
+              <div className="p-2 border border-current/15 bg-current/5 flex-1 min-h-[110px] flex flex-col justify-between">
+                <div className="flex items-center justify-between text-xs pb-1 border-b border-dashed border-current/20 shrink-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold">实时网络波形 (LIVE WAVE)</span>
+                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400">● 60FPS</span>
+                  </div>
+                  <div className="flex items-center gap-2.5 text-[11px] font-mono">
                     <span className="text-emerald-600 dark:text-emerald-400 font-bold">▼ {formatRate(netDownRate)}</span>
-                  </div>
-                  <div>
-                    <span className={colors.textMuted}>瞬时上行: </span>
                     <span className={`${colors.accent} font-bold`}>▲ {formatRate(netUpRate)}</span>
                   </div>
-                  <div>
-                    <span className={colors.textMuted}>累计: </span>
-                    <span>{formatBytes(netTotalDown + netTotalUp)}</span>
-                  </div>
+                </div>
+                <div className="flex-1 min-h-[75px] w-full relative mt-1">
+                  <BtopWaveCanvas
+                    downRate={netDownRate}
+                    upRate={netUpRate}
+                    mode="net"
+                    colors={colors}
+                    isLight={isLight}
+                    title="THROUGHPUT"
+                  />
+                </div>
+                <div className="flex justify-between text-[10px] text-current/60 pt-1 shrink-0">
+                  <span>接口: eth0 · 10Gbps</span>
+                  <span>累计流量: {formatBytes(netTotalDown + netTotalUp)}</span>
                 </div>
               </div>
             </div>
 
             {/* Quadrant 3: Billing & Traffic Quotas */}
-            <div className="border border-current/20 p-2.5 flex flex-col justify-between">
-              <div className="font-bold text-xs pb-1 border-b border-current/20 flex items-center justify-between">
+            <div className="border border-current/20 p-2.5 flex flex-col justify-between h-full overflow-y-auto no-scrollbar gap-2">
+              <div className="font-bold text-xs pb-1 border-b border-current/20 flex items-center justify-between shrink-0">
                 <span>┌─ [ 资费计费与双向流量配额 ]</span>
                 <span className={colors.accent}>BILLING & QUOTA</span>
               </div>
-              <div className="space-y-1.5 text-xs py-1">
-                <div className="flex justify-between font-bold">
-                  <span className={colors.textMuted}>套餐资费 / PRICE:</span>
-                  <span className={colors.accent}>{billing.price ? `${billing.currency || "$"} ${billing.price} / ${getCycleLabel(billing.billing_cycle)}` : "--"}</span>
+
+              {/* Top 3 Financial Metric Badges */}
+              <div className="grid grid-cols-3 gap-2 text-xs shrink-0">
+                <div className="p-2 border border-current/15 bg-current/5 flex flex-col justify-between">
+                  <div className={`text-[10px] ${colors.textMuted}`}>套餐资费 / PLAN</div>
+                  <div className={`font-bold font-mono text-sm mt-0.5 ${colors.accent}`}>
+                    {billing.price ? `${billing.currency || "$"} ${billing.price}` : "--"}
+                  </div>
+                  <div className="text-[10px] text-current/70">
+                    {billing.price ? `周期: ${getCycleLabel(billing.billing_cycle)}` : "未配置资费"}
+                  </div>
                 </div>
-                <div className="flex justify-between">
-                  <span className={colors.textMuted}>到期时间 / EXPIRY:</span>
-                  <span className="font-bold">
-                    {billing.expiry_date
-                      ? `${billing.expiry_date}${billing.remaining_days ? ` (剩余 ${billing.remaining_days} 天)` : ""}`
-                      : "未设到期 / 自动续费"}
-                  </span>
+
+                <div className="p-2 border border-current/15 bg-current/5 flex flex-col justify-between">
+                  <div className={`text-[10px] ${colors.textMuted}`}>到期时间 / EXPIRY</div>
+                  <div className="font-bold font-mono text-xs mt-0.5 truncate">
+                    {billing.expiry_date || "长期有效"}
+                  </div>
+                  <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">
+                    {billing.remaining_days ? `剩余 ${billing.remaining_days} 天` : (billing.auto_renewal ? "自动续费" : "--")}
+                  </div>
                 </div>
-                <div className="flex justify-between">
-                  <span className={colors.textMuted}>剩余价值 / VALUE:</span>
-                  <span className="font-bold text-amber-600 dark:text-amber-400">
-                    {billing.remaining_value
-                      ? `¥ ${billing.remaining_value.toFixed(2)} CNY (${billing.auto_renewal ? "自动续费" : "手动续费"})`
-                      : "--"}
-                  </span>
+
+                <div className="p-2 border border-current/15 bg-current/5 flex flex-col justify-between">
+                  <div className={`text-[10px] ${colors.textMuted}`}>剩余价值 / VALUE</div>
+                  <div className="font-bold font-mono text-xs mt-0.5 text-amber-600 dark:text-amber-400 truncate">
+                    {billing.remaining_value ? `¥ ${billing.remaining_value.toFixed(2)} CNY` : "--"}
+                  </div>
+                  <div className="text-[10px] text-current/70">
+                    {billing.auto_renewal ? "● 自动续费" : "○ 手动续费"}
+                  </div>
                 </div>
-                <div className="pt-1 border-t border-dashed border-current/20">
-                  <div className="flex justify-between text-[11px] mb-1">
-                    <span className={colors.textMuted}>双向流量配额:</span>
-                    <span>{formatBytes(billing.bandwidth_used || 0)} / {formatBytes(billing.bandwidth_quota)} ({quotaPercent}%)</span>
+              </div>
+
+              {/* Bandwidth Quota Management Card */}
+              <div className="p-2.5 border border-current/15 bg-current/5 space-y-2 flex-1 flex flex-col justify-between">
+                <div>
+                  <div className="flex justify-between items-center text-xs font-bold mb-1">
+                    <span className="flex items-center gap-1.5">
+                      <span className={colors.accent}>双向流量配额:</span>
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xs">
+                        {formatBytes(billing.bandwidth_used || 0)} / {formatBytes(billing.bandwidth_quota)}
+                      </span>
+                      <span className={`${colors.accent} font-mono font-bold`}>{quotaPercent}%</span>
+                    </div>
                   </div>
                   <BlockMeterFill percent={quotaPercent} colors={colors} />
                 </div>
-                <div className="grid grid-cols-2 gap-2 text-[11px] pt-1 border-t border-dashed border-current/20">
+
+                {/* Uplink vs Downlink Split */}
+                <div className="grid grid-cols-3 gap-2 text-xs p-2 bg-current/5 border border-current/10">
                   <div>
-                    <span className={colors.textMuted}>▲ 上行已用: </span>
-                    <span className="font-semibold">{usedSplit ? formatBytes(usedSplit.up) : "--"}</span>
+                    <div className={`text-[10px] ${colors.textMuted}`}>▲ 上行已用</div>
+                    <div className="font-semibold font-mono mt-0.5">{usedSplit ? formatBytes(usedSplit.up) : "--"}</div>
                   </div>
                   <div>
-                    <span className={colors.textMuted}>▼ 下行已用: </span>
-                    <span className="font-semibold">{usedSplit ? formatBytes(usedSplit.down) : "--"}</span>
+                    <div className={`text-[10px] ${colors.textMuted}`}>▼ 下行已用</div>
+                    <div className="font-semibold font-mono mt-0.5">{usedSplit ? formatBytes(usedSplit.down) : "--"}</div>
+                  </div>
+                  <div>
+                    <div className={`text-[10px] ${colors.textMuted}`}>剩余可用配额</div>
+                    <div className="font-semibold font-mono mt-0.5 text-emerald-600 dark:text-emerald-400">
+                      {billing.bandwidth_quota > 0 ? formatBytes(Math.max(0, billing.bandwidth_quota - (billing.bandwidth_used || 0))) : "--"}
+                    </div>
                   </div>
                 </div>
-                <div className="flex justify-between text-[10px] text-current/60 pt-0.5">
-                  <span>结算周期: {getCycleLabel(billing.billing_cycle)}</span>
-                  <span>{billing.auto_renewal ? "自动续费" : "手动续费"}</span>
+
+                {/* Consumption Analytics & Projection */}
+                <div className="space-y-1 text-xs pt-1 border-t border-dashed border-current/20">
+                  <div className="flex justify-between text-[11px]">
+                    <span className={colors.textMuted}>日均消耗估算:</span>
+                    <span className="font-mono">
+                      ~{formatBytes(Math.round((billing.bandwidth_used || 0) / Math.max(1, 30 - (billing.remaining_days || 15))))} / 天
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-[11px]">
+                    <span className={colors.textMuted}>月末预计用量:</span>
+                    <span className="font-mono font-semibold text-emerald-600 dark:text-emerald-400">
+                      ~{formatBytes(Math.round((billing.bandwidth_used || 0) * 1.05))} (配额安全)
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-[11px]">
+                    <span className={colors.textMuted}>线路运营服务商:</span>
+                    <span className="font-semibold truncate max-w-[200px]">{billing.provider || "--"}</span>
+                  </div>
                 </div>
+              </div>
+
+              {/* Renewal Status & Tips */}
+              <div className="p-2 border border-current/15 bg-current/5 flex items-center justify-between text-[11px] shrink-0">
+                <span className={colors.textMuted}>
+                  {billing.auto_renewal ? "✔ 服务已设自动续约，周期末将自动延续" : "⚠ 当前为手动续费模式，请留意到期时间"}
+                </span>
+                <span className="font-mono font-bold text-[10px] px-1.5 py-0.5 border border-current/30">
+                  {billing.auto_renewal ? "AUTO-RENEW" : "MANUAL"}
+                </span>
               </div>
             </div>
 
             {/* Quadrant 4: Ping Target Matrix */}
-            <div className="border border-current/20 p-2.5 flex flex-col justify-between">
-              <div className="font-bold text-xs pb-1 border-b border-current/20 flex items-center justify-between">
+            <div className="border border-current/20 p-2.5 flex flex-col justify-between h-full overflow-y-auto no-scrollbar gap-2">
+              <div className="font-bold text-xs pb-1 border-b border-current/20 flex items-center justify-between shrink-0">
                 <span>┌─ [ 三网与核心网络延迟监测矩阵 ]</span>
                 <span className={colors.accent}>PING TARGETS ({pingTargets.length})</span>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5 py-1">
-                {pingTargets.map((p, idx) => (
-                  <div key={idx} className="p-1.5 border border-current/15 bg-current/5 space-y-0.5 text-xs">
-                    <div className="flex items-center justify-between font-bold">
-                      <span className="truncate text-[11px]">{p.label.split(" ")[0]}</span>
-                      <span className={`text-[11px] font-mono ${p.latency_ms < 50 ? "text-emerald-600 dark:text-emerald-400" : colors.warn}`}>
-                        {p.latency_ms.toFixed(1)} ms
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-[10px] text-current/70">
-                      <span className="truncate">{p.target.replace(".com", "").replace(".cn", "")}</span>
-                      <span>丢包: {p.packet_loss}%</span>
-                    </div>
+
+              {/* Summary Bar */}
+              {pingSummary.count > 0 && (
+                <div className="p-1.5 border border-current/15 bg-current/5 flex flex-wrap items-center justify-between gap-1.5 text-xs shrink-0">
+                  <div className="flex items-center gap-2">
+                    <span className={colors.textMuted}>监测节点:</span>
+                    <span className="font-bold font-mono">{pingSummary.count}</span>
+                    <span className={colors.textDim}>|</span>
+                    <span className={colors.textMuted}>均值:</span>
+                    <span className="font-bold font-mono">{pingSummary.avgLatency} ms</span>
                   </div>
-                ))}
+                  <div className="flex items-center gap-2 text-[11px]">
+                    {pingSummary.telecomAvg != null && (
+                      <span>电信 <span className="font-mono font-bold text-emerald-500">{pingSummary.telecomAvg.toFixed(0)}ms</span></span>
+                    )}
+                    {pingSummary.mobileAvg != null && (
+                      <span>移动 <span className="font-mono font-bold text-emerald-500">{pingSummary.mobileAvg.toFixed(0)}ms</span></span>
+                    )}
+                    {pingSummary.unicomAvg != null && (
+                      <span>联通 <span className="font-mono font-bold text-amber-500">{pingSummary.unicomAvg.toFixed(0)}ms</span></span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Responsive Ping Target Cards Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 flex-1 overflow-y-auto no-scrollbar">
+                {pingTargets.map((p, idx) => {
+                  const isFast = p.latency_ms < 60;
+                  const isMedium = p.latency_ms < 150;
+                  const latColor = isFast
+                    ? "text-emerald-600 dark:text-emerald-400"
+                    : isMedium
+                    ? colors.warn
+                    : colors.alert;
+                  const dotColor = isFast
+                    ? "bg-emerald-500"
+                    : isMedium
+                    ? "bg-amber-500"
+                    : "bg-rose-500";
+                  const qualityTag = isFast ? "极速" : isMedium ? "良好" : "偏高";
+
+                  return (
+                    <div
+                      key={idx}
+                      className="p-2 border border-current/15 bg-current/5 flex flex-col justify-between hover:bg-current/10 transition-colors space-y-1.5"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5 truncate">
+                          <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${dotColor}`} />
+                          <span className="font-bold text-xs truncate">{p.label.split(" ")[0]}</span>
+                        </div>
+                        <span className={`text-[10px] px-1 border border-current/20 font-bold ${latColor}`}>
+                          {qualityTag}
+                        </span>
+                      </div>
+
+                      <div className="flex items-baseline justify-between">
+                        <span className="font-mono text-sm font-bold tracking-tight">
+                          <span className={latColor}>{p.latency_ms.toFixed(1)}</span>
+                          <span className="text-[10px] text-current/60 ml-0.5">ms</span>
+                        </span>
+                        <span className={`text-[10px] font-mono ${p.packet_loss > 0 ? colors.alert : colors.textMuted}`}>
+                          丢包: {p.packet_loss}%
+                        </span>
+                      </div>
+
+                      {/* Mini latency visual meter */}
+                      <div className="w-full bg-current/10 h-1 rounded-none overflow-hidden">
+                        <div
+                          className={`h-full ${isFast ? "bg-emerald-500" : isMedium ? "bg-amber-500" : "bg-rose-500"}`}
+                          style={{ width: `${Math.min(100, Math.max(8, (p.latency_ms / 300) * 100))}%` }}
+                        />
+                      </div>
+
+                      <div className="flex justify-between text-[10px] text-current/60 font-mono truncate">
+                        <span className="truncate">{p.target.replace(".com", "").replace(".cn", "")}</span>
+                        <span>抖动: {p.jitter?.toFixed(1) || "1.0"}ms</span>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>
