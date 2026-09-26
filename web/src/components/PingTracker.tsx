@@ -1,31 +1,69 @@
-import React, { useState, useRef, useMemo } from "react";
-import { PingStat } from "../types";
+import React, { useState, useRef, useMemo, useEffect } from "react";
+import { PingHistoryPoint, PingStat } from "../types";
 import { cn } from "../lib/utils";
 
 interface PingTrackerProps {
   ping: PingStat;
   nodeIsOnline: boolean;
   isBlueprint?: boolean;
-  nodeId: string;
+  /** 该目标的真实探测记录（按时间升序），每行一次探测。 */
+  history?: PingHistoryPoint[];
 }
 
 interface HistorySlot {
   timeStr: string;
   latencyMs: number;
-  loss: number;
-  status: "normal" | "elevated" | "slow" | "loss" | "offline";
+  lost: boolean;
+  status: "normal" | "elevated" | "slow" | "loss" | "empty";
 }
 
-function strHash(str: string): number {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    hash = (hash << 5) - hash + str.charCodeAt(i);
-    hash |= 0;
-  }
-  return Math.abs(hash);
+const TOTAL_BARS = 40;
+
+function latencyStatus(ms: number): HistorySlot["status"] {
+  if (ms >= 200) return "slow";
+  if (ms >= 80) return "elevated";
+  return "normal";
 }
 
-export function PingTracker({ ping, nodeIsOnline, isBlueprint, nodeId }: PingTrackerProps) {
+/**
+ * 拉取节点最近 1 小时的真实探测记录，每分钟刷新一次（探测周期默认 60s，
+ * 更频繁没有新数据）。节点离线时不轮询。
+ */
+export function useRecentPingHistory(nodeId: string, enabled: boolean): PingHistoryPoint[] {
+  const [points, setPoints] = useState<PingHistoryPoint[]>([]);
+  useEffect(() => {
+    if (!enabled) return;
+    const ctrl = new AbortController();
+    const load = () =>
+      fetch(`/api/v1/nodes/${encodeURIComponent(nodeId)}/ping-history?range=1h`, { signal: ctrl.signal })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data && Array.isArray(data.points)) setPoints(data.points);
+        })
+        .catch(() => {});
+    load();
+    const timer = window.setInterval(load, 60_000);
+    return () => {
+      ctrl.abort();
+      window.clearInterval(timer);
+    };
+  }, [nodeId, enabled]);
+  return points;
+}
+
+/** 从节点的探测记录里挑出属于该目标的行（按时间升序）。 */
+export function pingHistoryFor(points: PingHistoryPoint[], ping: PingStat): PingHistoryPoint[] {
+  return points
+    .filter((p) => (ping.target ? p.target === ping.target : p.label === ping.label))
+    .sort((a, b) => a.timestamp - b.timestamp);
+}
+
+function slotTime(ts: number): string {
+  const d = new Date(ts * 1000);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+export function PingTracker({ ping, nodeIsOnline, isBlueprint, history }: PingTrackerProps) {
   const rowRef = useRef<HTMLDivElement>(null);
   const [hoveredState, setHoveredState] = useState<{
     index: number;
@@ -33,94 +71,36 @@ export function PingTracker({ ping, nodeIsOnline, isBlueprint, nodeId }: PingTra
   } | null>(null);
 
   const baseLat = ping.latency_ms || 0;
-  const isOnline = nodeIsOnline && baseLat > 0;
+  // 最近一次探测丢包时 latency_ms 是上一次的值，不能当成当前延迟展示。
+  const isOnline = nodeIsOnline && (baseLat > 0 || !!ping.lost);
 
-  // 生成 40 个历史点（前 20 个在左半段，后 20 个在右半段）
+  // 40 格 = 最近 40 次真实探测；不足 40 次的左侧留空格，绝不按哈希编造历史。
   const slots: HistorySlot[] = useMemo(() => {
-    const TOTAL_BARS = 40;
-    const now = new Date();
-    const currentMinute = Math.floor(now.getTime() / 60000);
+    const samples: { ts: number; latencyMs: number; lost: boolean }[] = (history || []).map((h) => ({
+      ts: h.timestamp,
+      latencyMs: h.latency_ms,
+      lost: !!h.lost_event,
+    }));
+    // 实时流里的最新一次探测可能还没落库（降采样器每 15s 刷一次）。
+    const lastTs = samples.length > 0 ? samples[samples.length - 1].ts : 0;
+    if (nodeIsOnline && ping.probed_at && ping.probed_at > lastTs) {
+      samples.push({ ts: ping.probed_at, latencyMs: baseLat, lost: !!ping.lost });
+    }
+    const recent = samples.slice(-TOTAL_BARS);
     const result: HistorySlot[] = [];
-
-    for (let i = 0; i < TOTAL_BARS; i++) {
-      const offsetMin = TOTAL_BARS - 1 - i;
-      const slotTime = new Date(now.getTime() - offsetMin * 60000);
-      const timeStr = `${String(slotTime.getHours()).padStart(2, "0")}:${String(
-        slotTime.getMinutes()
-      ).padStart(2, "0")}`;
-
-      if (!isOnline) {
-        result.push({
-          timeStr,
-          latencyMs: 0,
-          loss: 0,
-          status: "offline",
-        });
-        continue;
-      }
-
-      // 最新点 (i = 39) 使用真实实时数据
-      if (i === TOTAL_BARS - 1) {
-        const hasLoss = ping.packet_loss > 0;
-        let status: HistorySlot["status"] = "normal";
-        if (hasLoss) {
-          status = "loss";
-        } else if (baseLat >= 200) {
-          status = "slow";
-        } else if (baseLat >= 80) {
-          status = "elevated";
-        }
-        result.push({
-          timeStr,
-          latencyMs: Math.round(baseLat),
-          loss: ping.packet_loss,
-          status,
-        });
-        continue;
-      }
-
-      // 基于节点 + 目标 + 槽位稳定哈希模拟历史微波动
-      const hashVal = strHash(`${nodeId}-${ping.target || ping.label}-${currentMinute - offsetMin}-${i}`);
-      const rand = (hashVal % 1000) / 1000;
-
-      const isLoss = ping.packet_loss > 0 && rand < Math.max(0.05, ping.packet_loss / 100);
-      const lossVal = isLoss ? Math.max(1, ping.packet_loss) : 0;
-
-      let lat = baseLat;
-      let status: HistorySlot["status"] = "normal";
-
-      if (isLoss) {
-        status = "loss";
-      } else {
-        // 少数点产生轻微升高（约 12% 概率，呈现用户图中的蓝色点）
-        const isElevated = rand > 0.86;
-        if (isElevated) {
-          lat = baseLat + 15 + Math.floor(rand * 25);
-          status = "elevated";
-        } else if (baseLat >= 200) {
-          status = "slow";
-        } else {
-          lat = Math.max(1, baseLat + (rand * 6 - 3));
-          if (lat >= 160) {
-            status = "slow";
-          } else if (lat >= 80) {
-            status = "elevated";
-          } else {
-            status = "normal";
-          }
-        }
-      }
-
+    for (let i = recent.length; i < TOTAL_BARS; i++) {
+      result.push({ timeStr: "", latencyMs: 0, lost: false, status: "empty" });
+    }
+    for (const s of recent) {
       result.push({
-        timeStr,
-        latencyMs: Math.round(lat),
-        loss: lossVal,
-        status,
+        timeStr: slotTime(s.ts),
+        latencyMs: Math.round(s.latencyMs),
+        lost: s.lost,
+        status: s.lost ? "loss" : latencyStatus(s.latencyMs),
       });
     }
-
     return result;
-  }, [nodeId, ping.target, ping.label, baseLat, ping.packet_loss, isOnline]);
+  }, [history, nodeIsOnline, ping.probed_at, ping.lost, baseLat]);
 
   const leftSlots = slots.slice(0, 20);
   const rightSlots = slots.slice(20, 40);
@@ -139,8 +119,8 @@ export function PingTracker({ ping, nodeIsOnline, isBlueprint, nodeId }: PingTra
 
   // 获取小条背景色
   const getBarColorClass = (slot: HistorySlot) => {
-    if (slot.status === "offline") {
-      return isBlueprint ? "bg-slate-300" : "bg-zinc-800";
+    if (slot.status === "empty") {
+      return isBlueprint ? "bg-slate-200 dark:bg-slate-800" : "bg-zinc-800";
     }
     if (slot.status === "loss") {
       return "bg-rose-500 hover:bg-rose-400";
@@ -157,11 +137,12 @@ export function PingTracker({ ping, nodeIsOnline, isBlueprint, nodeId }: PingTra
   // 延迟文字颜色
   const latColorClass = useMemo(() => {
     if (!isOnline) return "text-zinc-500";
+    if (ping.lost) return "text-rose-500 dark:text-rose-400";
     if (baseLat >= 200) return "text-rose-500 dark:text-rose-400";
     if (baseLat >= 120) return "text-amber-500 dark:text-amber-400";
     if (baseLat >= 80) return "text-blue-600 dark:text-blue-400";
     return "text-emerald-600 dark:text-emerald-400";
-  }, [isOnline, baseLat]);
+  }, [isOnline, baseLat, ping.lost]);
 
   // 丢包率文字颜色
   const lossColorClass = useMemo(() => {
@@ -174,12 +155,11 @@ export function PingTracker({ ping, nodeIsOnline, isBlueprint, nodeId }: PingTra
   const lossText = useMemo(() => {
     if (!isOnline) return "--";
     if (ping.packet_loss > 0) return `${ping.packet_loss.toFixed(1)}%`;
-    // 若当前高延迟或波动，与图片首行呼应使用 0.0%
-    if (baseLat >= 80) return "0.0%";
     return "0%";
   }, [isOnline, ping.packet_loss, baseLat]);
 
-  const activeSlot = hoveredState !== null ? slots[hoveredState.index] : null;
+  const hovered = hoveredState !== null ? slots[hoveredState.index] : null;
+  const activeSlot = hovered && hovered.status !== "empty" ? hovered : null;
 
   // Tooltip 水平定位（加边界约束防止被最外层卡片裁剪）
   const tooltipStyle = useMemo(() => {
@@ -209,7 +189,7 @@ export function PingTracker({ ping, nodeIsOnline, isBlueprint, nodeId }: PingTra
             {ping.label}
           </span>
           <span className={cn("font-bold font-mono text-xs ml-1 shrink-0", latColorClass)}>
-            {isOnline ? `${baseLat < 10 ? baseLat.toFixed(1) : baseLat.toFixed(0)}ms` : "--"}
+            {!isOnline ? "--" : ping.lost ? "超时" : `${baseLat < 10 ? baseLat.toFixed(1) : baseLat.toFixed(0)}ms`}
           </span>
         </div>
 
@@ -239,11 +219,10 @@ export function PingTracker({ ping, nodeIsOnline, isBlueprint, nodeId }: PingTra
             >
               <span>{activeSlot.timeStr}</span>
               <span className="opacity-40">·</span>
-              <span>{activeSlot.latencyMs} ms</span>
-              {activeSlot.loss > 0 && (
-                <span className="text-rose-400 font-sans font-normal text-[10px] ml-0.5">
-                  (丢包 {activeSlot.loss.toFixed(0)}%)
-                </span>
+              {activeSlot.lost ? (
+                <span className="text-rose-400">丢包</span>
+              ) : (
+                <span>{activeSlot.latencyMs} ms</span>
               )}
             </div>
             {/* 小尖角指针 */}

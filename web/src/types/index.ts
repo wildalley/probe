@@ -10,6 +10,10 @@ export interface PingStat {
   latency_ms: number;
   packet_loss: number;
   jitter: number;
+  /** 最近一次探测是否丢包；此时 latency_ms 是上一次成功探测的值。 */
+  lost?: boolean;
+  /** 最近一次探测完成的 Unix 秒；0/缺省表示尚未探测（或旧 Agent）。 */
+  probed_at?: number;
 }
 
 export interface BillingInfo {
@@ -109,6 +113,11 @@ export interface SystemInfo {
   cpu_model?: string;
   cpu_mark?: string;
   virtualization?: string;
+  /** 各逻辑核占用（%），旧 Agent 不上报。 */
+  cpu_per_core?: number[];
+  /** 可用内存 / 页缓存+缓冲区（字节），0 或缺省表示未知。 */
+  mem_available?: number;
+  mem_cached?: number;
   public_ip?: string;
   public_ipv6?: string;
   cpu_percent: number;
@@ -183,6 +192,8 @@ export interface PingHistoryPoint {
   label: string;
   latency_ms: number;
   packet_loss: number;
+  /** 该次探测丢包；此时 latency_ms 为上一次的值，不能当作样本。 */
+  lost_event?: boolean;
 }
 
 export interface WSEvent {

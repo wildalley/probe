@@ -21,7 +21,7 @@ import { agentVersionOf } from "../utils/agentVersion";
 import { usedTrafficSplit } from "../utils/traffic";
 import { OsIcon } from "./OsIcon";
 import { AgentVersionMark } from "./AgentVersionMark";
-import { PingTracker } from "./PingTracker";
+import { PingTracker, pingHistoryFor, useRecentPingHistory } from "./PingTracker";
 import { cn } from "../lib/utils";
 import { NumberTicker } from "./ui/NumberTicker";
 import { BorderBeam } from "./ui/BorderBeam";
@@ -179,10 +179,12 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
   // target, so there is no time series here to draw.
   const pings = node.pings && node.pings.length > 0 ? node.pings : [];
 
-  const reachable = useMemo(() => pings.filter((p) => p.latency_ms > 0), [pings]);
+  const reachable = useMemo(() => pings.filter((p) => !p.lost && p.latency_ms > 0), [pings]);
   const avgLatency = reachable.length > 0
     ? reachable.reduce((sum, p) => sum + p.latency_ms, 0) / reachable.length
     : null;
+
+  const pingHistory = useRecentPingHistory(node.node_id, node.is_online && pings.length > 0);
 
   const [expandedPings, setExpandedPings] = useState(false);
   const displayedPings = pings.length <= 4 || expandedPings ? pings : pings.slice(0, 4);
@@ -595,7 +597,7 @@ export function ServerCard({ node, onSelect, theme = "dark", latestAgentVersion 
                 ping={p}
                 nodeIsOnline={node.is_online}
                 isBlueprint={isBlueprint}
-                nodeId={node.node_id}
+                history={pingHistoryFor(pingHistory, p)}
               />
             ))}
 

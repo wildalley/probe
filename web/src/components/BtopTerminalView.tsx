@@ -267,9 +267,12 @@ export function BtopTerminalView({
     return (n.network?.rate_download || 0) + (n.network?.rate_upload || 0);
   };
 
+  // 各目标最近一次成功探测的平均延迟；没有可用样本返回 Infinity（排序垫底，显示 "--"），
+  // 不拿一个示例值冒充。丢包目标的 latency_ms 是上一次的值，不计入。
   const getNodePingLatency = (n: NodeState) => {
-    if (n.pings && n.pings.length > 0) return n.pings[0].latency_ms;
-    return 32.4;
+    const ok = (n.pings || []).filter((p) => !p.lost && p.latency_ms > 0);
+    if (ok.length === 0) return Infinity;
+    return ok.reduce((sum, p) => sum + p.latency_ms, 0) / ok.length;
   };
 
   const handleCopy = (text: string, label: string) => {
@@ -339,7 +342,11 @@ export function BtopTerminalView({
           cmp = getNodeNetRate(a) - getNodeNetRate(b);
           break;
         case "ping":
-          cmp = getNodePingLatency(a) - getNodePingLatency(b);
+          {
+            const la = getNodePingLatency(a);
+            const lb = getNodePingLatency(b);
+            cmp = la === lb ? 0 : la - lb; // Infinity - Infinity 是 NaN
+          }
           break;
         default:
           cmp = 0;
@@ -459,77 +466,45 @@ export function BtopTerminalView({
     };
   }, [isLight]);
 
-  // Rolling CPU & Net history buffer for Braille graph (72 data points for wide continuous wave)
-  const [cpuHistory, setCpuHistory] = useState<number[]>(() => [
-    12, 14, 18, 22, 20, 16, 12, 10, 15, 24, 30, 26, 18, 12, 8, 10,
-    14, 18, 24, 36, 42, 38, 26, 18, 14, 12, 10, 15, 18, 14, 10, 8,
-    12, 15, 20, 28, 35, 30, 22, 16, 12, 14, 18, 26, 32, 28, 20, 15,
-    12, 16, 22, 32, 44, 40, 28, 20, 16, 12, 10, 14, 18, 16, 12, 10,
-    12, 14, 18, 22, 18, 14, 10, 8
-  ]);
-  const [netHistory, setNetHistory] = useState<number[]>(() => [
-    8, 10, 14, 18, 26, 32, 28, 20, 14, 16, 22, 28, 34, 30, 22, 16,
-    12, 14, 18, 24, 38, 48, 42, 30, 22, 18, 14, 16, 20, 26, 32, 28,
-    20, 16, 14, 18, 22, 28, 36, 32, 24, 18, 14, 16, 22, 30, 42, 38,
-    28, 20, 16, 14, 18, 24, 32, 28, 22, 18, 14, 16, 20, 24, 20, 16,
-    12, 14, 18, 22, 26, 22, 18, 14
-  ]);
-
-  useEffect(() => {
-    if (!activeNode) return;
-    const currentCpu = activeNode.cpu || activeNode.system?.cpu_percent || 6;
-    setCpuHistory((prev) => [...prev.slice(1), currentCpu]);
-
-    const currentNetRate = (activeNode.network?.rate_download || 14.0 * 1024) / 1024;
-    setNetHistory((prev) => [...prev.slice(1), Math.max(4, Math.round(currentNetRate))]);
-  }, [activeNode?.cpu, activeNode?.network?.rate_download, activeNode?.last_seen]);
-
-  // Network throughput dynamic scale
-  const maxNetRate = useMemo(() => {
-    return Math.max(20, ...netHistory);
-  }, [netHistory]);
-
   // Metrics resolution
-  const cpuPercent = activeNode?.cpu || activeNode?.system?.cpu_percent || 6;
+  const cpuPercent = activeNode?.cpu || activeNode?.system?.cpu_percent || 0;
   const cpuCores = activeNode?.system?.cpu_count || 1;
-  const cpuModel = activeNode?.system?.cpu_model || activeNode?.name || "AMD EPYC Processor";
+  const cpuModel = activeNode?.system?.cpu_model || "--";
   const uptimeStr = formatBtopUptime(activeNode?.system?.uptime || 0);
 
-  // Core breakdown C0..C(N-1) adapted to actual machine cores
-  const screenshotCoreLoads = [44, 8, 2, 1, 20, 2, 3, 0, 6, 1, 2, 0, 4, 0, 1, 0];
-  const displayCoreCount = Math.min(16, Math.max(1, cpuCores));
-  const coreLoads = useMemo(() => {
-    return Array.from({ length: displayCoreCount }).map((_, i) => {
-      if (activeNode.system?.cpu_percent && activeNode.system.cpu_percent > 0) {
-        if (displayCoreCount === 1) return Math.round(cpuPercent);
-        const offset = Math.sin((i + 1) * 1.5) * 12 + ((i % 3) - 1) * 6;
-        return Math.min(100, Math.max(0, Math.round(cpuPercent + offset)));
-      }
-      return screenshotCoreLoads[i] ?? Math.round(cpuPercent);
-    });
-  }, [cpuPercent, activeNode?.system?.cpu_percent, displayCoreCount]);
+  // 分核负载只用 Agent 实测的 cpu_per_core；旧 Agent 不上报时为空，
+  // 不再用正弦偏移从总占用"推算"出一组假分核数据。
+  const coreLoads = useMemo(
+    () => (activeNode?.system?.cpu_per_core || []).slice(0, 16).map((v) => Math.round(v)),
+    [activeNode?.system?.cpu_per_core]
+  );
+  const displayCoreCount = coreLoads.length > 0 ? coreLoads.length : Math.min(16, Math.max(1, cpuCores));
 
   // Memory breakdown
-  const memTotal = activeNode.system?.mem_total || 28.3 * 1024 * 1024 * 1024;
-  const memUsed = activeNode.system?.mem_used || 16.3 * 1024 * 1024 * 1024;
-  const memFree = Math.max(0, memTotal - memUsed);
-  const memCached = Math.round(memTotal * 0.24);
-  const memAvail = Math.max(0, memTotal - memUsed + memCached * 0.7);
-  const memPercent = (memUsed / memTotal) * 100;
+  // 缺失的数值一律按 0/未知处理并显示 "--"，不再兜底一台虚构机器的规格。
+  const memTotal = activeNode.system?.mem_total || 0;
+  const memUsed = activeNode.system?.mem_used || 0;
+  // 空闲 = 总量 - 已用 - 缓存；缓存未知（旧 Agent）时只能给出 总量 - 已用。
+  const memCached = activeNode.system?.mem_cached || 0;
+  const memAvail = activeNode.system?.mem_available || 0;
+  const memFree = Math.max(0, memTotal - memUsed - memCached);
+  const memPercent = memTotal > 0 ? (memUsed / memTotal) * 100 : 0;
+  const pctOfMem = (v: number) => (memTotal > 0 && v > 0 ? (v / memTotal) * 100 : 0);
+  const fmtMem = (v: number) => (v > 0 ? formatBytes(v) : "--");
 
   // Primary Disk (精简为最实用的主系统盘与Swap)
-  const diskTotal = activeNode.system?.disk_total || 472 * 1024 * 1024 * 1024;
-  const diskUsed = activeNode.system?.disk_used || 111 * 1024 * 1024 * 1024;
-  const diskPercent = activeNode.system?.disk_percent || (diskUsed / diskTotal) * 100;
-  const swapTotal = activeNode.system?.swap_total || 14 * 1024 * 1024 * 1024;
-  const swapUsed = activeNode.system?.swap_used || 2.8 * 1024 * 1024 * 1024;
+  const diskTotal = activeNode.system?.disk_total || 0;
+  const diskUsed = activeNode.system?.disk_used || 0;
+  const diskPercent = activeNode.system?.disk_percent || (diskTotal > 0 ? (diskUsed / diskTotal) * 100 : 0);
+  const swapTotal = activeNode.system?.swap_total || 0;
+  const swapUsed = activeNode.system?.swap_used || 0;
   const swapPercent = swapTotal > 0 ? (swapUsed / swapTotal) * 100 : 0;
 
   // Network metrics
-  const netDownRate = activeNode.network?.rate_download || 14.0 * 1024;
-  const netUpRate = activeNode.network?.rate_upload || 7.17 * 1024;
-  const netTotalDown = activeNode.network?.bytes_recv || 20.7 * 1024 * 1024 * 1024;
-  const netTotalUp = activeNode.network?.bytes_sent || 38.7 * 1024 * 1024 * 1024;
+  const netDownRate = activeNode.network?.rate_download || 0;
+  const netUpRate = activeNode.network?.rate_upload || 0;
+  const netTotalDown = activeNode.network?.bytes_recv || 0;
+  const netTotalUp = activeNode.network?.bytes_sent || 0;
 
   // Real or simulated ping targets for active node (Covering 3 domestic carriers and international)
   const pingTargets: PingStat[] = useMemo(() => {
@@ -1034,7 +1009,7 @@ export function BtopTerminalView({
               const nUp = n.network?.rate_upload || 0;
               const nPing = getNodePingLatency(n);
               const nProvider = n.billing?.provider || "--";
-              const nIp = maskIP ? "**.***.***.**" : (n.system?.public_ip || "127.0.0.1");
+              const nIp = maskIP ? "**.***.***.**" : (n.system?.public_ip || "--");
 
               return (
                 <div
@@ -1100,7 +1075,9 @@ export function BtopTerminalView({
                   <div className="col-span-2 sm:col-span-1 flex items-center justify-end gap-1 font-mono text-[11px]">
                     <span
                       className={`h-1.5 w-1.5 rounded-full shrink-0 ${
-                        nPing < 50
+                        !Number.isFinite(nPing)
+                          ? "bg-zinc-500"
+                          : nPing < 50
                           ? "bg-emerald-500"
                           : nPing < 120
                           ? "bg-amber-500"
@@ -1109,14 +1086,16 @@ export function BtopTerminalView({
                     />
                     <span
                       className={`font-semibold ${
-                        nPing < 50
+                        !Number.isFinite(nPing)
+                          ? colors.textMuted
+                          : nPing < 50
                           ? "text-emerald-600 dark:text-emerald-400"
                           : nPing < 120
                           ? colors.warn
                           : colors.alert
                       }`}
                     >
-                      {nPing.toFixed(0)}ms
+                      {Number.isFinite(nPing) ? `${nPing.toFixed(0)}ms` : "--"}
                     </span>
                   </div>
                 </div>
@@ -1216,7 +1195,7 @@ export function BtopTerminalView({
               <span className="font-bold shrink-0">CPU</span>
               <div className="flex-1 min-w-0"><BlockMeterFill percent={cpuPercent} colors={colors} /></div>
               <span className="font-bold shrink-0 w-8 text-right">{cpuPercent.toFixed(0)}%</span>
-              <span className={`text-[11px] shrink-0 ${colors.textDim}`}>......... Tasks: {activeNode.system?.process_count || 87}</span>
+              <span className={`text-[11px] shrink-0 ${colors.textDim}`}>......... Tasks: {activeNode.system?.process_count || "--"}</span>
             </div>
 
             {/* Cores Breakdown + Smooth Wave on left */}
@@ -1234,7 +1213,7 @@ export function BtopTerminalView({
                 </div>
                 <div className="flex justify-between items-center text-[10px] mt-1 font-bold select-none text-current/75">
                   <span>{uptimeStr}</span>
-                  <span className={colors.textMuted}>Tasks: {activeNode.system?.process_count || 87}</span>
+                  <span className={colors.textMuted}>Tasks: {activeNode.system?.process_count || "--"}</span>
                 </div>
               </div>
 
@@ -1255,16 +1234,21 @@ export function BtopTerminalView({
                   <div className="p-1.5 border border-current/15 bg-current/5 space-y-0.5 text-[11px] flex flex-col justify-between">
                     <div className="flex justify-between">
                       <span className={colors.textMuted}>虚拟化:</span>
-                      <span>{activeNode.system?.virtualization || "KVM"}</span>
+                      <span>{activeNode.system?.virtualization || "--"}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className={colors.textMuted}>系统内核:</span>
-                      <span className="truncate max-w-[130px]">{activeNode.system?.kernel || "6.12.43-amd64"}</span>
+                      <span className="truncate max-w-[130px]">{activeNode.system?.kernel || "--"}</span>
                     </div>
                   </div>
                 </div>
               ) : (
                 <div className="md:col-span-6 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-0.5 text-xs font-mono">
+                  {coreLoads.length === 0 && (
+                    <span className={`sm:col-span-2 ${colors.textMuted}`}>
+                      {cpuCores} cores · 总占用 {cpuPercent.toFixed(1)}%（分核数据需升级 Agent）
+                    </span>
+                  )}
                   {coreLoads.map((pct, i) => (
                     <div key={i} className="flex items-center justify-between">
                       <span className={`w-8 shrink-0 ${colors.textMuted}`}>C{i}</span>
@@ -1289,7 +1273,7 @@ export function BtopTerminalView({
                 <span className="font-bold tracking-wider">
                   {activeNode.system?.load_1 != null && activeNode.system.load_1 > 0
                     ? `${activeNode.system.load_1.toFixed(2)} ${(activeNode.system.load_5 || activeNode.system.load_1).toFixed(2)} ${(activeNode.system.load_15 || activeNode.system.load_1).toFixed(2)}`
-                    : "1.68 1.92 1.68"}
+                    : "--"}
                 </span>
                 <span className={`text-[10px] ${colors.textMuted}`}>1m 5m 15m</span>
               </div>
@@ -1339,25 +1323,25 @@ export function BtopTerminalView({
                       <div className="flex justify-between items-center">
                         <span className={colors.textMuted}>Available:</span>
                         <div className="flex items-center gap-1.5">
-                          <span>{formatBytes(memAvail)}</span>
+                          <span>{fmtMem(memAvail)}</span>
                           <span className="w-8 text-right font-semibold text-current/75">
-                            {((memAvail / memTotal) * 100).toFixed(0)}%
+                            {memAvail > 0 ? `${pctOfMem(memAvail).toFixed(0)}%` : "--"}
                           </span>
                         </div>
                       </div>
-                      <div className="w-full mt-0.5"><BlockMeterFill percent={(memAvail / memTotal) * 100} colors={colors} /></div>
+                      <div className="w-full mt-0.5"><BlockMeterFill percent={pctOfMem(memAvail)} colors={colors} /></div>
                     </div>
                     <div>
                       <div className="flex justify-between items-center">
                         <span className={colors.textMuted}>Cached / Buffers:</span>
                         <div className="flex items-center gap-1.5">
-                          <span>{formatBytes(memCached)}</span>
+                          <span>{fmtMem(memCached)}</span>
                           <span className="w-8 text-right font-semibold text-current/75">
-                            {((memCached / memTotal) * 100).toFixed(0)}%
+                            {memCached > 0 ? `${pctOfMem(memCached).toFixed(0)}%` : "--"}
                           </span>
                         </div>
                       </div>
-                      <div className="w-full mt-0.5"><BlockMeterFill percent={(memCached / memTotal) * 100} colors={colors} /></div>
+                      <div className="w-full mt-0.5"><BlockMeterFill percent={pctOfMem(memCached)} colors={colors} /></div>
                     </div>
                     <div className="flex justify-between text-[11px] pt-1 border-t border-dashed border-current/20">
                       <span className={colors.textMuted}>Free RAM:</span>
@@ -1643,7 +1627,7 @@ export function BtopTerminalView({
                     <div className="flex justify-between items-center">
                       <span className={colors.textMuted}>公网 IP 地址:</span>
                       <div className="flex items-center gap-2">
-                        <span className="font-mono">{maskIP ? "**.***.***.**" : (activeNode.system?.public_ip || "127.0.0.1")}</span>
+                        <span className="font-mono">{maskIP ? "**.***.***.**" : (activeNode.system?.public_ip || "--")}</span>
                         <button
                           onClick={() => setMaskIP(!maskIP)}
                           className="hover:underline cursor-pointer text-[10px] opacity-80"
@@ -1757,11 +1741,11 @@ export function BtopTerminalView({
                     </div>
                     <div className="flex justify-between">
                       <span className={colors.textMuted}>虚拟化技术:</span>
-                      <span>{activeNode.system?.virtualization || "KVM (Standard)"}</span>
+                      <span>{activeNode.system?.virtualization || "--"}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className={colors.textMuted}>任务进程数:</span>
-                      <span className="font-mono">{activeNode.system?.process_count || 87} Tasks</span>
+                      <span className="font-mono">{activeNode.system?.process_count || "--"} Tasks</span>
                     </div>
                   </div>
                 </div>
@@ -1775,19 +1759,19 @@ export function BtopTerminalView({
                   <div className="space-y-1 text-[11px]">
                     <div className="flex justify-between">
                       <span className={colors.textMuted}>发行版本:</span>
-                      <span className="font-semibold truncate max-w-[170px]">{activeNode.system?.os || "Debian GNU/Linux 13"}</span>
+                      <span className="font-semibold truncate max-w-[170px]">{activeNode.system?.os || "--"}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className={colors.textMuted}>系统内核:</span>
-                      <span className="font-mono truncate max-w-[170px]">{activeNode.system?.kernel || "6.12.43-amd64"}</span>
+                      <span className="font-mono truncate max-w-[170px]">{activeNode.system?.kernel || "--"}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className={colors.textMuted}>数据中心/ISP:</span>
-                      <span className="truncate max-w-[170px]">{billing.provider || activeNode.billing?.provider || "DMIT Cloud Services"}</span>
+                      <span className="truncate max-w-[170px]">{billing.provider || "--"}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className={colors.textMuted}>主机区域:</span>
-                      <span className="font-bold">{activeNode.region || "US / Global"}</span>
+                      <span className="font-bold">{activeNode.region || "--"}</span>
                     </div>
                   </div>
                 </div>
@@ -1808,9 +1792,9 @@ export function BtopTerminalView({
                   <div className="flex items-center justify-between bg-current/5 px-2 py-1 border border-current/10">
                     <span className={colors.textMuted}>公网 IPv4:</span>
                     <div className="flex items-center gap-1 font-mono font-bold">
-                      <span>{maskIP ? "**.***.***.**" : (activeNode.system?.public_ip || "127.0.0.1")}</span>
+                      <span>{maskIP ? "**.***.***.**" : (activeNode.system?.public_ip || "--")}</span>
                       <button
-                        onClick={() => handleCopy(activeNode.system?.public_ip || "127.0.0.1", "IPv4 地址")}
+                        onClick={() => activeNode.system?.public_ip && handleCopy(activeNode.system.public_ip, "IPv4 地址")}
                         className="hover:opacity-75 cursor-pointer ml-1"
                         title="复制 IPv4"
                       >
@@ -1866,7 +1850,7 @@ export function BtopTerminalView({
                   </span>
                   <div className="flex items-center gap-2">
                     <span className="text-[11px] text-current/70">
-                      Load: {(activeNode.system?.load_1 || 1.68).toFixed(2)} {(activeNode.system?.load_5 || 1.92).toFixed(2)} {(activeNode.system?.load_15 || 1.68).toFixed(2)}
+                      Load: {(activeNode.system?.load_1 || 0).toFixed(2)} {(activeNode.system?.load_5 || 0).toFixed(2)} {(activeNode.system?.load_15 || 0).toFixed(2)}
                     </span>
                     <span className="font-mono font-bold text-xs">{cpuPercent.toFixed(1)}%</span>
                   </div>
@@ -1889,8 +1873,8 @@ export function BtopTerminalView({
                 </div>
                 <BlockMeterFill percent={memPercent} colors={colors} />
                 <div className="flex justify-between text-[10px] text-current/70 pt-0.5">
-                  <span>可用: {formatBytes(memAvail)}</span>
-                  <span>缓存: {formatBytes(memCached)}</span>
+                  <span>可用: {fmtMem(memAvail)}</span>
+                  <span>缓存: {fmtMem(memCached)}</span>
                   <span>空闲: {formatBytes(memFree)}</span>
                 </div>
               </div>
@@ -2162,7 +2146,7 @@ export function BtopTerminalView({
               <button
                 onClick={() =>
                   handleCopy(
-                    `ssh root@${activeNode.system?.public_ip || "127.0.0.1"}`,
+                    `ssh root@${activeNode.system?.public_ip || activeNode.system?.public_ipv6 || "<IP>"}`,
                     "SSH 连接命令"
                   )
                 }
@@ -2174,7 +2158,7 @@ export function BtopTerminalView({
               <button
                 onClick={() =>
                   handleCopy(
-                    `mtr -rw -c 50 ${activeNode.system?.public_ip || "127.0.0.1"}`,
+                    `mtr -rw -c 50 ${activeNode.system?.public_ip || activeNode.system?.public_ipv6 || "<IP>"}`,
                     "MTR 诊断命令"
                   )
                 }

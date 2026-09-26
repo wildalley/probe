@@ -220,13 +220,14 @@ export function App() {
 // Helper to adapt standard Komari nodes to NodeState
 function mapKomariClients(list: any[]): NodeState[] {
   return list.map((c: any) => {
-    const memTotal = c.system?.memory_total || 1024 * 1024 * 1024;
-    const diskTotal = c.system?.disk_total || 10 * 1024 * 1024 * 1024;
+    // 节点列表只带静态规格；缺的字段留 0/空，由实时流补上，不编造规格。
+    const memTotal = c.mem_total || c.system?.memory_total || 0;
+    const diskTotal = c.disk_total || c.system?.disk_total || 0;
     const isOnline = c.status === 1 || c.status === "online";
     return {
       node_id: c.uuid || c.id || "node",
       name: c.name || "Server",
-      region: c.region || "UN",
+      region: c.region || "",
       tags: c.tags ? (typeof c.tags === "string" ? c.tags.split(",") : c.tags) : [],
       is_online: isOnline,
       last_seen: Date.now() / 1000,
@@ -235,19 +236,19 @@ function mapKomariClients(list: any[]): NodeState[] {
       disk: 0,
       rate_down: 0,
       rate_up: 0,
-      uptime_str: "up 1d 00:00",
+      uptime_str: "",
       system: {
-        os: c.system?.os || "Linux",
-        kernel: c.system?.kernel_version || "6.1.0",
-        cpu_model: c.system?.cpu_name || "x86_64 CPU",
-        cpu_count: c.system?.cpu_cores || 1,
+        os: c.os || c.system?.os || "",
+        kernel: c.kernel_version || c.system?.kernel_version || "",
+        cpu_model: c.cpu_name || c.system?.cpu_name || "",
+        cpu_count: c.cpu_cores || c.system?.cpu_cores || 0,
         cpu_percent: 0,
         mem_used: 0,
         mem_total: memTotal,
         disk_used: 0,
         disk_total: diskTotal,
         disk_percent: 0,
-        uptime: 86400,
+        uptime: 0,
       },
       network: {
         bytes_sent: 0,

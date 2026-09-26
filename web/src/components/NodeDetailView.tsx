@@ -245,14 +245,8 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
       });
     }
 
-    if (node.pings && node.pings.length > 0) return node.pings;
-    return [
-      { target: "8.8.8.8", label: "Google", color: "#ef4444", latency_ms: 1.2, packet_loss: 0, jitter: 0.05 },
-      { target: "223.5.5.5", label: "电信", color: "#06b6d4", latency_ms: 150.0, packet_loss: 0, jitter: 0.18 },
-      { target: "www.youtube.com", label: "Youtube", color: "#a855f7", latency_ms: 1.1, packet_loss: 0, jitter: 0.08 },
-      { target: "api.openai.com", label: "ChatGPT", color: "#3b82f6", latency_ms: 1.2, packet_loss: 0, jitter: 0.06 },
-      { target: "api.anthropic.com", label: "Claude", color: "#f97316", latency_ms: 2.0, packet_loss: 0, jitter: 0.10 },
-    ];
+    // 没有配置也没有上报的目标就是没有，不拿一组示例延迟冒充实测。
+    return node.pings || [];
   }, [configuredTargets, node.pings]);
 
   // Hidden ping targets filter (tracks labels the user intentionally hid)
@@ -414,7 +408,7 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
     },
     {
       label: "UDP",
-      values: history.map((p) => p.udp_count || 4),
+      values: history.map((p) => p.udp_count ?? null),
       color: isBtop ? "#50fa7b" : "#10b981",
       unit: "",
     },
@@ -423,7 +417,7 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
   const procChartSeries: ChartSeries[] = useMemo(() => [
     {
       label: "进程",
-      values: history.map((p) => p.process_count || 87),
+      values: history.map((p) => p.process_count ?? null),
       color: isBtop ? "#bd93f9" : "#8b5cf6",
       fill: isBtop
         ? "rgba(189, 147, 249, 0.12)"
@@ -445,14 +439,16 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
     return displayPings
       .filter((target) => !hiddenTargets.has(target.label))
       .map((target) => {
-        const valMap = new Map<number, number>();
+        // 丢包行的 latency_ms 是上一次探测的值，记为缺口；别的目标的时间点
+        // 同样是缺口，而不是用当前延迟补一条平线。
+        const valMap = new Map<number, number | null>();
         pingHistory.forEach((p) => {
           if (p.label === target.label || p.target === target.target) {
-            valMap.set(p.timestamp, p.latency_ms);
+            valMap.set(p.timestamp, p.lost_event ? null : p.latency_ms);
           }
         });
 
-        const vals = pingTimestamps.map((ts) => valMap.get(ts) ?? target.latency_ms);
+        const vals = pingTimestamps.map((ts) => valMap.get(ts) ?? null);
 
         return {
           label: target.label,
@@ -949,7 +945,7 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
               <LinkIcon className={`h-3.5 w-3.5 ${isBlueprintDark ? "text-slate-400" : isBlueprintLight ? "text-slate-500" : isBtop ? "text-cyan-400" : "text-zinc-400"}`} />
             </div>
             <div className={`mt-1 sm:mt-1.5 text-base sm:text-lg font-bold ${isBlueprintDark ? "text-slate-100" : isBlueprintLight ? "text-slate-900" : isBtop ? "text-cyan-200" : "text-zinc-100"}`}>
-              <NumberTicker value={node.network.tcp_established + (node.network.udp_established || 4)} />
+              <NumberTicker value={(node.network.tcp_established || 0) + (node.network.udp_established || 0)} />
             </div>
           </BlurFade>
         </div>
@@ -1325,7 +1321,7 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
                   {formatBytes(usedTraffic)} {quotaBytes > 0 ? `/ ${formatBytes(quotaBytes)}` : "（无限制）"}
                 </div>
                 <div className={`text-10 mt-1.5 flex items-center gap-2 ${isBlueprintDark ? "text-slate-400" : isBlueprintLight ? "text-slate-500" : "text-zinc-400"}`}>
-                  <span>近一周峰值</span>
+                  <span title="本自然月内 Agent 观测到的最高瞬时速率（Agent 重启后重新统计）">本月峰值</span>
                   <span className="flex items-center gap-0.5 text-emerald-600 dark:text-emerald-400 font-semibold">
                     <ArrowUp className="h-3 w-3" />
                     <span>{node.network.monthly_peak_up ? formatRate(node.network.monthly_peak_up) : "--"}</span>
@@ -1383,7 +1379,7 @@ export const NodeDetailView: React.FC<NodeDetailViewProps> = ({
           <TimeSeriesChart
             title="CPU 与负载"
             icon={<Cpu className="h-3.5 w-3.5 text-rose-500" />}
-            headerRight={`${(node.cpu || 1.0).toFixed(1)}%`}
+            headerRight={`${(node.cpu || 0).toFixed(1)}%`}
             yAxisLabel="CPU %"
             timestamps={timestamps}
             seriesList={cpuChartSeries}

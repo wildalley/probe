@@ -5,7 +5,8 @@ import { ThemeMode } from "../types";
 
 export interface ChartSeries {
   label: string;
-  values: number[];
+  /** null 表示该时刻无样本，画成缺口而不是 0。 */
+  values: (number | null)[];
   color: string;
   fill?: string;
   unit?: string;
@@ -82,13 +83,13 @@ export const TimeSeriesChart: React.FC<TimeSeriesChartProps> = ({
       tList = [now - 60, now];
       sList = seriesList.map((s) => ({
         ...s,
-        values: [0, 0],
+        values: [null, null],
       }));
     } else if (tList.length === 1) {
       tList = [tList[0] - 1, tList[0]];
       sList = seriesList.map((s) => ({
         ...s,
-        values: [s.values[0] ?? 0, s.values[0] ?? 0],
+        values: [s.values[0] ?? null, s.values[0] ?? null],
       }));
     }
     return { effectiveTimestamps: tList, effectiveSeriesList: sList };
