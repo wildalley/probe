@@ -89,7 +89,8 @@ func (s *Storage) initSchema() error {
 		target TEXT NOT NULL,
 		label TEXT NOT NULL,
 		latency_ms REAL NOT NULL,
-		packet_loss REAL NOT NULL
+		packet_loss REAL NOT NULL,
+		lost_event INTEGER NOT NULL DEFAULT 0
 	);
 
 	CREATE INDEX IF NOT EXISTS idx_ping_node_time ON ping_points(node_id, timestamp);
@@ -270,6 +271,7 @@ func (s *Storage) migrateTableColumns() {
 		"ALTER TABLE node_settings ADD COLUMN bandwidth_base_counter_down INTEGER DEFAULT 0",
 		"ALTER TABLE node_settings ADD COLUMN public_ipv6 TEXT DEFAULT ''",
 		"ALTER TABLE node_settings ADD COLUMN note TEXT DEFAULT ''",
+		"ALTER TABLE ping_points ADD COLUMN lost_event INTEGER DEFAULT 0",
 		// First entry against the nodes table. Re-running is harmless because the
 		// error from a duplicate column is swallowed below, which is what makes
 		// this whole slice idempotent.
@@ -545,8 +547,8 @@ func (s *Storage) InsertPingBatch(points []*model.PingHistoryPoint) error {
 	defer tx.Rollback()
 
 	stmt, err := tx.Prepare(`
-		INSERT INTO ping_points (node_id, timestamp, target, label, latency_ms, packet_loss)
-		VALUES (?, ?, ?, ?, ?, ?)
+		INSERT INTO ping_points (node_id, timestamp, target, label, latency_ms, packet_loss, lost_event)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return err
@@ -554,7 +556,11 @@ func (s *Storage) InsertPingBatch(points []*model.PingHistoryPoint) error {
 	defer stmt.Close()
 
 	for _, p := range points {
-		_, err := stmt.Exec(p.NodeID, p.Timestamp, p.Target, p.Label, p.LatencyMs, p.PacketLoss)
+		lostEvent := 0
+		if p.LostEvent {
+			lostEvent = 1
+		}
+		_, err := stmt.Exec(p.NodeID, p.Timestamp, p.Target, p.Label, p.LatencyMs, p.PacketLoss, lostEvent)
 		if err != nil {
 			return err
 		}
@@ -600,7 +606,7 @@ func (s *Storage) GetPingHistory(nodeID string, start, end int64) ([]*model.Ping
 	defer s.mu.RUnlock()
 
 	rows, err := s.db.Query(`
-		SELECT timestamp, target, label, latency_ms, packet_loss
+		SELECT timestamp, target, label, latency_ms, packet_loss, lost_event
 		FROM ping_points
 		WHERE node_id = ? AND timestamp >= ? AND timestamp <= ?
 		ORDER BY timestamp ASC
@@ -613,7 +619,9 @@ func (s *Storage) GetPingHistory(nodeID string, start, end int64) ([]*model.Ping
 	var points []*model.PingHistoryPoint
 	for rows.Next() {
 		p := &model.PingHistoryPoint{NodeID: nodeID}
-		if err := rows.Scan(&p.Timestamp, &p.Target, &p.Label, &p.LatencyMs, &p.PacketLoss); err == nil {
+		var lostEvent int
+		if err := rows.Scan(&p.Timestamp, &p.Target, &p.Label, &p.LatencyMs, &p.PacketLoss, &lostEvent); err == nil {
+			p.LostEvent = lostEvent != 0
 			points = append(points, p)
 		}
 	}
@@ -631,7 +639,7 @@ func (s *Storage) GetPingHistoryRange(start, end int64, limit int) ([]*model.Pin
 		limit = 4000
 	}
 	rows, err := s.db.Query(`
-		SELECT node_id, timestamp, target, label, latency_ms, packet_loss
+		SELECT node_id, timestamp, target, label, latency_ms, packet_loss, lost_event
 		FROM ping_points
 		WHERE timestamp >= ? AND timestamp <= ?
 		ORDER BY timestamp DESC
@@ -644,7 +652,9 @@ func (s *Storage) GetPingHistoryRange(start, end int64, limit int) ([]*model.Pin
 	var points []*model.PingHistoryPoint
 	for rows.Next() {
 		p := &model.PingHistoryPoint{}
-		if err := rows.Scan(&p.NodeID, &p.Timestamp, &p.Target, &p.Label, &p.LatencyMs, &p.PacketLoss); err == nil {
+		var lostEvent int
+		if err := rows.Scan(&p.NodeID, &p.Timestamp, &p.Target, &p.Label, &p.LatencyMs, &p.PacketLoss, &lostEvent); err == nil {
+			p.LostEvent = lostEvent != 0
 			points = append(points, p)
 		}
 	}

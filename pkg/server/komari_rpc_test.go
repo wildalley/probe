@@ -222,7 +222,7 @@ func TestKomariQueryMetricsPingSeries(t *testing.T) {
 	now := time.Now().Unix()
 	points := []*model.PingHistoryPoint{
 		{NodeID: "test-node-1", Timestamp: now - 120, Target: "163.com", Label: "中国电信", LatencyMs: 40, PacketLoss: 0},
-		{NodeID: "test-node-1", Timestamp: now - 60, Target: "163.com", Label: "中国电信", LatencyMs: 50, PacketLoss: 50},
+		{NodeID: "test-node-1", Timestamp: now - 60, Target: "163.com", Label: "中国电信", LatencyMs: 50, PacketLoss: 50, LostEvent: true},
 	}
 	if err := srv.storage.InsertPingBatch(points); err != nil {
 		t.Fatal(err)
@@ -255,19 +255,21 @@ func TestKomariQueryMetricsPingSeries(t *testing.T) {
 	if !ok || len(lat.Points) == 0 {
 		t.Fatal("missing latency points")
 	}
-	// The two samples land in separate buckets; both original values survive.
-	if len(lat.Points) != 2 {
-		t.Fatalf("latency points = %+v", lat.Points)
+	// 丢失桶（LostEvent）不产生延迟点：只剩干净桶的 40。
+	if len(lat.Points) != 1 || lat.Points[0].Value != 40 {
+		t.Fatalf("latency points = %+v, want only the clean sample 40", lat.Points)
 	}
-	if lat.Points[0].Value != 40 || lat.Points[1].Value != 50 {
-		t.Fatalf("latency values = %v/%v, want 40/50", lat.Points[0].Value, lat.Points[1].Value)
-	}
+	// 丢包序列是事件语义：干净桶 0、丢失桶 100（丢失桶同时缺失延迟点）
 	loss, ok := byKey["ping.loss"]
 	if !ok || len(loss.Points) != 2 {
 		t.Fatalf("loss points = %+v", loss.Points)
 	}
-	if loss.Points[0].Value != 0 || loss.Points[1].Value != 50 {
-		t.Fatalf("loss values = %v/%v, want 0/50", loss.Points[0].Value, loss.Points[1].Value)
+	if loss.Points[0].Value != 0 || loss.Points[1].Value != 100 {
+		t.Fatalf("loss values = %v/%v, want 0/100", loss.Points[0].Value, loss.Points[1].Value)
+	}
+	lat = byKey["ping.latency_ms"]
+	if len(lat.Points) != 1 || lat.Points[0].Value != 40 {
+		t.Fatalf("lost bucket must not emit a latency point, got %+v", lat.Points)
 	}
 }
 

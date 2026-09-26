@@ -23,6 +23,11 @@ type PingStat struct {
 	LatencyMs  float64 `json:"latency_ms"`  // e.g. 1.2
 	PacketLoss float64 `json:"packet_loss"` // e.g. 0.00 (%)
 	Jitter     float64 `json:"jitter"`      // e.g. 0.15
+	// Lost reports whether the most recent probe for this target was lost.
+	// Windowed PacketLoss stays the aggregate view; this is the per-sample
+	// event the Komari loss timeline keys off (an always-positive windowed
+	// average would turn every timestamp into a loss marker).
+	Lost bool `json:"lost,omitempty"`
 }
 
 // BillingInfo contains VPS billing cycle, pricing, and expiration telemetry.
@@ -226,6 +231,11 @@ type PingHistoryPoint struct {
 	Label      string  `json:"label"`
 	LatencyMs  float64 `json:"latency_ms"`
 	PacketLoss float64 `json:"packet_loss"`
+	// LostEvent marks a flush interval whose most recent probe was lost.
+	// Komari-compatible loss views key off this event (0/100), not the
+	// windowed average — an always-positive average turns every timestamp
+	// into a loss marker.
+	LostEvent bool `json:"lost_event"`
 }
 
 // NodeMetadata represents registered node information in the database.

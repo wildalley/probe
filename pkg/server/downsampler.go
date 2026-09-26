@@ -178,6 +178,7 @@ func (d *Downsampler) flush() {
 				Label:      p.Label,
 				LatencyMs:  p.LatencyMs,
 				PacketLoss: p.PacketLoss,
+				LostEvent:  p.Lost,
 			})
 		}
 	}

@@ -1336,8 +1336,14 @@ func (s *Server) getKomariQueryMetrics(params interface{}) interface{} {
 					grouped[task.ID] = g
 					order = append(order, task.ID)
 				}
-				g.lat = append(g.lat, komariXY{t: pt.Timestamp, v: pt.LatencyMs})
-				g.loss = append(g.loss, komariXY{t: pt.Timestamp, v: pt.PacketLoss})
+				if pt.LostEvent {
+					// 丢失桶：不产生延迟样本（上游 1.3.2 语义——全丢桶无延迟
+					// 点，主题据缺失近似丢包并断线），丢包事件记 100。
+					g.loss = append(g.loss, komariXY{t: pt.Timestamp, v: 100})
+				} else {
+					g.lat = append(g.lat, komariXY{t: pt.Timestamp, v: pt.LatencyMs})
+					g.loss = append(g.loss, komariXY{t: pt.Timestamp, v: 0})
+				}
 			}
 			for _, id := range order {
 				g := grouped[id]
