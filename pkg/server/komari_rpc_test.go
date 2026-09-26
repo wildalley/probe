@@ -627,3 +627,80 @@ func TestKomariNodesExposeBillingFields(t *testing.T) {
 		t.Fatalf("traffic_limit = %v", node["traffic_limit"])
 	}
 }
+
+// TestKomariPingMetricStatsLossEvents covers rows that carry loss events: a
+// lost probe counts toward the loss rate but not toward latency, since its
+// stored latency is the previous probe's.
+func TestKomariPingMetricStatsLossEvents(t *testing.T) {
+	srv, cleanup := setupTestServerForRPC(t)
+	defer cleanup()
+
+	target := &model.PingTargetConfig{Label: "Cloudflare", Target: "1.1.1.1", Protocol: "tcp", Interval: 60, Enabled: true}
+	if err := srv.storage.AddPingTarget(target); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().Unix()
+	if err := srv.storage.InsertPingBatch([]*model.PingHistoryPoint{
+		{NodeID: "test-node-1", Timestamp: now - 120, Target: "1.1.1.1", Label: "Cloudflare", LatencyMs: 10, PacketLoss: 0},
+		{NodeID: "test-node-1", Timestamp: now - 90, Target: "1.1.1.1", Label: "Cloudflare", LatencyMs: 10, PacketLoss: 20, LostEvent: true},
+		{NodeID: "test-node-1", Timestamp: now - 60, Target: "1.1.1.1", Label: "Cloudflare", LatencyMs: 30, PacketLoss: 20},
+		{NodeID: "test-node-1", Timestamp: now - 30, Target: "1.1.1.1", Label: "Cloudflare", LatencyMs: 30, PacketLoss: 20, LostEvent: true},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	res, rpcErr := srv.executeRPCMethod("public:getPingMetricStats", map[string]interface{}{"uuid": "test-node-1", "hours": 1})
+	if rpcErr != nil {
+		t.Fatalf("rpc error: %v", rpcErr)
+	}
+	st := res.(gin.H)["stats"].([]KomariPingMetricStat)[0]
+	if st.Total != 4 || st.Loss != 50 || st.LossApproximate {
+		t.Fatalf("total/loss/approx = %d/%v/%v, want 4/50/false", st.Total, st.Loss, st.LossApproximate)
+	}
+	if st.Min != 10 || st.Max != 30 || st.Avg != 20 || st.Latest != 30 {
+		t.Fatalf("min/max/avg/latest = %v/%v/%v/%v", st.Min, st.Max, st.Avg, st.Latest)
+	}
+}
+
+// TestDownsamplerStoresEachProbeOnce: agents repeat the latest probe in every
+// 1Hz report, so the same probed_at must become exactly one row, stamped with
+// the probe time, and a lost probe in the middle of a bucket must survive.
+func TestDownsamplerStoresEachProbeOnce(t *testing.T) {
+	storage, err := NewStorage(t.TempDir() + "/ds.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer storage.Close()
+	d := NewDownsampler(storage, time.Hour, 7)
+
+	base := time.Now().Unix() - 100
+	report := func(ts int64, ping model.PingStat) {
+		d.RecordIngest(&model.NodeReport{NodeID: "n1", Timestamp: ts, Pings: []model.PingStat{ping}})
+	}
+	p := model.PingStat{Target: "1.1.1.1", Label: "CF"}
+	report(base, p) // not probed yet: stored nowhere
+	p.LatencyMs, p.ProbedAt = 12, base+1
+	for i := int64(1); i <= 5; i++ {
+		report(base+i, p)
+	}
+	p.Lost, p.ProbedAt = true, base+6
+	for i := int64(6); i <= 9; i++ {
+		report(base+i, p)
+	}
+	p.Lost, p.LatencyMs, p.ProbedAt = false, 14, base+10
+	report(base+10, p)
+	d.flush()
+	report(base+11, p) // repeat across a flush boundary
+	d.flush()
+
+	rows, err := storage.GetPingHistory("n1", base-1, base+20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 3 {
+		t.Fatalf("rows = %d, want 3 (one per probe): %+v", len(rows), rows)
+	}
+	if rows[0].Timestamp != base+1 || !rows[1].LostEvent || rows[2].LatencyMs != 14 {
+		t.Fatalf("unexpected rows: %+v %+v %+v", rows[0], rows[1], rows[2])
+	}
+}

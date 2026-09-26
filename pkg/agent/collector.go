@@ -43,6 +43,10 @@ type Collector struct {
 	virtualization string
 	maxRateDown    float64
 	maxRateUp      float64
+	// peakMonth is the calendar month maxRateDown/maxRateUp cover. The peaks
+	// are reported as monthly_peak_*, so they restart when the month turns
+	// instead of holding the highest rate since the agent started.
+	peakMonth time.Month
 }
 
 // ipLookupTimeout bounds each individual lookup. Detection runs in the
@@ -167,7 +171,9 @@ func (c *Collector) startIPDetection(autoRegion bool) {
 
 // NewCollector instantiates a new metrics collector.
 func NewCollector(nodeID, name, token, region string) *Collector {
+	// Prime both counters: the first zero-interval call only records a baseline.
 	_, _ = cpu.Percent(0, false)
+	_, _ = cpu.Percent(0, true)
 
 	// Detect CPU Model once
 	cpuModel := "Unknown CPU"
@@ -242,13 +248,22 @@ func (c *Collector) Collect() (*model.NodeReport, error) {
 		cpuPercent = math.Round(cpuPercents[0]*10) / 10
 	}
 	cpuCount, _ := cpu.Counts(true)
+	var perCore []float64
+	if percents, err := cpu.Percent(0, true); err == nil {
+		perCore = make([]float64, len(percents))
+		for i, v := range percents {
+			perCore[i] = math.Round(v*10) / 10
+		}
+	}
 
 	// 3. Memory & Swap metrics
 	vmem, err := mem.VirtualMemory()
-	var memUsed, memTotal uint64
+	var memUsed, memTotal, memAvail, memCached uint64
 	if err == nil && vmem != nil {
 		memUsed = vmem.Used
 		memTotal = vmem.Total
+		memAvail = vmem.Available
+		memCached = vmem.Cached + vmem.Buffers
 	}
 
 	swapMem, err := mem.SwapMemory()
@@ -293,6 +308,10 @@ func (c *Collector) Collect() (*model.NodeReport, error) {
 	}
 
 	rateDown, rateUp := c.rateTracker.Update(totalSent, totalRecv, now)
+	if now.Month() != c.peakMonth {
+		c.peakMonth = now.Month()
+		c.maxRateDown, c.maxRateUp = 0, 0
+	}
 	if rateDown > c.maxRateDown {
 		c.maxRateDown = rateDown
 	}
@@ -337,8 +356,11 @@ func (c *Collector) Collect() (*model.NodeReport, error) {
 			Virtualization: c.virtualization,
 			CPUPercent:     cpuPercent,
 			CPUCount:       cpuCount,
+			CPUPerCore:     perCore,
 			MemUsed:        memUsed,
 			MemTotal:       memTotal,
+			MemAvailable:   memAvail,
+			MemCached:      memCached,
 			SwapUsed:       swapUsed,
 			SwapTotal:      swapTotal,
 			DiskPercent:    diskPercent,
@@ -369,26 +391,61 @@ func (c *Collector) Collect() (*model.NodeReport, error) {
 	return report, nil
 }
 
+// detectVirtualization names the hypervisor or container the agent runs in.
+// It returns "" when nothing identifies one, which the dashboard shows as
+// unknown; guessing "kvm" would label bare metal and unrecognised platforms
+// with a hypervisor they do not run.
 func detectVirtualization() string {
 	if _, err := os.Stat("/.dockerenv"); err == nil {
 		return "docker"
 	}
-	if data, err := os.ReadFile("/sys/class/dmi/id/product_name"); err == nil {
-		s := strings.ToLower(string(data))
-		if strings.Contains(s, "kvm") {
-			return "kvm"
-		}
-		if strings.Contains(s, "qemu") {
-			return "qemu"
-		}
-		if strings.Contains(s, "vmware") {
-			return "vmware"
-		}
-		if strings.Contains(s, "virtualbox") {
-			return "virtualbox"
+	if _, err := os.Stat("/run/.containerenv"); err == nil {
+		return "podman"
+	}
+	if data, err := os.ReadFile("/proc/1/environ"); err == nil {
+		for _, kv := range strings.Split(string(data), "\x00") {
+			if v, ok := strings.CutPrefix(kv, "container="); ok && v != "" {
+				return strings.ToLower(v)
+			}
 		}
 	}
-	return "kvm"
+	if _, err := os.Stat("/proc/vz/veinfo"); err == nil {
+		if _, err := os.Stat("/proc/vz/version"); err != nil {
+			return "openvz"
+		}
+	}
+	var dmi strings.Builder
+	for _, f := range []string{"product_name", "sys_vendor", "board_vendor"} {
+		if data, err := os.ReadFile("/sys/class/dmi/id/" + f); err == nil {
+			dmi.WriteString(strings.ToLower(string(data)))
+			dmi.WriteByte(' ')
+		}
+	}
+	d := dmi.String()
+	for _, m := range []struct{ needle, name string }{
+		{"kvm", "kvm"}, {"qemu", "qemu"}, {"vmware", "vmware"},
+		{"virtualbox", "virtualbox"}, {"innotek", "virtualbox"},
+		{"microsoft corporation", "hyper-v"}, {"xen", "xen"},
+		{"amazon ec2", "kvm"}, {"google compute engine", "kvm"},
+		{"parallels", "parallels"}, {"bochs", "bochs"},
+	} {
+		if strings.Contains(d, m.needle) {
+			return m.name
+		}
+	}
+	if _, err := os.Stat("/proc/xen"); err == nil {
+		return "xen"
+	}
+	if data, err := os.ReadFile("/proc/cpuinfo"); err == nil {
+		if strings.Contains(string(data), " hypervisor") {
+			return "vm"
+		}
+		if runtime.GOOS == "linux" {
+			// No hypervisor flag, no container marker, no DMI match.
+			return "physical"
+		}
+	}
+	return ""
 }
 
 func getTcpEstablishedCount() int {
@@ -413,16 +470,24 @@ func getTcpEstablishedCount() int {
 
 func getUdpConnectionsCount() int {
 	if runtime.GOOS == "linux" {
-		if file, err := os.Open("/proc/net/udp"); err == nil {
-			defer file.Close()
+		// IPv4 and IPv6 sockets live in separate tables; CurrEstab on the TCP
+		// side already covers both families, so UDP must too.
+		count, found := 0, false
+		for _, path := range []string{"/proc/net/udp", "/proc/net/udp6"} {
+			file, err := os.Open(path)
+			if err != nil {
+				continue
+			}
+			found = true
 			scanner := bufio.NewScanner(file)
-			count := 0
-			// Skip header
-			if scanner.Scan() {
+			if scanner.Scan() { // header
 				for scanner.Scan() {
 					count++
 				}
 			}
+			file.Close()
+		}
+		if found {
 			return count
 		}
 	}

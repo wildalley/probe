@@ -228,8 +228,21 @@ func inferLineTag(asn, org, isp string) string {
 	case strings.Contains(upper, "AS63949") || strings.Contains(upper, "LINODE") || strings.Contains(upper, "AKAMAI"):
 		return "Linode/Akamai BGP"
 	default:
-		return "全网 BGP 多线"
+		// An unrecognised network gets no route tag: "BGP 多线" would be a
+		// claim about routing quality that nothing here measured.
+		return ""
 	}
+}
+
+// autoTags is the tag set inferred from GeoIP for a node with none configured.
+func autoTags(d *GeoIPDetails) []string {
+	var tags []string
+	for _, t := range []string{d.LineTag, d.CountryCode} {
+		if t != "" {
+			tags = append(tags, t)
+		}
+	}
+	return tags
 }
 
 // Hub manages purely in-memory node states and real-time event broadcasting to Web clients.
@@ -578,8 +591,8 @@ func (h *Hub) IngestReport(report *model.NodeReport, clientIP string) {
 		if billing.Provider == "" && geoDetails.Provider != "" {
 			billing.Provider = geoDetails.Provider
 		}
-		if len(tags) == 0 && geoDetails.LineTag != "" {
-			tags = []string{geoDetails.LineTag, geoDetails.CountryCode}
+		if len(tags) == 0 {
+			tags = autoTags(geoDetails)
 		}
 	} else if geoKey != "" {
 		// Launch background async resolution and push update when resolved
@@ -604,8 +617,10 @@ func (h *Hub) IngestReport(report *model.NodeReport, clientIP string) {
 						updated = true
 					}
 					if (customSettings == nil || len(customSettings.Tags) == 0) && len(st.Tags) == 0 {
-						st.Tags = []string{details.LineTag, details.CountryCode}
-						updated = true
+						if tags := autoTags(details); len(tags) > 0 {
+							st.Tags = tags
+							updated = true
+						}
 					}
 					if updated {
 						h.nodeStates[nodeID] = st
@@ -1299,6 +1314,9 @@ func (h *Hub) DeleteNode(nodeID string) error {
 	h.mu.Lock()
 	delete(h.nodeStates, nodeID)
 	h.mu.Unlock()
+	if h.downsampler != nil {
+		h.downsampler.ForgetNode(nodeID)
+	}
 
 	h.sendBroadcast(&model.WSEvent{
 		Type:      "node_delete",

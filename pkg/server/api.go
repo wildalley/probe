@@ -557,11 +557,10 @@ func (s *Server) handleGetNodeHistory(c *gin.Context) {
 		return
 	}
 
-	// If newly started node has fewer than 2 points, synthesize a clean initial baseline from live node state
-	if len(points) < 2 {
-		if state, found := s.hub.GetNodeState(nodeID); found {
-			points = generateInitialHistoryPoints(nodeID, start, now, state)
-		}
+	// A new node simply has little history yet. The chart shows what exists;
+	// it is never padded with synthesized points shaped like real telemetry.
+	if points == nil {
+		points = []*model.HistoryPoint{}
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -598,11 +597,8 @@ func (s *Server) handleGetNodePingHistory(c *gin.Context) {
 		return
 	}
 
-	// If newly started node has fewer than 2 points, synthesize clean initial ping history from live node state
-	if len(points) < 2 {
-		if state, found := s.hub.GetNodeState(nodeID); found {
-			points = generateInitialPingPoints(nodeID, start, now, state)
-		}
+	if points == nil {
+		points = []*model.PingHistoryPoint{}
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -610,84 +606,6 @@ func (s *Server) handleGetNodePingHistory(c *gin.Context) {
 		"range":   rangeParam,
 		"points":  points,
 	})
-}
-
-func generateInitialHistoryPoints(nodeID string, start, end int64, state *model.NodeState) []*model.HistoryPoint {
-	steps := 18
-	if end <= start {
-		end = start + 3600
-	}
-	stepDuration := (end - start) / int64(steps)
-	if stepDuration <= 0 {
-		stepDuration = 60
-	}
-
-	pts := make([]*model.HistoryPoint, 0, steps+1)
-	for i := 0; i <= steps; i++ {
-		ts := start + int64(i)*stepDuration
-		factor := 1.0 + math.Sin(float64(i)*0.4)*0.08
-		cpu := math.Max(0.5, math.Min(99.0, state.CPU*factor))
-		load1 := math.Max(0.01, state.System.Load1*factor)
-		memUsed := uint64(float64(state.System.MemUsed) * (0.98 + 0.04*math.Cos(float64(i)*0.3)))
-		pts = append(pts, &model.HistoryPoint{
-			NodeID:       nodeID,
-			Timestamp:    ts,
-			CPUPercent:   math.Round(cpu*10) / 10,
-			Load1:        math.Round(load1*100) / 100,
-			MemUsed:      memUsed,
-			MemTotal:     state.System.MemTotal,
-			SwapUsed:     state.System.SwapUsed,
-			SwapTotal:    state.System.SwapTotal,
-			DiskUsed:     state.System.DiskUsed,
-			DiskTotal:    state.System.DiskTotal,
-			RateDownload: math.Max(0, state.RateDown*(0.9+0.2*math.Sin(float64(i)*0.5))),
-			RateUpload:   math.Max(0, state.RateUp*(0.9+0.2*math.Cos(float64(i)*0.5))),
-			TCPCount:     state.Network.TCPEstablished,
-			UDPCount:     state.Network.UDPEstablished,
-			ProcessCount: state.System.ProcessCount,
-		})
-	}
-	return pts
-}
-
-func generateInitialPingPoints(nodeID string, start, end int64, state *model.NodeState) []*model.PingHistoryPoint {
-	steps := 18
-	if end <= start {
-		end = start + 3600
-	}
-	stepDuration := (end - start) / int64(steps)
-	if stepDuration <= 0 {
-		stepDuration = 60
-	}
-
-	pings := state.Pings
-	if len(pings) == 0 {
-		pings = []model.PingStat{
-			{Target: "8.8.8.8", Label: "Google", LatencyMs: 1.2, PacketLoss: 0.0},
-			{Target: "223.5.5.5", Label: "电信", LatencyMs: 150.0, PacketLoss: 0.0},
-			{Target: "www.youtube.com", Label: "Youtube", LatencyMs: 1.1, PacketLoss: 0.0},
-			{Target: "api.openai.com", Label: "ChatGPT", LatencyMs: 1.2, PacketLoss: 0.0},
-			{Target: "api.anthropic.com", Label: "Claude", LatencyMs: 2.0, PacketLoss: 0.0},
-		}
-	}
-
-	pts := make([]*model.PingHistoryPoint, 0, len(pings)*(steps+1))
-	for _, p := range pings {
-		for i := 0; i <= steps; i++ {
-			ts := start + int64(i)*stepDuration
-			jitter := math.Sin(float64(i)*0.6) * (p.LatencyMs * 0.03)
-			lat := math.Max(0.5, p.LatencyMs+jitter)
-			pts = append(pts, &model.PingHistoryPoint{
-				NodeID:     nodeID,
-				Timestamp:  ts,
-				Target:     p.Target,
-				Label:      p.Label,
-				LatencyMs:  math.Round(lat*100) / 100,
-				PacketLoss: p.PacketLoss,
-			})
-		}
-	}
-	return pts
 }
 
 func (s *Server) handleDeleteNode(c *gin.Context) {

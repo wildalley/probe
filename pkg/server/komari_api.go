@@ -486,7 +486,7 @@ func (s *Server) handleKomariRecordsPing(c *gin.Context) {
 		records = append(records, KomariPingRecord{
 			TaskID: task.ID,
 			Time:   time.Unix(p.Timestamp, 0).UTC().Format(time.RFC3339),
-			Value:  p.LatencyMs,
+			Value:  komariPingValue(p),
 			Loss:   p.PacketLoss,
 			Client: uuid,
 		})
@@ -500,6 +500,16 @@ func (s *Server) handleKomariRecordsPing(c *gin.Context) {
 			"records": records,
 		},
 	})
+}
+
+// komariPingValue is a ping row's latency as Komari records it: -1 marks a
+// lost probe. The stored latency of a lost row is the previous probe's, so
+// passing it through would chart a loss as an ordinary sample.
+func komariPingValue(p *model.PingHistoryPoint) float64 {
+	if p.LostEvent {
+		return -1
+	}
+	return p.LatencyMs
 }
 
 // GET /api/task/ping
@@ -1468,12 +1478,19 @@ func (s *Server) getKomariPingMetricStats(params interface{}) interface{} {
 		return empty
 	}
 
-	grouped := map[int64]*struct {
-		task   model.PingTargetConfig
-		lat    []float64
-		loss   []float64
-		latest float64
-	}{}
+	type pingGroup struct {
+		task model.PingTargetConfig
+		// lat holds only probes that answered: a lost probe carries the
+		// previous probe's latency, which would drag min/p50 toward stale
+		// (or zero) values.
+		lat         []float64
+		total, lost int
+		// windowLossSum sums the agent's 100-probe rolling loss, used only for
+		// rows from agents that cannot report individual loss events.
+		windowLossSum float64
+		latest        float64
+	}
+	grouped := map[int64]*pingGroup{}
 	order := []int64{}
 	for _, pt := range history {
 		task, ok := lookup.resolve(pt)
@@ -1482,63 +1499,67 @@ func (s *Server) getKomariPingMetricStats(params interface{}) interface{} {
 		}
 		g := grouped[task.ID]
 		if g == nil {
-			g = &struct {
-				task   model.PingTargetConfig
-				lat    []float64
-				loss   []float64
-				latest float64
-			}{task: task}
+			g = &pingGroup{task: task}
 			grouped[task.ID] = g
 			order = append(order, task.ID)
 		}
+		g.total++
+		g.windowLossSum += pt.PacketLoss
+		if pt.LostEvent {
+			g.lost++
+			continue
+		}
 		g.lat = append(g.lat, pt.LatencyMs)
-		g.loss = append(g.loss, pt.PacketLoss)
 		g.latest = pt.LatencyMs
 	}
 
 	stats := make([]KomariPingMetricStat, 0, len(order))
 	for _, id := range order {
 		g := grouped[id]
-		if len(g.lat) == 0 {
-			continue
-		}
-		sortedLat := append([]float64(nil), g.lat...)
-		sort.Float64s(sortedLat)
-		// Nearest-rank percentile: ceil(q*n)-1, clamped into the slice.
-		pct := func(q float64) float64 {
-			idx := int(math.Ceil(q * float64(len(sortedLat))))
-			if idx < 1 {
-				idx = 1
-			}
-			if idx > len(sortedLat) {
-				idx = len(sortedLat)
-			}
-			return sortedLat[idx-1]
-		}
-		p50 := pct(0.50)
-		p99 := pct(0.99)
-		var sumLat, sumLoss float64
-		for i := range g.lat {
-			sumLat += g.lat[i]
-			sumLoss += g.loss[i]
-		}
 		stat := KomariPingMetricStat{
 			EntityID: entity,
 			TaskID:   g.task.ID,
 			Name:     g.task.Label,
 			Type:     g.task.Protocol,
 			Interval: g.task.Interval,
-			Total:    len(g.lat),
-			Loss:     sumLoss / float64(len(g.loss)),
-			Min:      sortedLat[0],
-			Max:      sortedLat[len(sortedLat)-1],
-			Avg:      sumLat / float64(len(g.lat)),
+			Total:    g.total,
 			Latest:   g.latest,
-			P99:      p99,
-			P50:      p50,
 		}
-		if p50 > 0 {
-			stat.P99P50Ratio = p99 / p50
+		if g.lost > 0 {
+			stat.Loss = float64(g.lost) / float64(g.total) * 100
+		} else if g.windowLossSum > 0 {
+			// No loss events but a non-zero rolling rate: either an agent that
+			// predates loss events, or losses just before the window. Either
+			// way the figure is an approximation, and is flagged as one.
+			stat.Loss = g.windowLossSum / float64(g.total)
+			stat.LossApproximate = true
+		}
+		if len(g.lat) > 0 {
+			sortedLat := append([]float64(nil), g.lat...)
+			sort.Float64s(sortedLat)
+			// Nearest-rank percentile: ceil(q*n)-1, clamped into the slice.
+			pct := func(q float64) float64 {
+				idx := int(math.Ceil(q * float64(len(sortedLat))))
+				if idx < 1 {
+					idx = 1
+				}
+				if idx > len(sortedLat) {
+					idx = len(sortedLat)
+				}
+				return sortedLat[idx-1]
+			}
+			var sumLat float64
+			for _, v := range g.lat {
+				sumLat += v
+			}
+			stat.Min = sortedLat[0]
+			stat.Max = sortedLat[len(sortedLat)-1]
+			stat.Avg = sumLat / float64(len(g.lat))
+			stat.P50 = pct(0.50)
+			stat.P99 = pct(0.99)
+			if stat.P50 > 0 {
+				stat.P99P50Ratio = stat.P99 / stat.P50
+			}
 		}
 		stats = append(stats, stat)
 	}
@@ -1651,7 +1672,7 @@ func (s *Server) getKomariPingRecords(params interface{}) interface{} {
 				Client: pt.NodeID,
 				TaskID: task.ID,
 				Time:   time.Unix(pt.Timestamp, 0).UTC().Format(time.RFC3339),
-				Value:  pt.LatencyMs,
+				Value:  komariPingValue(pt),
 				Loss:   pt.PacketLoss,
 			})
 		}

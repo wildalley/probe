@@ -301,6 +301,10 @@ func (p *Pinger) GetStats() []model.PingStat {
 		}
 		// 最近一次探测是否丢包：窗口里 newest = lostIdx 的前一格
 		lostNewest := st.lostFilled > 0 && st.lost[(st.lostIdx-1+lossWindow)%lossWindow]
+		var probedAt int64
+		if !st.lastProbe.IsZero() {
+			probedAt = st.lastProbe.Unix()
+		}
 
 		res = append(res, model.PingStat{
 			ID:         t.ID,
@@ -311,6 +315,7 @@ func (p *Pinger) GetStats() []model.PingStat {
 			PacketLoss: lossRate,
 			Jitter:     math.Round(st.jitter*100) / 100,
 			Lost:       lostNewest,
+			ProbedAt:   probedAt,
 		})
 	}
 	return res

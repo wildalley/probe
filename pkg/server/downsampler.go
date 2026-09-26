@@ -25,7 +25,13 @@ type nodeBucket struct {
 	tcpCount     int
 	udpCount     int
 	processCount int
-	lastPings    []model.PingStat
+	// probes holds every distinct probe result seen during the bucket, each
+	// stamped with the time it was actually taken.
+	probes []*model.PingHistoryPoint
+	// legacyPings is the last snapshot from agents that do not report
+	// probed_at; their probes cannot be told apart, so one row per flush is
+	// the best that can be stored.
+	legacyPings  []model.PingStat
 	lastReportTs int64
 }
 
@@ -36,6 +42,10 @@ type Downsampler struct {
 	buckets       map[string]*nodeBucket
 	flushInterval time.Duration
 	retentionDays int
+	// lastProbed remembers, per node and target, the probed_at already
+	// recorded. Agents repeat the latest probe in every 1Hz report, so this is
+	// what keeps one probe from becoming one row per flush.
+	lastProbed map[string]map[string]int64
 }
 
 // NewDownsampler creates a new downsampling engine.
@@ -49,6 +59,7 @@ func NewDownsampler(storage *Storage, flushInterval time.Duration, retentionDays
 	return &Downsampler{
 		storage:       storage,
 		buckets:       make(map[string]*nodeBucket),
+		lastProbed:    make(map[string]map[string]int64),
 		flushInterval: flushInterval,
 		retentionDays: retentionDays,
 	}
@@ -88,8 +99,47 @@ func (d *Downsampler) RecordIngest(report *model.NodeReport) {
 	b.tcpCount = report.Network.TCPEstablished
 	b.udpCount = report.Network.UDPEstablished
 	b.processCount = report.System.ProcessCount
-	b.lastPings = report.Pings
 	b.lastReportTs = report.Timestamp
+
+	seen := d.lastProbed[report.NodeID]
+	if seen == nil {
+		seen = make(map[string]int64)
+		d.lastProbed[report.NodeID] = seen
+	}
+	var legacy []model.PingStat
+	for _, p := range report.Pings {
+		if p.ProbedAt <= 0 {
+			// Nothing probed yet reports zero latency and no loss; storing it
+			// would chart a fake 0 ms sample.
+			if p.LatencyMs > 0 || p.Lost {
+				legacy = append(legacy, p)
+			}
+			continue
+		}
+		key := p.Target + "\x00" + p.Label
+		if seen[key] == p.ProbedAt {
+			continue
+		}
+		seen[key] = p.ProbedAt
+		b.probes = append(b.probes, &model.PingHistoryPoint{
+			NodeID:     report.NodeID,
+			Timestamp:  p.ProbedAt,
+			Target:     p.Target,
+			Label:      p.Label,
+			LatencyMs:  p.LatencyMs,
+			PacketLoss: p.PacketLoss,
+			LostEvent:  p.Lost,
+		})
+	}
+	b.legacyPings = legacy
+}
+
+// ForgetNode drops the per-node probe bookkeeping once a node is deleted.
+func (d *Downsampler) ForgetNode(nodeID string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	delete(d.lastProbed, nodeID)
+	delete(d.buckets, nodeID)
 }
 
 // Start runs background flush and retention loops.
@@ -170,7 +220,8 @@ func (d *Downsampler) flush() {
 			ProcessCount: b.processCount,
 		})
 
-		for _, p := range b.lastPings {
+		pingBatch = append(pingBatch, b.probes...)
+		for _, p := range b.legacyPings {
 			pingBatch = append(pingBatch, &model.PingHistoryPoint{
 				NodeID:     nodeID,
 				Timestamp:  ts,

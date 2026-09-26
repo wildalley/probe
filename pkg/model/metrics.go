@@ -28,6 +28,12 @@ type PingStat struct {
 	// event the Komari loss timeline keys off (an always-positive windowed
 	// average would turn every timestamp into a loss marker).
 	Lost bool `json:"lost,omitempty"`
+	// ProbedAt is the Unix time (seconds) the probe behind LatencyMs/Lost
+	// completed. Reports go out every second but a target is probed every
+	// Interval seconds, so without it the server cannot tell a fresh probe from
+	// the same result repeated, and would store one probe many times. 0 means
+	// not probed yet (or an agent that predates the field).
+	ProbedAt int64 `json:"probed_at,omitempty"`
 }
 
 // BillingInfo contains VPS billing cycle, pricing, and expiration telemetry.
@@ -154,12 +160,19 @@ type SystemInfo struct {
 	// none, and an agent that cannot reach a lookup service reports neither.
 	// The dashboard renders an empty value as unknown rather than substituting
 	// a placeholder.
-	PublicIP     string  `json:"public_ip"`
-	PublicIPv6   string  `json:"public_ipv6"`
-	CPUPercent   float64 `json:"cpu_percent"`
-	CPUCount     int     `json:"cpu_count"`
-	MemUsed      uint64  `json:"mem_used"`
-	MemTotal     uint64  `json:"mem_total"`
+	PublicIP   string  `json:"public_ip"`
+	PublicIPv6 string  `json:"public_ipv6"`
+	CPUPercent float64 `json:"cpu_percent"`
+	CPUCount   int     `json:"cpu_count"`
+	// CPUPerCore is each logical core's usage in percent. Absent from agents
+	// that predate it; the dashboard then shows only the aggregate rather
+	// than inventing a per-core split.
+	CPUPerCore []float64 `json:"cpu_per_core,omitempty"`
+	MemUsed    uint64    `json:"mem_used"`
+	MemTotal   uint64    `json:"mem_total"`
+	// MemAvailable / MemCached (page cache + buffers) are 0 when unknown.
+	MemAvailable uint64  `json:"mem_available,omitempty"`
+	MemCached    uint64  `json:"mem_cached,omitempty"`
 	SwapUsed     uint64  `json:"swap_used"`
 	SwapTotal    uint64  `json:"swap_total"`
 	DiskPercent  float64 `json:"disk_percent"`
@@ -231,10 +244,12 @@ type PingHistoryPoint struct {
 	Label      string  `json:"label"`
 	LatencyMs  float64 `json:"latency_ms"`
 	PacketLoss float64 `json:"packet_loss"`
-	// LostEvent marks a flush interval whose most recent probe was lost.
-	// Komari-compatible loss views key off this event (0/100), not the
-	// windowed average — an always-positive average turns every timestamp
-	// into a loss marker.
+	// LostEvent marks a lost probe. Rows from agents that report probed_at
+	// are one per probe, stamped with the probe time; older agents yield one
+	// row per flush carrying the latest probe. Loss views key off this event
+	// (0/100), not the windowed average — an always-positive average turns
+	// every timestamp into a loss marker. A lost row's LatencyMs is the
+	// previous probe's and must not be read as a sample.
 	LostEvent bool `json:"lost_event"`
 }
 
