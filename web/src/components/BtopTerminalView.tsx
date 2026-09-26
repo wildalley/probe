@@ -78,7 +78,7 @@ function brailleChar(h1: number, h2: number): string {
  * Format uptime into btop style: "up 6d 19:25"
  */
 function formatBtopUptime(uptimeSeconds: number): string {
-  if (!uptimeSeconds || uptimeSeconds <= 0) return "up 6d 19:25";
+  if (!uptimeSeconds || uptimeSeconds <= 0) return "up --";
   const days = Math.floor(uptimeSeconds / 86400);
   const hours = Math.floor((uptimeSeconds % 86400) / 3600);
   const minutes = Math.floor((uptimeSeconds % 3600) / 60);
@@ -660,13 +660,15 @@ export function BtopTerminalView({
       {/* =========================================================================
           GLOBAL TOP TUI NAVIGATION HEADER
           ========================================================================= */}
-      <div className={`border ${colors.border} rounded-none shrink-0 px-2.5 py-1 mb-1.5 flex items-center justify-between text-xs`}>
+      <div className={`border ${colors.border} rounded-none shrink-0 px-2.5 py-1 mb-1.5 flex items-center justify-between gap-2 text-xs whitespace-nowrap`}>
         {/* Left Primary Screen Tabs: [1] HOSTS (列表页), [2] MONITOR (单机监控), [3] DETAILS (详情页) */}
-        <div className="flex items-center gap-1.5 sm:gap-2">
+        {/* 窄屏下标签整行横向滚动，不再逐字折行 */}
+        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 overflow-x-auto no-scrollbar">
           {/* Tab 1: Hosts Cluster List */}
           <button
             onClick={() => setTerminalMode("hosts")}
-            className={`px-2 py-0.5 border cursor-pointer font-bold transition-all ${
+            className={`shrink-0 px-2 py-0.5 border cursor-pointer font-bold transition-all ${
               terminalMode === "hosts"
                 ? `${colors.selectedBg} ${colors.accent} border-current shadow-xs`
                 : "border-current/30 hover:border-current hover:bg-current/10"
@@ -679,20 +681,20 @@ export function BtopTerminalView({
           {/* Tab 2: Monitor (Active Host) */}
           <button
             onClick={() => setTerminalMode("monitor")}
-            className={`px-2 py-0.5 border cursor-pointer font-bold transition-all ${
+            className={`shrink-0 px-2 py-0.5 border cursor-pointer font-bold transition-all ${
               terminalMode === "monitor"
                 ? `${colors.selectedBg} ${colors.accent} border-current shadow-xs`
                 : "border-current/30 hover:border-current hover:bg-current/10"
             }`}
             title="快捷键: 按 2 切换到单机 4 分区拟真监控"
           >
-            [²monitor: {activeNode.name || activeNode.node_id.slice(0, 10)}]
+            [²monitor<span className="hidden sm:inline">: <span className="inline-block max-w-[14rem] truncate align-bottom">{activeNode.name || activeNode.node_id.slice(0, 10)}</span></span>]
           </button>
 
           {/* Tab 3: Details */}
           <button
             onClick={() => setTerminalMode("details")}
-            className={`px-2 py-0.5 border cursor-pointer font-bold transition-all ${
+            className={`shrink-0 px-2 py-0.5 border cursor-pointer font-bold transition-all ${
               terminalMode === "details"
                 ? `${colors.selectedBg} ${colors.accent} border-current shadow-xs`
                 : "border-current/30 hover:border-current hover:bg-current/10"
@@ -702,8 +704,9 @@ export function BtopTerminalView({
             [³details]
           </button>
 
-          {/* Terminal Menu */}
-          <div className="relative" ref={menuRef}>
+        </div>
+          {/* Terminal Menu — 放在滚动容器之外，下拉层才不会被裁掉 */}
+          <div className="relative shrink-0" ref={menuRef}>
             <button
               onClick={() => setIsMenuOpen(!isMenuOpen)}
               className={`px-1.5 py-0.5 border border-current/30 hover:border-current hover:bg-current/10 cursor-pointer font-bold ${
@@ -804,7 +807,7 @@ export function BtopTerminalView({
         <div className="tracking-widest font-bold text-center hidden sm:block">{timeStr}</div>
 
         {/* Right Controls */}
-        <div className="flex items-center gap-1.5 sm:gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           {onOpenThemeModal && (
             <button
               onClick={onOpenThemeModal}
@@ -827,7 +830,7 @@ export function BtopTerminalView({
           >
             [{isLight ? "☀️ LIGHT" : "🌙 DARK"}]
           </button>
-          <div className="flex items-center text-xs">
+          <div className="hidden sm:flex items-center text-xs">
             <button
               onClick={() => setRefreshInterval((prev) => Math.max(500, prev - 500))}
               className="px-1 hover:bg-current/10 cursor-pointer"
@@ -855,10 +858,10 @@ export function BtopTerminalView({
           {/* Top Filter & Cluster Summary Bar */}
           <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-current/20 mb-2 shrink-0">
             {/* Region Filters */}
-            <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5 text-xs">
+            <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5 text-xs min-w-0 max-w-full whitespace-nowrap">
               <button
                 onClick={() => setSelectedRegion("ALL")}
-                className={`px-2 py-0.5 border cursor-pointer transition-all ${
+                className={`shrink-0 px-2 py-0.5 border cursor-pointer transition-all ${
                   selectedRegion === "ALL" ? `${colors.selectedBg} ${colors.accent} font-bold border-current` : "border-current/30 hover:bg-current/10"
                 }`}
               >
@@ -868,7 +871,7 @@ export function BtopTerminalView({
                 <button
                   key={reg}
                   onClick={() => setSelectedRegion(reg)}
-                  className={`px-2 py-0.5 border cursor-pointer transition-all flex items-center gap-1 ${
+                  className={`shrink-0 px-2 py-0.5 border cursor-pointer transition-all flex items-center gap-1 ${
                     selectedRegion === reg ? `${colors.selectedBg} ${colors.accent} font-bold border-current` : "border-current/30 hover:bg-current/10"
                   }`}
                 >
@@ -879,15 +882,15 @@ export function BtopTerminalView({
             </div>
 
             {/* Search Input */}
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1 border border-current/30 px-2 py-0.5 text-xs">
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <div className="flex items-center gap-1 border border-current/30 px-2 py-0.5 text-xs w-full sm:w-auto">
                 <Search className="h-3 w-3 shrink-0" />
                 <input
                   type="text"
                   placeholder="FIND ❯ 过滤主机名, IP, 运营商..."
                   value={hostSearch}
                   onChange={(e) => setHostSearch(e.target.value)}
-                  className="bg-transparent outline-none font-mono text-xs w-44 sm:w-56"
+                  className="bg-transparent outline-none font-mono text-xs flex-1 min-w-0 sm:w-56 sm:flex-none"
                 />
                 {hostSearch && (
                   <button onClick={() => setHostSearch("")} className="hover:opacity-75 cursor-pointer">
@@ -899,7 +902,7 @@ export function BtopTerminalView({
           </div>
 
           {/* Cluster Summary Metrics */}
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs py-1.5 px-2 mb-2 border border-current/15 shrink-0 bg-current/5">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-x-2 gap-y-1 text-xs py-1.5 px-2 mb-2 border border-current/15 shrink-0 bg-current/5">
             <div>
               <span className={colors.textMuted}>TOTAL NODES: </span>
               <span className="font-bold">{clusterStats.total}</span>
@@ -916,7 +919,7 @@ export function BtopTerminalView({
               <span className={colors.textMuted}>AVG RAM: </span>
               <span className="font-bold">{clusterStats.avgMem}%</span>
             </div>
-            <div>
+            <div className="col-span-2 sm:col-span-1 sm:text-right">
               <span className={colors.textMuted}>CLUSTER NET: </span>
               <span className="font-bold">▼ {formatRate(clusterStats.totalDown)} ▲ {formatRate(clusterStats.totalUp)}</span>
             </div>
@@ -929,12 +932,13 @@ export function BtopTerminalView({
               className="col-span-1 text-left flex items-center gap-0.5 hover:text-current cursor-pointer"
               title="按在线状态排序"
             >
-              <span>STAT</span>
+              <span className="hidden sm:inline">STAT</span>
+              <span className="sm:hidden">●</span>
               {hostSortField === "status" && <span>{hostSortAsc ? "▲" : "▼"}</span>}
             </button>
             <button
               onClick={() => handleSort("name")}
-              className="col-span-3 sm:col-span-2 text-left flex items-center gap-0.5 hover:text-current cursor-pointer"
+              className="col-span-5 sm:col-span-2 text-left flex items-center gap-0.5 hover:text-current cursor-pointer"
               title="按主机名排序"
             >
               <span>HOST NAME</span>
@@ -958,7 +962,7 @@ export function BtopTerminalView({
             </button>
             <button
               onClick={() => handleSort("cpu")}
-              className="col-span-1 text-right flex items-center justify-end gap-0.5 hover:text-current cursor-pointer"
+              className="col-span-2 sm:col-span-1 text-right flex items-center justify-end gap-0.5 hover:text-current cursor-pointer"
               title="按CPU占用排序"
             >
               <span>CPU%</span>
@@ -966,7 +970,7 @@ export function BtopTerminalView({
             </button>
             <button
               onClick={() => handleSort("mem")}
-              className="col-span-1 text-right flex items-center justify-end gap-0.5 hover:text-current cursor-pointer"
+              className="col-span-2 sm:col-span-1 text-right flex items-center justify-end gap-0.5 hover:text-current cursor-pointer"
               title="按内存占用排序"
             >
               <span>RAM%</span>
@@ -982,7 +986,7 @@ export function BtopTerminalView({
             </button>
             <button
               onClick={() => handleSort("net")}
-              className="col-span-2 text-right flex items-center justify-end gap-0.5 hover:text-current cursor-pointer"
+              className="col-span-2 hidden sm:flex text-right items-center justify-end gap-0.5 hover:text-current cursor-pointer"
               title="按网络吞吐排序"
             >
               <span>NET (D/U)</span>
@@ -1029,21 +1033,21 @@ export function BtopTerminalView({
                   <span className="col-span-1 flex items-center gap-1 font-bold">
                     <span className={isSelected ? colors.accent : "opacity-0"}>❯</span>
                     {n.is_online ? (
-                      <span className="text-emerald-600 dark:text-emerald-400">● ON</span>
+                      <span className="text-emerald-600 dark:text-emerald-400">●<span className="hidden sm:inline"> ON</span></span>
                     ) : (
-                      <span className={colors.textDim}>○ OFF</span>
+                      <span className={colors.textDim}>○<span className="hidden sm:inline"> OFF</span></span>
                     )}
                   </span>
 
                   {/* Name */}
-                  <span className="col-span-3 sm:col-span-2 truncate font-semibold" title={n.name || n.node_id}>
+                  <span className="col-span-5 sm:col-span-2 truncate font-semibold pr-1" title={n.name || n.node_id}>
                     {n.name || n.node_id}
                   </span>
 
                   {/* Region */}
                   <span className="col-span-1 hidden sm:flex items-center gap-1">
                     <span>{getRegionFlag(n.region)}</span>
-                    <span className="uppercase text-[11px]">{n.region || "LOC"}</span>
+                    <span className="uppercase text-[11px]">{n.region || "--"}</span>
                   </span>
 
                   {/* IP / Provider */}
@@ -1052,23 +1056,30 @@ export function BtopTerminalView({
                   </span>
 
                   {/* CPU% */}
-                  <div className="col-span-1 flex items-center justify-end gap-1">
-                    <span className="w-9 text-right font-mono font-semibold">{nCpu.toFixed(0)}%</span>
+                  <div className="col-span-2 sm:col-span-1 flex items-center justify-end gap-1">
+                    <UsageCell pct={nCpu} online={n.is_online} colors={colors} />
                   </div>
 
                   {/* RAM% */}
-                  <div className="col-span-1 flex items-center justify-end gap-1">
-                    <span className="w-9 text-right font-mono font-semibold">{nMemPct.toFixed(0)}%</span>
+                  <div className="col-span-2 sm:col-span-1 flex items-center justify-end gap-1">
+                    <UsageCell pct={nMemPct} online={n.is_online} colors={colors} />
                   </div>
 
-                  {/* DISK% (hidden on small) */}
+                  {/* DISK% (hidden on small) — 离线节点的磁盘占用仍是最后一次上报值，照常显示 */}
                   <div className="col-span-1 hidden lg:flex items-center justify-end gap-1">
-                    <span className="w-9 text-right font-mono font-semibold text-current/80">{nDiskPct.toFixed(0)}%</span>
+                    <UsageCell pct={nDiskPct} online={nDiskPct > 0} colors={colors} />
                   </div>
 
                   {/* Net */}
-                  <div className="col-span-2 flex items-center justify-end gap-1 font-mono text-[11px]">
-                    <span className="truncate">▼{formatRate(nDown)} ▲{formatRate(nUp)}</span>
+                  <div className="col-span-2 hidden sm:flex items-center justify-end gap-1 font-mono text-[11px]">
+                    {n.is_online ? (
+                      <span className="truncate">
+                        <span className="text-sky-600 dark:text-sky-400">▼</span>{formatRate(nDown)}{" "}
+                        <span className="text-fuchsia-600 dark:text-fuchsia-400">▲</span>{formatRate(nUp)}
+                      </span>
+                    ) : (
+                      <span className={colors.textDim}>--</span>
+                    )}
                   </div>
 
                   {/* Ping */}
@@ -1104,9 +1115,9 @@ export function BtopTerminalView({
           </div>
 
           {/* Footer Shortcuts & Action Buttons */}
-          <div className="pt-2 border-t border-current/20 mt-1 shrink-0 flex flex-wrap items-center justify-between text-[11px]">
-            <div className="flex items-center gap-3">
-              <span>↑ select ↓</span>
+          <div className="pt-2 border-t border-current/20 mt-1 shrink-0 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-[11px] whitespace-nowrap">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span className="hidden sm:inline">↑ select ↓</span>
               <button
                 onClick={() => setTerminalMode("monitor")}
                 className="hover:underline font-bold cursor-pointer"
@@ -1126,7 +1137,7 @@ export function BtopTerminalView({
                 [ {maskIP ? "显示真实IP" : "遮掩IP"} ]
               </button>
             </div>
-            <span className={colors.textMuted}>
+            <span className={`hidden sm:inline ${colors.textMuted}`}>
               1: 集群列表 · 2: 拟真监控 · 3: 节点详情 · m: 菜单
             </span>
           </div>
@@ -2181,5 +2192,24 @@ export function BtopTerminalView({
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * 主机列表里的占用率单元：btop 风格的 5 格小量表（宽屏才显示）+ 按阈值着色的百分比。
+ * 离线节点显示 "--"，不把最后一次上报的 CPU/内存当成当前值。
+ */
+function UsageCell({ pct, online, colors }: { pct: number; online: boolean; colors: { alert: string; warn: string; textDim: string } }) {
+  if (!online) return <span className={`w-9 text-right font-mono ${colors.textDim}`}>--</span>;
+  const tone = pct >= 85 ? colors.alert : pct >= 65 ? colors.warn : "";
+  const filled = Math.min(5, Math.max(pct > 0 ? 1 : 0, Math.round(pct / 20)));
+  return (
+    <>
+      <span className="hidden xl:inline font-mono text-[10px] tracking-[-0.05em] select-none" aria-hidden>
+        <span className={tone || "text-emerald-600 dark:text-emerald-400"}>{"■".repeat(filled)}</span>
+        <span className={colors.textDim}>{"■".repeat(5 - filled)}</span>
+      </span>
+      <span className={`w-9 text-right font-mono font-semibold ${tone}`}>{pct.toFixed(0)}%</span>
+    </>
   );
 }

@@ -303,9 +303,10 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                   : "border-[#1b253b] bg-[#0b101c] text-slate-500"
               }`}
             >
-              <span>└─ [ PORT: 8080 · SQLite ]</span>
+              <span>└─ [ HOST: {window.location.host} ]</span>
+              {/* 首次启动的管理员密码是随机生成的，只打印在服务端日志里。 */}
               <span className={isBtopLight ? "text-[#352f44] font-semibold" : "text-cyan-400/80"}>
-                DEFAULT PASS: admin / admin123
+                初始密码见服务端启动日志
               </span>
             </div>
           </div>
