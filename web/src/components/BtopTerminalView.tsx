@@ -97,10 +97,8 @@ function formatBtopUptime(uptimeSeconds: number): string {
 // brackets hug the panel edges like a real btop gauge instead of leaving dead space.
 const BlockMeterFill: React.FC<{
   percent: number;
-  colors: { meterActiveText: string; meterEmptyText: string };
+  colors: { meterActiveText: string; meterEmptyText: string; alert?: string; warn?: string };
 }> = ({ percent, colors }) => {
-  const ref = useRef<HTMLDivElement | null>(null);
-  const [width, setWidth] = useState(0);
   const [smoothPercent, setSmoothPercent] = useState(percent);
 
   useEffect(() => {
@@ -122,33 +120,29 @@ const BlockMeterFill: React.FC<{
     return () => cancelAnimationFrame(animId);
   }, [percent]);
 
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const update = () => setWidth(el.clientWidth);
-    update();
-    if (typeof ResizeObserver === "undefined") return;
-    const ro = new ResizeObserver(update);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
-  // ≈7px per monospace cell at text-[11px]/xs, minus the two brackets; clamped
-  // so extreme widths cannot explode the string length.
-  const blocks = width > 0 ? Math.max(6, Math.min(240, Math.floor((width - 14) / 7))) : 32;
   const safeVal = Math.min(100, Math.max(0, smoothPercent));
-  const activeBlocks = Math.round((safeVal / 100) * blocks);
-  const filled = "█".repeat(activeBlocks);
-  const empty = "░".repeat(Math.max(0, blocks - activeBlocks));
-
+  // btop 的量表随负载变色：65% 起转警告色，85% 起转告警色。
+  const tone = safeVal >= 85 ? colors.alert : safeVal >= 65 ? colors.warn : undefined;
+  // 格子用 CSS 渐变画：宽度随容器伸缩，右括号永远贴边。按字符宽度估算格数时
+  // 字形一旦比估算宽，行尾的 "]" 就会被裁掉。
+  const cells = "repeating-linear-gradient(90deg, currentColor 0 5px, transparent 5px 7px)";
   return (
-    <div ref={ref} className="w-full overflow-hidden whitespace-nowrap">
-      [
-      <span className="tracking-tight select-none">
-        <span className={colors.meterActiveText}>{filled}</span>
-        <span className={colors.meterEmptyText}>{empty}</span>
-      </span>
-      ]
+    <div
+      className="w-full flex items-center gap-[3px] leading-none select-none"
+      role="meter"
+      aria-valuenow={Math.round(safeVal)}
+      aria-valuemin={0}
+      aria-valuemax={100}
+    >
+      <span>[</span>
+      <div className="relative flex-1 h-[0.8em]">
+        <div className={`absolute inset-0 ${colors.meterEmptyText}`} style={{ backgroundImage: cells }} />
+        <div
+          className={`absolute inset-y-0 left-0 ${tone || colors.meterActiveText}`}
+          style={{ width: `${safeVal}%`, backgroundImage: cells }}
+        />
+      </div>
+      <span>]</span>
     </div>
   );
 };
@@ -436,7 +430,7 @@ export function BtopTerminalView({
         borderColor: "#aba4b8",
         meterBlockActive: "#352f44",
         meterActiveText: "text-[#352f44]",
-        meterEmptyText: "text-[#ded8e6]",
+        meterEmptyText: "text-[#cbc3d6]",
         accent: "text-[#7c5c99]",
         accentBg: "bg-[#7c5c99]",
         selectedBg: "bg-[#ded8e6]",
@@ -455,7 +449,7 @@ export function BtopTerminalView({
       borderColor: "#262d42",
       meterBlockActive: "#00f0ff",
       meterActiveText: "text-[#00f0ff]",
-      meterEmptyText: "text-[#182035]",
+      meterEmptyText: "text-[#243049]",
       accent: "text-[#00f0ff]",
       accentBg: "bg-[#00f0ff]",
       selectedBg: "bg-[#18243c]",
@@ -1197,7 +1191,7 @@ export function BtopTerminalView({
 
               <div className="flex items-center gap-3">
                 <span className="font-bold">{cpuModel}</span>
-                <span className={colors.textMuted}>2.6 GHz 55°C 7.97W</span>
+                <span className={colors.textMuted}>{cpuCores} threads</span>
               </div>
             </div>
 
@@ -1213,7 +1207,7 @@ export function BtopTerminalView({
             <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
               {/* Smooth CPU Waveform on Left (Takes 4 cols) */}
               <div className="hidden md:flex md:col-span-4 flex-col justify-center font-mono leading-none py-0.5">
-                <div className="w-full h-[62px] border border-current/15 bg-current/5 p-1 relative">
+                <div className="w-full h-[96px] border border-current/15 bg-current/5 p-1 relative">
                   <BtopWaveCanvas
                     downRate={cpuPercent}
                     mode="cpu"
@@ -1369,7 +1363,7 @@ export function BtopTerminalView({
                       </div>
                       <div className="w-full mt-0.5"><BlockMeterFill percent={diskPercent} colors={colors} /></div>
                       <div className="flex justify-between text-[11px] mt-0.5">
-                        <span className={colors.textMuted}>IO 速率: R 68 KiB/s · W 1.2 MiB/s</span>
+                        <span className={colors.textMuted}>根分区使用率:</span>
                         <span className="font-semibold">{diskPercent.toFixed(1)}%</span>
                       </div>
                     </div>
@@ -1388,17 +1382,6 @@ export function BtopTerminalView({
                       </div>
                     </div>
 
-                    <div className="pt-1 border-t border-dashed border-current/20">
-                      <div className="flex justify-between">
-                        <span className="font-bold">/mnt/data (挂载盘)</span>
-                        <span>420 GiB / 1.8 TiB</span>
-                      </div>
-                      <div className="w-full mt-0.5"><BlockMeterFill percent={22.8} colors={colors} /></div>
-                      <div className="flex justify-between text-[11px] mt-0.5">
-                        <span className={colors.textMuted}>IO 存储状态:</span>
-                        <span className="font-bold text-emerald-600 dark:text-emerald-400">HEALTHY / NVMe Gen4</span>
-                      </div>
-                    </div>
                   </div>
                 </div>
               </div>
@@ -1412,7 +1395,7 @@ export function BtopTerminalView({
                     <span className={colors.textMuted}>sync</span>
                     <span className={colors.textMuted}>auto</span>
                     <span className={colors.textDim}>──</span>
-                    <span className="font-bold">←b eth0 n→</span>
+                    <span className="font-bold" title="Agent 汇总全部物理网卡，已排除 lo / docker / veth / 隧道等虚拟接口">←b ∑ 物理网卡 n→</span>
                   </div>
                   <span className={`text-[11px] ${colors.textMuted}`}>TOTAL RECV: {formatBytes(netTotalDown)}</span>
                 </div>
@@ -1442,8 +1425,8 @@ export function BtopTerminalView({
                         <span>{(netDownRate * 8 / 1024).toFixed(0)} Kibps</span>
                       </div>
                       <div className="flex justify-between text-[11px] text-current/75">
-                        <span className={colors.textMuted}>▼ 峰值 Peak:</span>
-                        <span>{(netDownRate * 1.35 * 8 / 1024).toFixed(0)} Kibps</span>
+                        <span className={colors.textMuted}>▼ 本月峰值:</span>
+                        <span>{activeNode.network?.monthly_peak_down ? `${(activeNode.network.monthly_peak_down * 8 / 1024).toFixed(0)} Kibps` : "--"}</span>
                       </div>
                       <div className="flex justify-between text-[11px] text-current/75">
                         <span className={colors.textMuted}>▼ 累计 Total:</span>
@@ -1461,8 +1444,8 @@ export function BtopTerminalView({
                         <span>{(netUpRate * 8 / 1024).toFixed(0)} Kibps</span>
                       </div>
                       <div className="flex justify-between text-[11px] text-current/75">
-                        <span className={colors.textMuted}>▲ 峰值 Peak:</span>
-                        <span>{(netUpRate * 1.35 * 8 / 1024).toFixed(0)} Kibps</span>
+                        <span className={colors.textMuted}>▲ 本月峰值:</span>
+                        <span>{activeNode.network?.monthly_peak_up ? `${(activeNode.network.monthly_peak_up * 8 / 1024).toFixed(0)} Kibps` : "--"}</span>
                       </div>
                       <div className="flex justify-between text-[11px] text-current/75">
                         <span className={colors.textMuted}>▲ 累计 Total:</span>
@@ -1471,8 +1454,8 @@ export function BtopTerminalView({
                     </div>
 
                     <div className="border-t border-dashed border-current/20 pt-1 text-[10px] flex justify-between text-current/60">
-                      <span>网络接口: eth0 (10Gbps)</span>
-                      <span>MTU: 1500</span>
+                      <span>∑ 物理网卡汇总</span>
+                      <span>TCP {activeNode.network?.tcp_established ?? "--"} · UDP {activeNode.network?.udp_established ?? "--"}</span>
                     </div>
                   </div>
                 </div>
@@ -1609,8 +1592,8 @@ export function BtopTerminalView({
                   {/* Bandwidth Quota Progress Bar */}
                   <div className="p-1.5 border border-current/20 space-y-1">
                     <div className="flex justify-between items-center text-xs font-bold">
-                      <span>流量配额: {formatBytes(billing.bandwidth_used || 0)} / {formatBytes(billing.bandwidth_quota)}</span>
-                      <span className={colors.accent}>{quotaPercent}%</span>
+                      <span>流量配额: {formatBytes(billing.bandwidth_used || 0)} / {billing.bandwidth_quota > 0 ? formatBytes(billing.bandwidth_quota) : "无限制"}</span>
+                      <span className={colors.accent}>{billing.bandwidth_quota > 0 ? `${quotaPercent}%` : "--"}</span>
                     </div>
                     <BlockMeterFill percent={quotaPercent} colors={colors} />
                     <div className="grid grid-cols-3 gap-1 text-[11px] pt-1 border-t border-dashed border-current/20">
@@ -1905,7 +1888,7 @@ export function BtopTerminalView({
                 </div>
                 <BlockMeterFill percent={diskPercent} colors={colors} />
                 <div className="flex justify-between text-[10px] text-current/70 pt-0.5">
-                  <span>IO 速率: R 68 KiB/s · W 1.2 MiB/s</span>
+                  <span>根分区 /</span>
                   <span>Swap: {formatBytes(swapUsed)} / {formatBytes(swapTotal)}</span>
                 </div>
               </div>
@@ -1915,7 +1898,7 @@ export function BtopTerminalView({
                 <div className="flex items-center justify-between text-xs pb-1 border-b border-dashed border-current/20 shrink-0">
                   <div className="flex items-center gap-2">
                     <span className="font-bold">实时网络波形 (LIVE WAVE)</span>
-                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400">● 60FPS</span>
+                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400">● LIVE</span>
                   </div>
                   <div className="flex items-center gap-2.5 text-[11px] font-mono">
                     <span className="text-emerald-600 dark:text-emerald-400 font-bold">▼ {formatRate(netDownRate)}</span>
@@ -1933,7 +1916,7 @@ export function BtopTerminalView({
                   />
                 </div>
                 <div className="flex justify-between text-[10px] text-current/60 pt-1 shrink-0">
-                  <span>接口: eth0 · 10Gbps</span>
+                  <span>TCP {activeNode.network?.tcp_established ?? "--"} · UDP {activeNode.network?.udp_established ?? "--"}</span>
                   <span>累计流量: {formatBytes(netTotalDown + netTotalUp)}</span>
                 </div>
               </div>
@@ -1988,9 +1971,9 @@ export function BtopTerminalView({
                     </span>
                     <div className="flex items-center gap-2">
                       <span className="font-mono text-xs">
-                        {formatBytes(billing.bandwidth_used || 0)} / {formatBytes(billing.bandwidth_quota)}
+                        {formatBytes(billing.bandwidth_used || 0)} / {billing.bandwidth_quota > 0 ? formatBytes(billing.bandwidth_quota) : "无限制"}
                       </span>
-                      <span className={`${colors.accent} font-mono font-bold`}>{quotaPercent}%</span>
+                      <span className={`${colors.accent} font-mono font-bold`}>{billing.bandwidth_quota > 0 ? `${quotaPercent}%` : "--"}</span>
                     </div>
                   </div>
                   <BlockMeterFill percent={quotaPercent} colors={colors} />
@@ -2017,16 +2000,8 @@ export function BtopTerminalView({
                 {/* Consumption Analytics & Projection */}
                 <div className="space-y-1 text-xs pt-1 border-t border-dashed border-current/20">
                   <div className="flex justify-between text-[11px]">
-                    <span className={colors.textMuted}>日均消耗估算:</span>
-                    <span className="font-mono">
-                      ~{formatBytes(Math.round((billing.bandwidth_used || 0) / Math.max(1, 30 - (billing.remaining_days || 15))))} / 天
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-[11px]">
-                    <span className={colors.textMuted}>月末预计用量:</span>
-                    <span className="font-mono font-semibold text-emerald-600 dark:text-emerald-400">
-                      ~{formatBytes(Math.round((billing.bandwidth_used || 0) * 1.05))} (配额安全)
-                    </span>
+                    <span className={colors.textMuted}>网卡计数（开机以来）:</span>
+                    <span className="font-mono">{billing.bandwidth_live ? formatBytes(billing.bandwidth_live) : "--"}</span>
                   </div>
                   <div className="flex justify-between text-[11px]">
                     <span className={colors.textMuted}>线路运营服务商:</span>
