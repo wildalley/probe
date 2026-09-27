@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { RefreshCw, Infinity as InfinityIcon, XCircle } from "lucide-react";
 import { Input, ListBox, Select } from "@heroui/react";
 import { ThemeMode } from "../types";
@@ -31,12 +31,12 @@ const UNIT_MULTIPLIERS: Record<Unit, number> = {
 const getBestUnit = (bytes: number): { value: number; unit: Unit } => {
   if (bytes <= 0) return { value: 0, unit: "GB" };
   if (bytes >= 1024 * 1024 * 1024 * 1024) {
-    return { value: Math.round((bytes / UNIT_MULTIPLIERS.TB) * 100) / 100, unit: "TB" };
+    return { value: Number((bytes / UNIT_MULTIPLIERS.TB).toPrecision(12)), unit: "TB" };
   }
   if (bytes >= 1024 * 1024 * 1024) {
-    return { value: Math.round((bytes / UNIT_MULTIPLIERS.GB) * 100) / 100, unit: "GB" };
+    return { value: Number((bytes / UNIT_MULTIPLIERS.GB).toPrecision(12)), unit: "GB" };
   }
-  return { value: Math.round((bytes / UNIT_MULTIPLIERS.MB) * 100) / 100, unit: "MB" };
+  return { value: Number((bytes / UNIT_MULTIPLIERS.MB).toPrecision(12)), unit: "MB" };
 };
 
 export const BandwidthConfig: React.FC<BandwidthConfigProps> = ({
@@ -66,14 +66,16 @@ export const BandwidthConfig: React.FC<BandwidthConfigProps> = ({
   const initialUsed = getBestUnit(usedBytes);
   const [usedVal, setUsedVal] = useState<number>(initialUsed.value);
   const [usedUnit, setUsedUnit] = useState<Unit>(initialUsed.unit);
+  // Keep the byte value exact while changing quota or display units. Rounding
+  // the visible number and sending it back would silently recalibrate usage.
+  const usedBytesRef = useRef(usedBytes);
 
   // Sync to parent whenever values change
   const handleQuotaChange = (newVal: number, newUnit: Unit, unlimited: boolean) => {
     setQuotaVal(newVal);
     setQuotaUnit(newUnit);
     const calculatedQuota = unlimited ? 0 : Math.round(newVal * UNIT_MULTIPLIERS[newUnit]);
-    const calculatedUsed = Math.round(usedVal * UNIT_MULTIPLIERS[usedUnit]);
-    onChange(calculatedQuota, calculatedUsed);
+    onChange(calculatedQuota, usedBytesRef.current);
   };
 
   const handleUsedChange = (newVal: number, newUnit: Unit) => {
@@ -81,6 +83,7 @@ export const BandwidthConfig: React.FC<BandwidthConfigProps> = ({
     setUsedUnit(newUnit);
     const calculatedQuota = isUnlimited ? 0 : Math.round(quotaVal * UNIT_MULTIPLIERS[quotaUnit]);
     const calculatedUsed = Math.round(newVal * UNIT_MULTIPLIERS[newUnit]);
+    usedBytesRef.current = calculatedUsed;
     onChange(calculatedQuota, calculatedUsed);
   };
 
@@ -91,19 +94,23 @@ export const BandwidthConfig: React.FC<BandwidthConfigProps> = ({
   };
 
   const handleUnitSwitchUsed = (targetUnit: Unit) => {
-    const bytes = usedVal * UNIT_MULTIPLIERS[usedUnit];
-    const converted = Math.round((bytes / UNIT_MULTIPLIERS[targetUnit]) * 100) / 100;
-    handleUsedChange(converted, targetUnit);
+    const converted = Number((usedBytesRef.current / UNIT_MULTIPLIERS[targetUnit]).toPrecision(12));
+    setUsedVal(converted);
+    setUsedUnit(targetUnit);
   };
 
   const handleSyncLive = () => {
     const best = getBestUnit(liveTotalBytes);
-    handleUsedChange(best.value, best.unit);
+    setUsedVal(best.value);
+    setUsedUnit(best.unit);
+    usedBytesRef.current = liveTotalBytes;
+    const calculatedQuota = isUnlimited ? 0 : Math.round(quotaVal * UNIT_MULTIPLIERS[quotaUnit]);
+    onChange(calculatedQuota, liveTotalBytes);
   };
 
   // Stats calculation
   const totalCalcQuota = isUnlimited ? 0 : quotaVal * UNIT_MULTIPLIERS[quotaUnit];
-  const totalCalcUsed = usedVal * UNIT_MULTIPLIERS[usedUnit];
+  const totalCalcUsed = usedBytesRef.current;
   const percentUsed = totalCalcQuota > 0 ? Math.min(100, Math.round((totalCalcUsed / totalCalcQuota) * 1000) / 10) : 0;
   const remainingBytes = Math.max(0, totalCalcQuota - totalCalcUsed);
 

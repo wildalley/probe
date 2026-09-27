@@ -56,6 +56,8 @@ export const HostEditDialog: React.FC<HostEditDialogProps> = ({
   const isBlueprint = isLight;
 
   const [draft, setDraft] = useState<NodeSettings>(() => toDraft(node));
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const [settingsLoadError, setSettingsLoadError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -76,28 +78,31 @@ export const HostEditDialog: React.FC<HostEditDialogProps> = ({
     down: node.network.bytes_recv || 0,
   };
 
-  // The live node carries the *effective* usage (baseline + counted traffic), so
-  // it cannot tell us what baseline the operator saved. Read the persisted row so
-  // reopening the dialog shows the real calibration value instead of resetting it
-  // to 0 — a save would otherwise silently clear a calibration nobody touched.
+  // The live node carries effective usage, not the saved baseline. Wait for the
+  // persisted row before mounting BandwidthConfig: it initializes its input
+  // state from props only once, and mounting it with the draft's initial zero
+  // would keep showing zero even after this request completes.
   useEffect(() => {
     let cancelled = false;
+    setSettingsLoaded(false);
+    setSettingsLoadError(null);
     (async () => {
       try {
         const res = await fetch(
           `/api/v1/nodes/${encodeURIComponent(node.node_id)}/settings`
         );
-        if (!res.ok) return;
+        if (!res.ok) throw new Error(`服务返回 ${res.status}`);
         const saved = await res.json();
-        if (cancelled || !saved) return;
+        if (cancelled) return;
         setDraft((prev) => ({
           ...prev,
           public_ip: saved.public_ip || prev.public_ip,
           public_ipv6: saved.public_ipv6 || prev.public_ipv6,
           bandwidth_used: saved.bandwidth_used || 0,
         }));
+        setSettingsLoaded(true);
       } catch {
-        // Offline or transient failure: keep the draft derived from live state.
+        if (!cancelled) setSettingsLoadError("读取主机设置失败，请关闭后重试");
       }
     })();
     return () => {
@@ -147,6 +152,7 @@ export const HostEditDialog: React.FC<HostEditDialogProps> = ({
   };
 
   const handleSave = async () => {
+    if (!settingsLoaded) return;
     try {
       setIsSaving(true);
       setSaveError(null);
@@ -464,16 +470,22 @@ export const HostEditDialog: React.FC<HostEditDialogProps> = ({
 
           <div>
             <label className={cn(labelCls, "text-xs")}>流量配额与使用量设置 (Bandwidth Settings)</label>
-            <BandwidthConfig
-              quotaBytes={draft.bandwidth_quota}
-              usedBytes={draft.bandwidth_used || 0}
-              liveTotalBytes={liveTotalBytes}
-              liveSplit={liveSplit}
-              onChange={(newQuota, newUsed) =>
-                patch({ bandwidth_quota: newQuota, bandwidth_used: newUsed })
-              }
-              theme={theme}
-            />
+            {settingsLoaded ? (
+              <BandwidthConfig
+                quotaBytes={draft.bandwidth_quota}
+                usedBytes={draft.bandwidth_used || 0}
+                liveTotalBytes={liveTotalBytes}
+                liveSplit={liveSplit}
+                onChange={(newQuota, newUsed) =>
+                  patch({ bandwidth_quota: newQuota, bandwidth_used: newUsed })
+                }
+                theme={theme}
+              />
+            ) : (
+              <p className="text-xs text-slate-500 dark:text-zinc-400">
+                {settingsLoadError || "正在读取主机设置..."}
+              </p>
+            )}
           </div>
 
           <div>
@@ -557,10 +569,10 @@ export const HostEditDialog: React.FC<HostEditDialogProps> = ({
             size="sm"
             type="button"
             onPress={handleSave}
-            isDisabled={isSaving}
+            isDisabled={isSaving || !settingsLoaded}
             className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs px-4 py-2 rounded-xl shadow-xs transition-colors cursor-pointer"
           >
-            {isSaving ? "保存中..." : "保存主机设置"}
+            {isSaving ? "保存中..." : !settingsLoaded && !settingsLoadError ? "读取中..." : "保存主机设置"}
           </Button>
         </div>
       </div>
