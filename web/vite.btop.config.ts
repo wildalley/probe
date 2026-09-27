@@ -6,7 +6,8 @@ import path from "path";
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   root: path.resolve(__dirname, "./src/themes/btop-terminal"),
-  base: "./",
+  // The theme also renders at /dashboard after login; assets must resolve from the site root.
+  base: "/",
   build: {
     outDir: path.resolve(__dirname, "../themes/btop-terminal/dist"),
     emptyOutDir: true,

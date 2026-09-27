@@ -32,10 +32,11 @@
 
 ### 3. 极客视觉与交互系统 (Web Dashboard)
 - **原生 btop++ 4 视窗终端拟真布局（官方默认）**：
-  - 深度还原 Linux 顶级终端监控工具 btop++ 视觉范式，纯直角硬朗形态、全等宽字体、盲文点阵（`⡇⡎⡍⣹⣽⣻⣷⣾⣿`）波形图谱与 18 格/10 格分段霓虹量表。波形由 Canvas 按真实采样绘制（原始每秒遥测、离散步进、无字体回退错位），支持 盲文点阵 / TTY 抖动块 / 方块 三种符号风格点击切换；
+  - 深度还原 Linux 顶级终端监控工具 btop++ 视觉范式，纯直角硬朗形态、全等宽字体、盲文点阵（`⡇⡎⡍⣹⣽⣻⣷⣾⣿`）波形图谱与填满容器的分段量表。波形由 Canvas 按真实采样绘制（原始每秒遥测、离散步进、无字体回退错位），支持 盲文点阵 / TTY 抖动块 / 方块 三种符号风格点击切换；量表括号贴边，负载达到 65% / 85% 时分别变为警告色 / 告警色；
   - `[1] hosts`（集群多节点聚合列表）、`[2] monitor`（拟真单机 4 象限监控）、`[3] details`（全屏深度诊断）三重视图自由穿梭；
   - 双色终端外观：🌙 **暗色终端（btop++ Dark）** 与 ☀️ **浅色终端（btop++ Light）** 即时切换；
-  - 提供独立通用插件包，全兼容 **Komari 监控** 与 **Cyber Probe** 系统。开源仓库：[wildalley/komari-theme-btop](https://github.com/wildalley/komari-theme-btop)。
+  - 不展示未采集的 CPU 主频、温度、功耗、挂载盘和网卡规格；网络面板标明物理网卡汇总，未设置流量配额时显示「无限制」。
+  - 提供兼容 **Komari 监控** 与 **Cyber Probe** 的独立插件包：[下载 btop-terminal.zip](https://raw.githubusercontent.com/wildalley/komari-theme-btop/main/btop-terminal.zip)（[源码与安装说明](https://github.com/wildalley/komari-theme-btop)）。插件资源从站点根路径加载，在 `/dashboard` 等页面路径下也可正常打开。
 - **全生态主题扩展（Komari Theme Market）**：
   - 原生内置主题管理器，完全兼容 Komari 主题生态；
   - 支持在管理后台一键拉取并安装官方市场主题，亦可上传第三方 ZIP 主题包；

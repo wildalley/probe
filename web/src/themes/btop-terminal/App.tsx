@@ -31,8 +31,11 @@ export function App() {
 
   // Check auth
   useEffect(() => {
-    fetch("/api/v1/auth/session", { credentials: "include" })
-      .then((r) => r.json())
+    fetch("/api/v1/auth/status", { credentials: "include" })
+      .then((r) => {
+        if (!r.ok) throw new Error("Probe auth unavailable");
+        return r.json();
+      })
       .then((data) => {
         if (data.authenticated) {
           setCanManage(true);
@@ -64,8 +67,9 @@ export function App() {
         const res = await fetch("/api/v1/nodes", { credentials: "include" });
         if (res.ok) {
           const data = await res.json();
-          if (Array.isArray(data) && !unmounted) {
-            setNodes(data);
+          const list = Array.isArray(data) ? data : data?.nodes;
+          if (Array.isArray(list) && !unmounted) {
+            setNodes(list);
             setupProbeWS();
             return;
           }
@@ -101,7 +105,7 @@ export function App() {
 
     const setupProbeWS = () => {
       const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const ws = new WebSocket(`${proto}//${window.location.host}/ws/telemetry`);
+      const ws = new WebSocket(`${proto}//${window.location.host}/api/v1/client/ws`);
       wsRef.current = ws;
 
       ws.onmessage = (e) => {
