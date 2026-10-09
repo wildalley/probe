@@ -1,11 +1,20 @@
-import React, { useEffect, useState, useMemo, useRef } from "react";
+import React, { Suspense, lazy, useEffect, useState, useMemo, useRef } from "react";
 import { ColorMode, NodeState, SystemSummary, ThemeMode, ThemePreset, WSEvent } from "./types";
 import { BtopTerminalView } from "./components/BtopTerminalView";
-import { AddNodeModal } from "./components/AddNodeModal";
-import { AdminModal } from "./components/AdminModal";
 import { LoginScreen } from "./components/LoginScreen";
-import { ChangePasswordModal } from "./components/ChangePasswordModal";
-import { ThemeManagerModal } from "./components/ThemeManagerModal";
+
+// The dashboard itself needs none of HeroUI / framer-motion; only these dialogs
+// do. Loading them on demand keeps ~500 kB of vendor JS off the first paint.
+// Each one already renders nothing while closed, so they are mounted only when
+// open and the chunk is fetched the first time it is needed.
+const AdminModal = lazy(() => import("./components/AdminModal").then((m) => ({ default: m.AdminModal })));
+const AddNodeModal = lazy(() => import("./components/AddNodeModal").then((m) => ({ default: m.AddNodeModal })));
+const ChangePasswordModal = lazy(() =>
+  import("./components/ChangePasswordModal").then((m) => ({ default: m.ChangePasswordModal })),
+);
+const ThemeManagerModal = lazy(() =>
+  import("./components/ThemeManagerModal").then((m) => ({ default: m.ThemeManagerModal })),
+);
 import { useAuth } from "./hooks/useAuth";
 import { Activity } from "lucide-react";
 import { AnimatedShinyText } from "./components/ui/AnimatedShinyText";
@@ -439,31 +448,35 @@ export function App() {
       <div className={`min-h-screen w-full flex flex-col font-sans transition-colors ${
         isBtopLight ? "bg-slate-100 text-slate-900" : "bg-[#06080d] text-zinc-100"
       }`}>
-        <AdminModal
-          isOpen={true}
-          isStandalone={true}
-          onClose={() => {
-            window.location.href = "/?_t=" + Date.now();
-          }}
-          nodes={Array.from(nodes.values())}
-          theme={theme}
-          onRefreshNodes={fetchNodes}
-          currentPreset={themePreset}
-          onSelectPreset={handleSelectThemePreset}
-          colorMode={colorMode}
-          onSelectColorMode={setColorMode}
-          onToggleTheme={toggleTheme}
-          onLogout={auth.logout}
-          onOpenPasswordModal={() => setIsPasswordModalOpen(true)}
-          username={auth.username}
-        />
-        <ChangePasswordModal
-          isOpen={isPasswordModalOpen}
-          forced={auth.mustChangePassword}
-          onClose={() => setIsPasswordModalOpen(false)}
-          onSubmit={auth.changePassword}
-          theme={theme}
-        />
+        <Suspense fallback={null}>
+          <AdminModal
+            isOpen={true}
+            isStandalone={true}
+            onClose={() => {
+              window.location.href = "/?_t=" + Date.now();
+            }}
+            nodes={Array.from(nodes.values())}
+            theme={theme}
+            onRefreshNodes={fetchNodes}
+            currentPreset={themePreset}
+            onSelectPreset={handleSelectThemePreset}
+            colorMode={colorMode}
+            onSelectColorMode={setColorMode}
+            onToggleTheme={toggleTheme}
+            onLogout={auth.logout}
+            onOpenPasswordModal={() => setIsPasswordModalOpen(true)}
+            username={auth.username}
+          />
+          {isPasswordModalOpen && (
+            <ChangePasswordModal
+              isOpen={isPasswordModalOpen}
+              forced={auth.mustChangePassword}
+              onClose={() => setIsPasswordModalOpen(false)}
+              onSubmit={auth.changePassword}
+              theme={theme}
+            />
+          )}
+        </Suspense>
       </div>
     );
   }
@@ -505,43 +518,49 @@ export function App() {
       />
 
       {/* Global Admin Modals accessible from btop terminal menu */}
-      <AdminModal
-        isOpen={isAdminModalOpen}
-        onClose={() => setIsAdminModalOpen(false)}
-        nodes={Array.from(nodes.values())}
-        theme={theme}
-        onRefreshNodes={fetchNodes}
-        currentPreset={themePreset}
-        onSelectPreset={handleSelectThemePreset}
-        colorMode={colorMode}
-        onSelectColorMode={setColorMode}
-        onToggleTheme={toggleTheme}
-        onLogout={auth.logout}
-        onOpenPasswordModal={() => setIsPasswordModalOpen(true)}
-        username={auth.username}
-      />
-      <AddNodeModal
-        isOpen={canManage && isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
-        theme={theme}
-      />
-      <ChangePasswordModal
-        isOpen={canManage && isPasswordModalOpen}
-        forced={auth.mustChangePassword}
-        onClose={() => setIsPasswordModalOpen(false)}
-        onSubmit={auth.changePassword}
-        theme={theme}
-      />
-      <ThemeManagerModal
-        isOpen={isThemeModalOpen}
-        onClose={() => setIsThemeModalOpen(false)}
-        currentPreset={themePreset}
-        onSelectPreset={handleSelectThemePreset}
-        colorMode={colorMode}
-        onSelectColorMode={setColorMode}
-        theme={theme}
-        canManage={canManage}
-      />
+      <Suspense fallback={null}>
+        {isAdminModalOpen && (
+          <AdminModal
+            isOpen={isAdminModalOpen}
+            onClose={() => setIsAdminModalOpen(false)}
+            nodes={Array.from(nodes.values())}
+            theme={theme}
+            onRefreshNodes={fetchNodes}
+            currentPreset={themePreset}
+            onSelectPreset={handleSelectThemePreset}
+            colorMode={colorMode}
+            onSelectColorMode={setColorMode}
+            onToggleTheme={toggleTheme}
+            onLogout={auth.logout}
+            onOpenPasswordModal={() => setIsPasswordModalOpen(true)}
+            username={auth.username}
+          />
+        )}
+        {canManage && isAddModalOpen && (
+          <AddNodeModal isOpen={true} onClose={() => setIsAddModalOpen(false)} theme={theme} />
+        )}
+        {canManage && isPasswordModalOpen && (
+          <ChangePasswordModal
+            isOpen={true}
+            forced={auth.mustChangePassword}
+            onClose={() => setIsPasswordModalOpen(false)}
+            onSubmit={auth.changePassword}
+            theme={theme}
+          />
+        )}
+        {isThemeModalOpen && (
+          <ThemeManagerModal
+            isOpen={isThemeModalOpen}
+            onClose={() => setIsThemeModalOpen(false)}
+            currentPreset={themePreset}
+            onSelectPreset={handleSelectThemePreset}
+            colorMode={colorMode}
+            onSelectColorMode={setColorMode}
+            theme={theme}
+            canManage={canManage}
+          />
+        )}
+      </Suspense>
     </div>
   );
 }

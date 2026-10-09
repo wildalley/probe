@@ -58,8 +58,6 @@
 @import "@heroui/styles/utilities";
 @import "@heroui/styles/variants";
 
-@import "uplot/dist/uPlot.min.css";
-
 /* Tailwind 4 defaults to `prefers-color-scheme` for `dark:`. This app toggles a
    `.dark` class on <html> instead, so the variant is redefined to match that. */
 @custom-variant dark (&:where(.dark, .dark *));
@@ -84,17 +82,9 @@
   --text-11: 11px;
   --text-11--line-height: 16px;
 
-  --color-cyber-bg: #09090b;
-  --color-cyber-card: rgba(24, 24, 27, 0.65);
-  --color-cyber-border: #27272a;
-  --color-cyber-glow: rgba(120, 119, 198, 0.15);
-
-  --animate-pulse-slow: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   --animate-fade-in: fadeIn 0.3s ease-in-out;
   --animate-border-beam: border-beam calc(var(--duration) * 1s) infinite linear;
   --animate-shiny-text: shiny-text var(--shiny-speed, 8s) infinite;
-  --animate-gradient-flow: gradient-flow var(--bg-speed, 8s) linear infinite;
-  --animate-ripple: ripple var(--duration, 2s) ease calc(var(--i, 0) * 0.2s) infinite;
 
   @keyframes fadeIn {
     0% {
@@ -125,23 +115,7 @@
     }
   }
 
-  @keyframes gradient-flow {
-    to {
-      background-position: var(--bg-size, 300%) 0;
-    }
-  }
 
-  @keyframes ripple {
-    0%,
-    100% {
-      transform: translate(-50%, -50%) scale(1);
-      opacity: 0.28;
-    }
-    50% {
-      transform: translate(-50%, -50%) scale(0.9);
-      opacity: 0.12;
-    }
-  }
 }
 
 @layer base {
@@ -495,11 +469,6 @@ html.blueprint-dark body {
   color: #e2e8f0;
 }
 
-/* Subtle ambient radial glow behind header */
-.ambient-glow {
-  background: radial-gradient(circle at 50% -20%, rgba(99, 102, 241, 0.15), transparent 70%);
-}
-
 /* Custom scrollbars */
 ::-webkit-scrollbar {
   width: 6px;
@@ -524,34 +493,4 @@ html.btop ::-webkit-scrollbar-thumb {
 }
 html.btop ::-webkit-scrollbar-thumb:hover {
   background: #25334e;
-}
-
-/* uPlot styles */
-.uplot {
-  font-family: var(--font-mono);
-  user-select: none;
-}
-
-.uplot .u-wrap {
-  position: relative !important;
-  overflow: hidden !important;
-}
-
-.uplot .u-axis {
-  position: absolute !important;
-  color: #71717a !important;
-}
-
-.uplot .u-cursor-x,
-.uplot .u-cursor-y {
-  position: absolute !important;
-  pointer-events: none !important;
-}
-
-.uplot .u-cursor-x {
-  border-right: 1px dashed rgba(129, 140, 248, 0.4) !important;
-}
-
-.uplot .u-cursor-y {
-  border-bottom: 1px dashed rgba(129, 140, 248, 0.4) !important;
 }
