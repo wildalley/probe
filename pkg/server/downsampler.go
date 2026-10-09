@@ -65,10 +65,30 @@ func NewDownsampler(storage *Storage, flushInterval time.Duration, retentionDays
 	}
 }
 
+// maxAgentClockSkew is how far an agent's clock may drift from the server's
+// before its timestamps are re-based onto the server clock.
+const maxAgentClockSkew = 5 * 60
+
+// clockOffset returns the seconds to add to an agent timestamp so it lands on
+// the server clock. Small drift is kept as-is so probe times stay exact; a
+// large one (dead NTP on a VPS) would otherwise file history in the future or
+// past, where range queries miss it and retention purges it early.
+func clockOffset(agentTs, now int64) int64 {
+	if agentTs <= 0 {
+		return 0
+	}
+	if diff := now - agentTs; diff > maxAgentClockSkew || diff < -maxAgentClockSkew {
+		return diff
+	}
+	return 0
+}
+
 // RecordIngest adds a live report to the in-memory downsampling bucket.
 func (d *Downsampler) RecordIngest(report *model.NodeReport) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+
+	offset := clockOffset(report.Timestamp, time.Now().Unix())
 
 	b, exists := d.buckets[report.NodeID]
 	if !exists {
@@ -99,7 +119,9 @@ func (d *Downsampler) RecordIngest(report *model.NodeReport) {
 	b.tcpCount = report.Network.TCPEstablished
 	b.udpCount = report.Network.UDPEstablished
 	b.processCount = report.System.ProcessCount
-	b.lastReportTs = report.Timestamp
+	if report.Timestamp > 0 {
+		b.lastReportTs = report.Timestamp + offset
+	}
 
 	seen := d.lastProbed[report.NodeID]
 	if seen == nil {
@@ -123,7 +145,7 @@ func (d *Downsampler) RecordIngest(report *model.NodeReport) {
 		seen[key] = p.ProbedAt
 		b.probes = append(b.probes, &model.PingHistoryPoint{
 			NodeID:     report.NodeID,
-			Timestamp:  p.ProbedAt,
+			Timestamp:  p.ProbedAt + offset,
 			Target:     p.Target,
 			Label:      p.Label,
 			LatencyMs:  p.LatencyMs,

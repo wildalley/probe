@@ -22,9 +22,33 @@ import (
 )
 
 var (
-	geoIPCache    sync.Map // map[string]*GeoIPDetails
+	geoIPCache    sync.Map // map[string]*GeoIPDetails, successful lookups only
+	// geoIPInflight holds keys whose background lookup is running, so a node
+	// reporting every second does not fan out one lookup per report.
+	geoIPInflight sync.Map // map[string]struct{}
+	// geoIPFailures remembers when every provider last failed for a key. A
+	// failure is retried after geoIPRetryAfter instead of being cached forever.
+	geoIPFailures sync.Map // map[string]time.Time
 	ErrNodeActive = errors.New("stop the agent before deleting this node")
 )
+
+const geoIPRetryAfter = 10 * time.Minute
+
+// beginGeoLookup reports whether the caller should start a background lookup
+// for key; the caller must call endGeoLookup when it returns true.
+func beginGeoLookup(key string, now time.Time) bool {
+	if v, ok := geoIPFailures.Load(key); ok {
+		if failedAt, ok := v.(time.Time); ok && now.Sub(failedAt) < geoIPRetryAfter {
+			return false
+		}
+	}
+	_, running := geoIPInflight.LoadOrStore(key, struct{}{})
+	return !running
+}
+
+func endGeoLookup(key string) {
+	geoIPInflight.Delete(key)
+}
 
 // GeoIPDetails contains resolved geographic location, ISP, ASN, provider, and line tag.
 type GeoIPDetails struct {
@@ -158,7 +182,8 @@ func ResolveNodeGeoAndProvider(ip string) *GeoIPDetails {
 		}
 	}
 
-	if details.CountryCode == "" {
+	resolved := details.CountryCode != ""
+	if !resolved {
 		details.CountryCode = "GLOBAL"
 	}
 
@@ -180,7 +205,14 @@ func ResolveNodeGeoAndProvider(ip string) *GeoIPDetails {
 	// Infer Route / Line Tag
 	details.LineTag = inferLineTag(details.ASN, orgName, details.ISP)
 
-	geoIPCache.Store(ip, &details)
+	// Only a provider answer is cached. Caching the GLOBAL placeholder would pin
+	// a node to "unknown" after a single network blip until the server restarts.
+	if resolved {
+		geoIPCache.Store(ip, &details)
+		geoIPFailures.Delete(ip)
+	} else {
+		geoIPFailures.Store(ip, time.Now())
+	}
 	return &details
 }
 
@@ -594,9 +626,10 @@ func (h *Hub) IngestReport(report *model.NodeReport, clientIP string) {
 		if len(tags) == 0 {
 			tags = autoTags(geoDetails)
 		}
-	} else if geoKey != "" {
+	} else if geoKey != "" && beginGeoLookup(geoKey, time.Now()) {
 		// Launch background async resolution and push update when resolved
 		go func(nodeID, targetIP string) {
+			defer endGeoLookup(targetIP)
 			details := ResolveNodeGeoAndProvider(targetIP)
 			if details != nil && details.CountryCode != "" && details.CountryCode != "GLOBAL" {
 				h.mu.Lock()
