@@ -245,7 +245,10 @@ func (s *Server) setupRoutes() {
 			return
 		}
 
-		isAdminRoute := strings.HasPrefix(path, "/admin") || strings.HasPrefix(path, "/terminal")
+		// Matched by whole path segment: a bare prefix test also claimed theme
+		// files such as blueprint's /admin-app/manifest.json, which were then
+		// answered with the built-in index.html ("Manifest: Syntax error").
+		isAdminRoute := isPathUnder(path, "/admin") || isPathUnder(path, "/terminal")
 		activeTheme := s.themeManager.GetActiveTheme()
 
 		// Helper to prevent aggressive browser caching of HTML entry points
@@ -363,6 +366,13 @@ self.addEventListener('activate', () => {
 			"note":    "Web frontend is running separately or not embedded.",
 		})
 	})
+}
+
+// isPathUnder reports whether path is root itself or lies beneath it
+// ("/admin", "/admin/hosts"), but not a sibling that merely shares the
+// prefix ("/admin-app/...").
+func isPathUnder(path, root string) bool {
+	return path == root || strings.HasPrefix(path, root+"/")
 }
 
 // handleAgentWS handles long connections from probe agents.

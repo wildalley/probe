@@ -447,8 +447,9 @@ func TestKomariGetRecordsPing(t *testing.T) {
 	if _, err := time.Parse(time.RFC3339, r.Time); err != nil {
 		t.Fatalf("time %q not RFC3339: %v", r.Time, err)
 	}
-	if _, ok := payload["tasks"].([]KomariPingTask); !ok {
-		t.Fatalf("tasks missing from response: %+v", payload)
+	tasks, ok := payload["tasks"].([]komariPingTaskSummary)
+	if !ok || len(tasks) != 1 || tasks[0].ID != target.ID || tasks[0].Total != 1 {
+		t.Fatalf("tasks = %+v", payload["tasks"])
 	}
 
 	// A uuid filter restricts the rows to that client.
@@ -457,6 +458,83 @@ func TestKomariGetRecordsPing(t *testing.T) {
 	})
 	if rows := res.(gin.H)["records"].([]komariPingRecordRow); len(rows) != 0 {
 		t.Fatalf("uuid filter leaked rows: %+v", rows)
+	}
+}
+
+// TestKomariGetRecordsPingTaskStats: the ping "tasks" list carries each task's
+// window aggregates, as upstream does. Themes such as blueprint fall back to
+// this list when getPingMetricStats is not exact and call task.loss.toFixed()
+// unguarded, so loss must always be present, with the JSON key spelled "loss".
+// A task with no samples in the window is omitted rather than shown as 0%.
+func TestKomariGetRecordsPingTaskStats(t *testing.T) {
+	srv, cleanup := setupTestServerForRPC(t)
+	defer cleanup()
+
+	measured := &model.PingTargetConfig{Label: "Cloudflare", Target: "1.1.1.1", Protocol: "tcp", Interval: 60, Enabled: true}
+	idle := &model.PingTargetConfig{Label: "Idle", Target: "2.2.2.2", Protocol: "tcp", Interval: 60, Enabled: true}
+	for _, tg := range []*model.PingTargetConfig{measured, idle} {
+		if err := srv.storage.AddPingTarget(tg); err != nil {
+			t.Fatal(err)
+		}
+	}
+	now := time.Now().Unix()
+	if err := srv.storage.InsertPingBatch([]*model.PingHistoryPoint{
+		{NodeID: "test-node-1", Timestamp: now - 120, Target: "1.1.1.1", Label: "Cloudflare", LatencyMs: 10},
+		{NodeID: "test-node-1", Timestamp: now - 90, Target: "1.1.1.1", Label: "Cloudflare", LatencyMs: 10, PacketLoss: 25, LostEvent: true},
+		{NodeID: "test-node-1", Timestamp: now - 60, Target: "1.1.1.1", Label: "Cloudflare", LatencyMs: 30},
+		{NodeID: "test-node-1", Timestamp: now - 30, Target: "1.1.1.1", Label: "Cloudflare", LatencyMs: 20},
+		{NodeID: "other-node", Timestamp: now - 30, Target: "1.1.1.1", Label: "Cloudflare", LatencyMs: 500, LostEvent: true},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	res, rpcErr := srv.executeRPCMethod("common:getRecords", map[string]interface{}{
+		"type": "ping", "hours": 1, "uuid": "test-node-1",
+	})
+	if rpcErr != nil {
+		t.Fatalf("rpc error: %v", rpcErr)
+	}
+	payload := res.(gin.H)
+	tasks := payload["tasks"].([]komariPingTaskSummary)
+	if len(tasks) != 1 || tasks[0].ID != measured.ID {
+		t.Fatalf("want only the measured task, got %+v", tasks)
+	}
+	st := tasks[0]
+	if st.Total != 4 || st.Loss != 25 || st.Min != 10 || st.Max != 30 || st.Avg != 20 || st.Latest != 20 {
+		t.Fatalf("summary = %+v", st)
+	}
+	if payload["count"] != 4 {
+		t.Fatalf("count = %v, want 4", payload["count"])
+	}
+
+	raw, err := json.Marshal(st)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded map[string]interface{}
+	_ = json.Unmarshal(raw, &decoded)
+	for _, key := range []string{"id", "name", "interval", "loss", "min", "max", "avg", "p50", "p99", "p99_p50_ratio"} {
+		if _, ok := decoded[key]; !ok {
+			t.Fatalf("task JSON missing %q: %s", key, raw)
+		}
+	}
+}
+
+// TestIsPathUnder: built-in admin routes are matched by whole segment, so a
+// theme's own /admin-app/* files are served from the theme, not as index.html.
+func TestIsPathUnder(t *testing.T) {
+	cases := map[string]bool{
+		"/admin":                   true,
+		"/admin/":                  true,
+		"/admin/hosts":             true,
+		"/admin-app/manifest.json": false,
+		"/administrator":           false,
+		"/":                        false,
+	}
+	for path, want := range cases {
+		if got := isPathUnder(path, "/admin"); got != want {
+			t.Errorf("isPathUnder(%q) = %v, want %v", path, got, want)
+		}
 	}
 }
 

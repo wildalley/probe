@@ -1478,6 +1478,15 @@ func (s *Server) getKomariPingMetricStats(params interface{}) interface{} {
 		return empty
 	}
 
+	return gin.H{"stats": komariPingTaskStats(entity, history, lookup)}
+}
+
+// komariPingTaskStats aggregates ping rows into one stat per configured task,
+// in first-seen order. Both public:getPingMetricStats and the tasks summary of
+// common:getRecords type=ping use it, so the two never disagree; themes such as
+// blueprint fall back from the former to the latter and format task.loss
+// unguarded. Rows that resolve to no configured task are skipped.
+func komariPingTaskStats(entity string, history []*model.PingHistoryPoint, lookup komariTaskIDLookup) []KomariPingMetricStat {
 	type pingGroup struct {
 		task model.PingTargetConfig
 		// lat holds only probes that answered: a lost probe carries the
@@ -1563,7 +1572,7 @@ func (s *Server) getKomariPingMetricStats(params interface{}) interface{} {
 		}
 		stats = append(stats, stat)
 	}
-	return gin.H{"stats": stats}
+	return stats
 }
 
 // handleKomariRecent serves GET /api/recent/{uuid}: the node's recent status
@@ -1653,33 +1662,111 @@ func (s *Server) getKomariPingRecords(params interface{}) interface{} {
 	end := time.Now().Unix()
 	start := end - int64(hours*3600)
 
-	history, err := s.storage.GetPingHistoryRange(start, end, maxCount)
+	// A single client is read in full and trimmed afterwards: capping the
+	// all-client query first would hand a busy cluster's quota to other nodes
+	// and leave this one with a sliver of its window.
+	var history []*model.PingHistoryPoint
+	var err error
+	if uuid != "" {
+		history, err = s.storage.GetPingHistory(uuid, start, end)
+	} else {
+		history, err = s.storage.GetPingHistoryRange(start, end, maxCount)
+	}
+	if err != nil {
+		history = nil
+	}
+
+	lookup := s.komariPingTaskLookup()
 	records := make([]komariPingRecordRow, 0, len(history))
-	if err == nil {
-		lookup := s.komariPingTaskLookup()
-		for _, pt := range history {
-			if uuid != "" && pt.NodeID != uuid {
-				continue
-			}
-			task, ok := lookup.resolve(pt)
-			if !ok {
-				// The row's target is not a configured task; without an id the
-				// theme cannot attribute it, so it is dropped rather than
-				// merged into a bogus task 1.
-				continue
-			}
-			records = append(records, komariPingRecordRow{
-				Client: pt.NodeID,
-				TaskID: task.ID,
-				Time:   time.Unix(pt.Timestamp, 0).UTC().Format(time.RFC3339),
-				Value:  komariPingValue(pt),
-				Loss:   pt.PacketLoss,
-			})
+	for _, pt := range history {
+		task, ok := lookup.resolve(pt)
+		if !ok {
+			// The row's target is not a configured task; without an id the
+			// theme cannot attribute it, so it is dropped rather than
+			// merged into a bogus task 1.
+			continue
 		}
+		records = append(records, komariPingRecordRow{
+			Client: pt.NodeID,
+			TaskID: task.ID,
+			Time:   time.Unix(pt.Timestamp, 0).UTC().Format(time.RFC3339),
+			Value:  komariPingValue(pt),
+			Loss:   pt.PacketLoss,
+		})
+	}
+	if len(records) > maxCount {
+		records = records[len(records)-maxCount:]
 	}
 
 	return gin.H{
+		"count":   len(records),
 		"records": records,
-		"tasks":   s.getKomariRPCPingTasks(),
+		"tasks":   s.komariPingTaskSummaries(uuid, history, lookup),
+		"from":    time.Unix(start, 0).UTC().Format(time.RFC3339),
+		"to":      time.Unix(end, 0).UTC().Format(time.RFC3339),
 	}
+}
+
+// komariPingTaskSummary is one entry of the common:getRecords ping "tasks"
+// list. Upstream Komari carries the window's loss and latency aggregates on
+// each task, and themes read them directly — blueprint formats task.loss
+// with no undefined guard, so a bare task config crashed its ping panel.
+// Fields are spelled out rather than embedding both structs: name, type and
+// interval would collide, and encoding/json silently drops colliding fields.
+type komariPingTaskSummary struct {
+	ID              int64    `json:"id"`
+	Weight          int      `json:"weight"`
+	Name            string   `json:"name"`
+	Clients         []string `json:"clients"`
+	DefaultOn       bool     `json:"default_on"`
+	Type            string   `json:"type"`
+	Interval        int      `json:"interval"`
+	Total           int      `json:"total"`
+	Loss            float64  `json:"loss"`
+	LossApproximate bool     `json:"loss_approximate"`
+	Min             float64  `json:"min"`
+	Max             float64  `json:"max"`
+	Avg             float64  `json:"avg"`
+	Latest          float64  `json:"latest"`
+	P50             float64  `json:"p50"`
+	P99             float64  `json:"p99"`
+	P99P50Ratio     float64  `json:"p99_p50_ratio"`
+}
+
+// komariPingTaskSummaries lists the enabled tasks that have samples in
+// history, each with its aggregates. A task with no samples in the window is
+// left out rather than reported as 0% loss: there is no measurement to report,
+// and its series is absent from records anyway.
+func (s *Server) komariPingTaskSummaries(entity string, history []*model.PingHistoryPoint, lookup komariTaskIDLookup) []komariPingTaskSummary {
+	byID := map[int64]KomariPingMetricStat{}
+	for _, st := range komariPingTaskStats(entity, history, lookup) {
+		byID[st.TaskID] = st
+	}
+	list := make([]komariPingTaskSummary, 0, len(byID))
+	for _, t := range s.getKomariRPCPingTasks() {
+		st, ok := byID[t.ID]
+		if !ok || st.Total == 0 {
+			continue
+		}
+		list = append(list, komariPingTaskSummary{
+			ID:              t.ID,
+			Weight:          t.Weight,
+			Name:            t.Name,
+			Clients:         t.Clients,
+			DefaultOn:       t.DefaultOn,
+			Type:            t.Type,
+			Interval:        t.Interval,
+			Total:           st.Total,
+			Loss:            st.Loss,
+			LossApproximate: st.LossApproximate,
+			Min:             st.Min,
+			Max:             st.Max,
+			Avg:             st.Avg,
+			Latest:          st.Latest,
+			P50:             st.P50,
+			P99:             st.P99,
+			P99P50Ratio:     st.P99P50Ratio,
+		})
+	}
+	return list
 }
