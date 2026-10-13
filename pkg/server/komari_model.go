@@ -280,4 +280,9 @@ type KomariPingTask struct {
 	DefaultOn bool     `json:"default_on"`
 	Type      string   `json:"type"`
 	Interval  int      `json:"interval"`
+	Loss      float64  `json:"loss"`
+	Avg       *float64 `json:"avg,omitempty"`
+	Min       *float64 `json:"min,omitempty"`
+	Max       *float64 `json:"max,omitempty"`
+	Latest    *float64 `json:"latest,omitempty"`
 }

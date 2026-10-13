@@ -458,6 +458,19 @@ func TestKomariGetRecordsPing(t *testing.T) {
 	if !ok || len(tasks) != 1 || tasks[0].ID != target.ID || tasks[0].Total != 1 {
 		t.Fatalf("tasks = %+v", payload["tasks"])
 	}
+	var targetTask *komariPingTaskSummary
+	for i := range tasks {
+		if tasks[i].ID == target.ID {
+			targetTask = &tasks[i]
+			break
+		}
+	}
+	if targetTask == nil || targetTask.Loss != 0 {
+		t.Fatalf("expected target task loss 0, got targetTask=%+v tasks=%+v", targetTask, tasks)
+	}
+	if targetTask.Avg != 12 {
+		t.Fatalf("expected target task avg 12, got %+v", targetTask)
+	}
 
 	// A uuid filter restricts the rows to that client.
 	res, _ = srv.executeRPCMethod("common:getRecords", map[string]interface{}{
