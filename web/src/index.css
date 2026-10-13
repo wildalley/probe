@@ -179,6 +179,42 @@
     background-color: #070e1e;
     color: #e2e8f0;
   }
+
+  /* Nezha Industrial Blueprint Theme Variables (Light default) */
+  :root {
+    --nezha-sea: #E4E4DF;
+    --nezha-panel: #FBFBF9;
+    --nezha-panel-sub: #F2F2EE;
+    --nezha-line: #CFCFC8;
+    --nezha-line-soft: #DEDED8;
+    --nezha-ink: #141414;
+    --nezha-ink-2: #55554F;
+    --nezha-ink-3: #66665F;
+    --nezha-accent: #FF5A1F;
+    --nezha-accent-ink: #C2410C;
+    --nezha-accent-soft: rgba(255, 90, 31, 0.15);
+    --nezha-on-accent: #141414;
+    --nezha-track: #E3E3DD;
+  }
+
+  /* Nezha Industrial Blueprint Theme Variables (Dark) */
+  .dark,
+  [data-theme="dark"],
+  [data-theme="btop"] {
+    --nezha-sea: #121311;
+    --nezha-panel: #1A1B18;
+    --nezha-panel-sub: #22231F;
+    --nezha-line: #34352F;
+    --nezha-line-soft: #2A2B26;
+    --nezha-ink: #ECECE6;
+    --nezha-ink-2: #A9A9A0;
+    --nezha-ink-3: #9C9C93;
+    --nezha-accent: #FF6A33;
+    --nezha-accent-ink: #FF8A5C;
+    --nezha-accent-soft: rgba(255, 106, 51, 0.22);
+    --nezha-on-accent: #141414;
+    --nezha-track: #2E2F2A;
+  }
 }
 
 @layer utilities {
@@ -467,6 +503,38 @@
 html.blueprint-dark body {
   background-color: #070e1e;
   color: #e2e8f0;
+}
+
+/* Nezha-Live Industrial Engineering grid patterns */
+.nezha-grid {
+  background-color: var(--nezha-sea);
+  background-size: 24px 24px;
+  background-image:
+    linear-gradient(to right, rgba(0, 0, 0, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.05) 1px, transparent 1px);
+}
+.dark .nezha-grid,
+[data-theme="dark"] .nezha-grid,
+[data-theme="btop"] .nezha-grid {
+  background-color: var(--nezha-sea);
+  background-size: 24px 24px;
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+}
+
+/* Nezha Admin UI Custom Overrides */
+.admin-console button[data-variant="primary"],
+.admin-console .btn-primary {
+  background-color: var(--nezha-accent) !important;
+  color: #141414 !important;
+  font-weight: 700 !important;
+  border-radius: 0px !important;
+  box-shadow: none !important;
+}
+.admin-console button[data-variant="primary"]:hover,
+.admin-console .btn-primary:hover {
+  filter: brightness(0.95);
 }
 
 /* Custom scrollbars */

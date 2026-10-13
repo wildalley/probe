@@ -1,10 +1,7 @@
 import React, { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { X, Plus, Tag as TagIcon } from "lucide-react";
-import { Button, Chip } from "@heroui/react";
 import { ThemeMode } from "../types";
-import { getTagStyle } from "../utils/tagColors";
-import { cn } from "../lib/utils";
 
 interface TagInputProps {
   tags: string[];
@@ -26,10 +23,7 @@ const PRESET_TAGS = [
   "直连优化",
 ];
 
-export const TagInput: React.FC<TagInputProps> = ({ tags, onChange, theme = "dark" }) => {
-  const isDark = theme === "dark" || theme === "btop" || theme === "blueprint-dark";
-  const isLight = !isDark;
-  const isBlueprint = isLight;
+export const TagInput: React.FC<TagInputProps> = ({ tags, onChange }) => {
   const [inputValue, setInputValue] = useState("");
 
   const addTag = (text: string) => {
@@ -63,15 +57,9 @@ export const TagInput: React.FC<TagInputProps> = ({ tags, onChange, theme = "dar
   };
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2 font-mono text-xs">
       {/* Active tags container */}
-      <div
-        className={`flex flex-wrap items-center gap-1.5 p-2 rounded-xl border min-h-[44px] transition-colors ${
-          isBlueprint
-            ? "bg-white border-slate-200 focus-within:border-indigo-500 focus-within:ring-1 focus-within:ring-indigo-500/20"
-            : "bg-zinc-950 border-zinc-800 focus-within:border-indigo-500 focus-within:ring-1 focus-within:ring-indigo-500/20"
-        }`}
-      >
+      <div className="flex flex-wrap items-center gap-1.5 p-2 rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] min-h-[40px] focus-within:border-[var(--nezha-ink)] transition-colors">
         <AnimatePresence initial={false} mode="popLayout">
           {tags.map((tag) => (
             <motion.span
@@ -83,27 +71,18 @@ export const TagInput: React.FC<TagInputProps> = ({ tags, onChange, theme = "dar
               transition={{ duration: 0.15, ease: "easeOut" }}
               className="inline-flex"
             >
-              {/* motion wraps rather than replaces the Chip: framer-motion needs a
-                  ref to animate, and Chip renders a plain span without forwarding one. */}
-              <Chip
-                size="sm"
-                variant="soft"
-                className={cn(
-                  "h-auto gap-1.5 border px-2.5 py-1 text-xs font-sans font-medium shadow-sm",
-                  getTagStyle(tag, isBlueprint)
-                )}
-              >
-                <TagIcon className="h-3 w-3 shrink-0 opacity-75" />
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel)] text-[var(--nezha-ink)] text-xs font-mono font-bold">
+                <TagIcon className="h-3 w-3 shrink-0 text-[var(--nezha-accent)]" />
                 <span>{tag}</span>
                 <button
                   type="button"
                   onClick={() => removeTag(tag)}
-                  className="cursor-pointer rounded-full p-0.5 opacity-70 transition-all hover:bg-black/15 hover:opacity-100 active:scale-90"
+                  className="cursor-pointer p-0.5 ml-0.5 text-[var(--nezha-ink-3)] hover:text-rose-500 transition-colors"
                   title="删除标签"
                 >
                   <X className="h-3 w-3" />
                 </button>
-              </Chip>
+              </span>
             </motion.span>
           ))}
         </AnimatePresence>
@@ -117,15 +96,13 @@ export const TagInput: React.FC<TagInputProps> = ({ tags, onChange, theme = "dar
             onKeyDown={handleKeyDown}
             onBlur={() => inputValue && addTag(inputValue)}
             placeholder={tags.length === 0 ? "输入标签并回车添加..." : "添加标签..."}
-            className={`w-full bg-transparent text-xs font-mono focus:outline-none py-1 px-1 ${
-              isBlueprint ? "text-slate-900 placeholder:text-slate-400" : "text-zinc-100 placeholder:text-zinc-500"
-            }`}
+            className="w-full bg-transparent text-xs font-mono text-[var(--nezha-ink)] placeholder:text-[var(--nezha-ink-3)] focus:outline-none py-1 px-1"
           />
           {inputValue.trim() && (
             <button
               type="button"
               onClick={() => addTag(inputValue)}
-              className="p-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-mono shrink-0 transition-all cursor-pointer active:scale-90"
+              className="p-1 rounded-none bg-[var(--nezha-accent)] text-[#141414] text-xs font-mono shrink-0 cursor-pointer"
             >
               <Plus className="h-3.5 w-3.5" />
             </button>
@@ -134,8 +111,8 @@ export const TagInput: React.FC<TagInputProps> = ({ tags, onChange, theme = "dar
       </div>
 
       {/* Preset recommendations */}
-      <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-        <span className={cn("text-xs font-medium", isBlueprint ? "text-slate-500" : "text-zinc-400")}>
+      <div className="flex flex-wrap items-center gap-1.5 pt-0.5 font-mono">
+        <span className="text-11 font-bold text-[var(--nezha-ink-3)]">
           快捷推荐:
         </span>
         {PRESET_TAGS.map((preset) => {
@@ -145,14 +122,11 @@ export const TagInput: React.FC<TagInputProps> = ({ tags, onChange, theme = "dar
               key={preset}
               type="button"
               onClick={() => togglePreset(preset)}
-              className={cn(
-                "h-auto rounded-md border px-2 py-0.5 font-sans text-xs font-medium transition-all active:scale-95 cursor-pointer",
+              className={`h-6 px-2 rounded-none border text-11 font-mono font-bold transition-colors cursor-pointer ${
                 isSelected
-                  ? "bg-indigo-600 border-indigo-600 text-white shadow-xs"
-                  : isBlueprint
-                  ? "bg-slate-50 hover:bg-indigo-50 border-slate-200 hover:border-indigo-300 text-slate-600 hover:text-indigo-600"
-                  : "bg-zinc-900 hover:bg-zinc-800 border-zinc-800 hover:border-indigo-500/50 text-zinc-400 hover:text-indigo-300"
-              )}
+                  ? "border-[var(--nezha-accent)] bg-[var(--nezha-accent)] text-[#141414]"
+                  : "border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] hover:border-[var(--nezha-ink)] hover:bg-[var(--nezha-panel)] text-[var(--nezha-ink)]"
+              }`}
             >
               {isSelected ? `✓ ${preset}` : `+ ${preset}`}
             </button>

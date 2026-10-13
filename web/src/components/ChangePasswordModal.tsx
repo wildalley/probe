@@ -16,12 +16,7 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
   forced = false,
   onClose,
   onSubmit,
-  theme,
 }) => {
-  const isDark = theme === "dark" || theme === "btop" || theme === "blueprint-dark";
-  const isLight = !isDark;
-  const isBlueprint = isLight;
-
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -74,56 +69,42 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
     }, 1200);
   };
 
-  const inputClass = `w-full rounded-lg border px-3 py-2 text-xs font-mono transition-colors focus:outline-none ${
-    isBlueprint
-      ? "bg-white border-slate-200 text-slate-800 placeholder-slate-400 focus:border-indigo-500"
-      : "bg-zinc-900/80 border-zinc-800 text-zinc-100 placeholder-zinc-500 focus:border-indigo-500"
-  }`;
+  const inputClass = "w-full rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] text-[var(--nezha-ink)] px-3 py-2 text-xs font-mono transition-colors focus:outline-none focus:border-[var(--nezha-accent)] focus:ring-1 focus:ring-[var(--nezha-accent)]";
 
-  const labelClass = `mb-1.5 block text-11 font-sans uppercase tracking-wider ${
-    isBlueprint ? "text-slate-500" : "text-zinc-400"
-  }`;
+  const labelClass = "mb-1.5 block text-11 font-mono uppercase tracking-wider font-bold text-[var(--nezha-ink)]";
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 font-mono">
       <div
-        className={`absolute inset-0 backdrop-blur-sm ${isBlueprint ? "bg-slate-900/30" : "bg-black/70"}`}
+        className="absolute inset-0 bg-black/80 backdrop-blur-sm"
         onClick={forced ? undefined : onClose}
       />
 
       <div
-        className={`relative w-full max-w-md rounded-2xl border shadow-2xl ${
-          isBlueprint ? "bg-white border-slate-200" : "bg-zinc-950 border-zinc-800"
-        }`}
+        className="relative w-full max-w-md rounded-none border-1.5 border-[var(--nezha-line)] bg-[var(--nezha-panel)] text-[var(--nezha-ink)] shadow-2xl"
       >
         {/* Header */}
         <div
-          className={`flex items-center justify-between border-b px-5 py-4 ${
-            isBlueprint ? "border-slate-200" : "border-zinc-800"
-          }`}
+          className="flex items-center justify-between border-b border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] px-5 py-3.5"
         >
           <div className="flex items-center gap-2.5">
             <div
-              className={`flex h-9 w-9 items-center justify-center rounded-xl border ${
-                forced
-                  ? "bg-amber-500/10 border-amber-500/30"
-                  : isBlueprint
-                  ? "bg-indigo-50 border-indigo-200"
-                  : "bg-indigo-500/10 border-indigo-500/30"
+              className={`flex h-8 w-8 items-center justify-center rounded-none border border-[var(--nezha-line)] ${
+                forced ? "bg-[var(--nezha-accent)] text-[#141414]" : "bg-[var(--nezha-panel)] text-[var(--nezha-accent)]"
               }`}
             >
               {forced ? (
-                <ShieldAlert className="h-4.5 w-4.5 text-amber-500" />
+                <ShieldAlert className="h-4 w-4" />
               ) : (
-                <KeyRound className="h-4.5 w-4.5 text-indigo-500" />
+                <KeyRound className="h-4 w-4" />
               )}
             </div>
             <div>
-              <h2 className={`text-sm font-bold font-sans ${isBlueprint ? "text-slate-900" : "text-zinc-100"}`}>
-                {forced ? "请修改初始密码" : "修改登录密码"}
+              <h2 className="text-xs sm:text-sm font-bold tracking-tight text-[var(--nezha-ink)]">
+                {forced ? "[ SECURITY · 请设置新密码 ]" : "[ AUTH · 修改管理密码 ]"}
               </h2>
-              <p className={`text-11 font-sans ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}>
-                {forced ? "当前使用系统生成的临时密码" : "修改后其他设备需重新登录"}
+              <p className="text-10 text-[var(--nezha-ink-3)] font-mono">
+                {forced ? "当前使用服务端随机生成的临时凭证" : "修改后其他设备需重新登录"}
               </p>
             </div>
           </div>
@@ -131,27 +112,25 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
           {!forced && (
             <button
               onClick={onClose}
-              className={`rounded-lg p-1.5 transition-colors ${
-                isBlueprint ? "text-slate-400 hover:bg-slate-100" : "text-zinc-500 hover:bg-zinc-800"
-              }`}
+              className="p-1 rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel)] hover:bg-[var(--nezha-accent)] hover:text-[#141414] text-[var(--nezha-ink)] transition-colors cursor-pointer"
             >
               <X className="h-4 w-4" />
             </button>
           )}
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4 px-5 py-5">
+        <form onSubmit={handleSubmit} className="space-y-4 px-5 py-5 font-mono">
           {forced && (
-            <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5">
-              <ShieldAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
-              <p className={`text-11 font-sans leading-relaxed ${isBlueprint ? "text-amber-700" : "text-amber-300"}`}>
-                初始密码由服务端随机生成并打印在启动日志中。为保证集群安全，请立即设置你自己的密码。
+            <div className="flex items-start gap-2 rounded-none border border-[var(--nezha-accent)]/50 bg-[var(--nezha-accent-soft)] px-3 py-2.5">
+              <ShieldAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--nezha-accent-ink)] dark:text-[var(--nezha-accent)]" />
+              <p className="text-11 leading-relaxed text-[var(--nezha-ink)]">
+                初始密码由服务端随机生成并打印在启动日志中。为保证集群控制安全，请立即设置你的密码。
               </p>
             </div>
           )}
 
           <div>
-            <label className={labelClass}>当前密码</label>
+            <label className={labelClass}>[01] 当前管理密码</label>
             <input
               type={showPasswords ? "text" : "password"}
               value={currentPassword}
@@ -164,7 +143,7 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
           </div>
 
           <div>
-            <label className={labelClass}>新密码</label>
+            <label className={labelClass}>[02] 新设密码</label>
             <input
               type={showPasswords ? "text" : "password"}
               value={newPassword}
@@ -177,7 +156,7 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
           </div>
 
           <div>
-            <label className={labelClass}>确认新密码</label>
+            <label className={labelClass}>[03] 确认新密码</label>
             <input
               type={showPasswords ? "text" : "password"}
               value={confirmPassword}
@@ -192,49 +171,41 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
           <button
             type="button"
             onClick={() => setShowPasswords((v) => !v)}
-            className={`flex items-center gap-1.5 text-11 font-sans transition-colors ${
-              isBlueprint ? "text-slate-500 hover:text-slate-800" : "text-zinc-500 hover:text-zinc-300"
-            }`}
+            className="flex items-center gap-1.5 text-11 font-mono text-[var(--nezha-ink-3)] hover:text-[var(--nezha-ink)] transition-colors cursor-pointer"
           >
             {showPasswords ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
             <span>{showPasswords ? "隐藏密码" : "显示密码"}</span>
           </button>
 
           {error && (
-            <div className="flex items-start gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2">
-              <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-rose-500" />
-              <span className={`text-11 font-sans ${isBlueprint ? "text-rose-700" : "text-rose-300"}`}>{error}</span>
+            <div className="flex items-start gap-2 rounded-none border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-rose-500 text-xs">
+              <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>{error}</span>
             </div>
           )}
 
           {success && (
-            <div className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2">
-              <Check className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
-              <span className={`text-11 font-sans ${isBlueprint ? "text-emerald-700" : "text-emerald-300"}`}>
-                密码已更新
-              </span>
+            <div className="flex items-center gap-2 rounded-none border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-emerald-600 dark:text-emerald-400 text-xs font-bold">
+              <Check className="h-3.5 w-3.5 shrink-0" />
+              <span>[OK] 密码已成功更新</span>
             </div>
           )}
 
-          <div className="flex items-center gap-2 pt-1">
+          <div className="flex items-center gap-2 pt-2">
             <button
               type="submit"
               disabled={submitting || success || !currentPassword || !newPassword || !confirmPassword}
-              className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-xs font-sans font-semibold text-white shadow-lg shadow-indigo-600/25 transition-colors hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex flex-1 items-center justify-center gap-2 rounded-none bg-[var(--nezha-accent)] hover:bg-[#E54D16] px-4 py-2 text-xs font-mono font-bold text-[#141414] border border-[#141414]/30 transition-colors disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer shadow-none"
             >
               <KeyRound className="h-3.5 w-3.5" />
-              <span>{submitting ? "提交中..." : "确认修改"}</span>
+              <span>{submitting ? "提交中..." : "确认修改密码"}</span>
             </button>
 
             {!forced && (
               <button
                 type="button"
                 onClick={onClose}
-                className={`rounded-lg border px-4 py-2.5 text-xs font-sans transition-colors ${
-                  isBlueprint
-                    ? "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-                    : "border-zinc-800 bg-zinc-900 text-zinc-300 hover:bg-zinc-800"
-                }`}
+                className="rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] hover:border-[var(--nezha-ink)] text-[var(--nezha-ink)] px-4 py-2 text-xs font-mono font-bold transition-colors cursor-pointer"
               >
                 取消
               </button>

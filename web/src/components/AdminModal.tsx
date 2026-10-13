@@ -344,12 +344,12 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     badge?: number | string;
     badgeTone?: "count" | "new";
   }[] = [
-    { key: "hosts", icon: Server, label: "主机管理", shortLabel: "主机", badge: nodes.length },
-    { key: "network", icon: Activity, label: "网络延迟与丢包检测", shortLabel: "网络监测", badge: pingTargets.length },
-    { key: "themes", icon: Palette, label: "探针主题与扩展中心", shortLabel: "主题中心" },
-    { key: "billing", icon: Coins, label: "财务计费与实时汇率", shortLabel: "财务汇率" },
-    { key: "tokens", icon: Key, label: "通信鉴权 Token", shortLabel: "Token", badge: tokens.length },
-    { key: "notifications", icon: Bell, label: "自定义通知与告警", shortLabel: "告警通知", badge: "NEW", badgeTone: "new" },
+    { key: "hosts", icon: Server, label: "[01] 主机列表 HOSTS", shortLabel: "HOSTS", badge: nodes.length },
+    { key: "network", icon: Activity, label: "[02] 网络监测 NETWORK", shortLabel: "NETWORK", badge: pingTargets.length },
+    { key: "themes", icon: Palette, label: "[03] 主题扩展 THEMES", shortLabel: "THEMES" },
+    { key: "billing", icon: Coins, label: "[04] 财务汇率 BILLING", shortLabel: "BILLING" },
+    { key: "tokens", icon: Key, label: "[05] 鉴权密钥 TOKENS", shortLabel: "TOKENS", badge: tokens.length },
+    { key: "notifications", icon: Bell, label: "[06] 告警通知 ALERTS", shortLabel: "ALERTS", badge: "NEW", badgeTone: "new" },
   ];
 
   const handleTabChange = (key: TabKey) => {
@@ -646,160 +646,114 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     <div
       className={
         isStandalone
-          ? `min-h-screen w-full flex flex-col font-sans transition-colors ${
-              isBlueprintDark
-                ? "bg-[#070e1e] text-slate-100"
-                : isBlueprintLight
-                ? "bg-slate-100 text-slate-900"
-                : isBtopLight
-                ? "bg-[#ebe7ee] text-slate-900"
-                : isBtop
-                ? "bg-[#06080d] text-zinc-100"
-                : "bg-zinc-950 text-zinc-100"
-            }`
+          ? "min-h-screen w-full flex flex-col font-sans transition-colors nezha-grid text-[var(--nezha-ink)]"
           : "fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 lg:p-6 bg-black/80 backdrop-blur-md animate-fade-in font-sans"
       }
     >
       <div
         className={
           isStandalone
-            ? `relative flex flex-col w-full flex-1 max-w-[1700px] mx-auto overflow-hidden sm:border-x shadow-xs transition-colors ${
-                isLight
-                  ? "bg-slate-50 border-slate-200/90 text-slate-900"
-                  : isBlueprintDark
-                  ? "bg-[#070e1e] border-[#1d2d52] text-slate-100"
-                  : "bg-zinc-950 border-zinc-800 text-zinc-100"
-              }`
-            : `relative flex flex-col w-full max-w-[1440px] h-[100dvh] sm:h-[92vh] rounded-none sm:rounded-2xl border-0 sm:border shadow-2xl overflow-hidden transition-colors ${
-                isLight
-                  ? "bg-slate-50 border-slate-200/90 text-slate-900"
-                  : isBlueprintDark
-                  ? "bg-[#070e1e] border-[#1d2d52] text-slate-100"
-                  : "bg-zinc-950 border-zinc-800 text-zinc-100"
-              }`
+            ? "relative flex flex-col w-full flex-1 max-w-[1720px] mx-auto overflow-hidden sm:border-x shadow-xl transition-colors bg-[var(--nezha-panel)] border-[var(--nezha-line)] text-[var(--nezha-ink)] admin-console"
+            : "relative flex flex-col w-full max-w-[1440px] h-[100dvh] sm:h-[92vh] rounded-none sm:rounded-sm border shadow-2xl overflow-hidden transition-colors bg-[var(--nezha-panel)] border-[var(--nezha-line)] text-[var(--nezha-ink)] admin-console"
         }
       >
         {/* Header */}
         <div
-          className={`flex items-center justify-between px-3.5 py-2.5 sm:px-6 sm:py-3.5 border-b shrink-0 ${
-            isLight
-              ? "bg-white border-slate-200/80"
-              : isBlueprintDark
-              ? "bg-[#091124] border-[#1d2d52]"
-              : "bg-zinc-900/90 border-zinc-800"
-          }`}
+          className="flex items-center justify-between px-3.5 py-2.5 sm:px-6 sm:py-3.5 border-b shrink-0 bg-[var(--nezha-panel)] border-[var(--nezha-line)]"
         >
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-            <div className="p-2 sm:p-2.5 rounded-xl bg-indigo-50 border border-indigo-200/80 text-indigo-600 dark:bg-indigo-950/50 dark:border-indigo-800/60 dark:text-indigo-400 shrink-0">
+            <div className="flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] text-[var(--nezha-accent)] shrink-0">
               <Sliders className="h-4 w-4 sm:h-4.5 sm:w-4.5" />
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <h2 className="text-sm sm:text-base font-bold font-sans tracking-tight truncate text-slate-900 dark:text-zinc-100">
-                  PROBE ADMIN CONSOLE
+                <h2 className="text-sm sm:text-base font-bold font-mono tracking-tight truncate text-[var(--nezha-ink)]">
+                  PROBE // CONTROL CONSOLE
                 </h2>
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-10 sm:text-11 font-sans font-semibold bg-indigo-50 text-indigo-600 border border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-400 dark:border-indigo-800 shrink-0">
-                  管理后台
+                <span className="inline-flex items-center px-1.5 py-0.5 text-10 font-mono font-bold bg-[var(--nezha-accent)] text-[#141414] rounded-none shrink-0">
+                  ADMIN
                 </span>
               </div>
-              <p className={`hidden sm:block text-xs font-sans mt-0.5 truncate ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}>
+              <p className="hidden sm:block text-xs font-mono text-[var(--nezha-ink-3)] mt-0.5 truncate">
                 主机管理 · 网络延迟丢包监控 · 探针主题中心 · 财务与实时汇率 · 多渠道通知
               </p>
             </div>
           </div>
 
           {isStandalone ? (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
               <a
                 href={"/?_t=" + Date.now()}
                 onClick={(e) => {
                   e.currentTarget.href = "/?_t=" + Date.now();
                 }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-sans font-medium shadow-md shadow-indigo-600/20 active:scale-95 transition-all cursor-pointer"
+                className="h-7 px-2.5 flex items-center justify-center gap-1.5 rounded-none bg-[var(--nezha-panel)] hover:bg-[var(--nezha-accent)] text-[var(--nezha-ink)] hover:text-[#141414] border border-[var(--nezha-line)] hover:border-[var(--nezha-accent)] text-xs font-mono font-bold shrink-0 whitespace-nowrap transition-all cursor-pointer"
                 title="返回监控前台"
               >
-                <ArrowLeft className="h-4 w-4" />
+                <ArrowLeft className="h-3.5 w-3.5 shrink-0" />
                 <span className="hidden sm:inline">返回监控前台</span>
-                <span className="sm:hidden">前台</span>
+                <span className="sm:hidden whitespace-nowrap">前台</span>
               </a>
 
               {onToggleTheme && (
                 <button
+                  type="button"
                   onClick={onToggleTheme}
-                  className={`p-2 rounded-xl border text-xs transition-all cursor-pointer ${
-                    isDark
-                      ? "border-zinc-800 bg-zinc-900 text-cyan-400 hover:border-zinc-700"
-                      : "border-slate-200 bg-white text-amber-500 hover:bg-slate-50"
-                  }`}
+                  className="h-7 w-7 flex items-center justify-center rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel)] hover:border-[var(--nezha-ink)] text-[var(--nezha-ink)] shrink-0 transition-all cursor-pointer"
                   title="切换色彩明暗"
                 >
-                  {isDark ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+                  {isDark ? <Moon className="h-3.5 w-3.5 text-[var(--nezha-accent)]" /> : <Sun className="h-3.5 w-3.5 text-[var(--nezha-accent)]" />}
                 </button>
               )}
 
               {onOpenPasswordModal && (
                 <button
+                  type="button"
                   onClick={onOpenPasswordModal}
-                  className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-sans transition-all cursor-pointer ${
-                    isDark
-                      ? "border-zinc-800 bg-zinc-900 text-zinc-300 hover:text-white"
-                      : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                  }`}
+                  className="hidden sm:flex h-7 px-2.5 items-center justify-center gap-1.5 rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel)] hover:border-[var(--nezha-ink)] text-[var(--nezha-ink)] text-xs font-mono font-bold shrink-0 whitespace-nowrap transition-all cursor-pointer"
                   title="修改管理密码"
                 >
-                  <KeyRound className="h-3.5 w-3.5 text-indigo-500" />
+                  <KeyRound className="h-3.5 w-3.5 text-[var(--nezha-accent)] shrink-0" />
                   <span>改密</span>
                 </button>
               )}
 
               {username && (
                 <div
-                  className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-mono ${
-                    isDark ? "border-zinc-800 bg-zinc-900/60 text-zinc-300" : "border-slate-200 bg-slate-100 text-slate-700"
-                  }`}
+                  className="hidden sm:flex h-7 px-2.5 items-center justify-center gap-1.5 rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel)] text-[var(--nezha-ink)] text-xs font-mono font-bold shrink-0 whitespace-nowrap"
                 >
-                  <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                  <span className="h-1.5 w-1.5 rounded-none bg-[var(--nezha-accent)]" />
                   <span>{username}</span>
                 </div>
               )}
 
               {onLogout && (
                 <button
+                  type="button"
                   onClick={onLogout}
-                  className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl border text-xs font-sans text-rose-500 transition-all cursor-pointer ${
-                    isDark ? "border-rose-500/20 bg-rose-500/10 hover:bg-rose-500/20" : "border-rose-200 bg-rose-50 hover:bg-rose-100"
-                  }`}
+                  className="h-7 px-2 sm:px-2.5 flex items-center justify-center gap-1 rounded-none border border-rose-500/30 bg-[var(--nezha-panel)] text-rose-500 hover:bg-rose-500/10 text-xs font-mono font-bold shrink-0 whitespace-nowrap transition-all cursor-pointer"
                   title="退出登录"
                 >
-                  <LogOut className="h-3.5 w-3.5" />
+                  <LogOut className="h-3.5 w-3.5 shrink-0" />
                   <span className="hidden sm:inline">退出</span>
                 </button>
               )}
             </div>
           ) : (
-            <Button
-              variant="ghost"
-              size="sm"
-              isIconOnly
-              onPress={onClose}
-              className="text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 shrink-0"
+            <button
+              type="button"
+              onClick={onClose}
+              className="h-7 w-7 flex items-center justify-center rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel)] hover:bg-[var(--nezha-accent)] hover:text-[#141414] text-[var(--nezha-ink)] shrink-0 transition-colors cursor-pointer"
               aria-label="关闭"
             >
               <X className="h-4 w-4" />
-            </Button>
+            </button>
           )}
         </div>
 
         {/* Tab Navigation */}
         <div
-          className={cn(
-            "px-2.5 sm:px-6 border-b shrink-0 overflow-x-auto no-scrollbar",
-            isLight
-              ? "bg-white border-slate-200/80"
-              : isBlueprintDark
-              ? "bg-[#070e1f] border-[#1d2d52]"
-              : "bg-zinc-900/60 border-zinc-800"
-          )}
+          className="px-2.5 sm:px-6 border-b shrink-0 overflow-x-auto no-scrollbar bg-[var(--nezha-panel)] border-[var(--nezha-line)]"
         >
           <Tabs
             selectedKey={activeTab}
@@ -812,12 +766,8 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                   key={key}
                   id={key}
                   className={cn(
-                    "h-10 sm:h-11 w-auto shrink-0 gap-1.5 sm:gap-2 whitespace-nowrap text-xs font-sans px-2 sm:px-3 font-medium transition-colors",
-                    isLight
-                      ? "text-slate-600 data-[selected=true]:text-indigo-600 hover:text-slate-900"
-                      : isBlueprintDark
-                      ? "text-slate-400 data-[selected=true]:text-cyan-300 hover:text-slate-200"
-                      : "text-zinc-400 data-[selected=true]:text-zinc-100 hover:text-zinc-200"
+                    "h-10 sm:h-11 w-auto shrink-0 gap-1.5 sm:gap-2 whitespace-nowrap text-xs font-mono px-3 sm:px-4 font-semibold transition-colors rounded-none border-b-2 border-transparent",
+                    "text-[var(--nezha-ink-2)] hover:text-[var(--nezha-ink)] data-[selected=true]:text-[var(--nezha-ink)] data-[selected=true]:border-[var(--nezha-accent)] data-[selected=true]:bg-[var(--nezha-panel-sub)]/60"
                   )}
                 >
                   <Icon className="h-3.5 w-3.5 shrink-0" />
@@ -826,12 +776,10 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                   {badge != null && (
                     <span
                       className={cn(
-                        "rounded-full px-1.5 py-0.5",
+                        "rounded-none px-1.5 py-0.2 font-mono",
                         badgeTone === "new"
-                          ? "text-9 font-bold bg-indigo-50 text-indigo-600 border border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-400 dark:border-indigo-800"
-                          : isDark
-                          ? "text-10 font-mono bg-zinc-800 text-zinc-400 border border-zinc-700/60"
-                          : "text-10 font-mono bg-slate-100 text-slate-600 border border-slate-200/60"
+                          ? "text-9 font-bold bg-[var(--nezha-accent)] text-[#141414]"
+                          : "text-10 bg-[var(--nezha-panel-sub)] text-[var(--nezha-ink-2)] border border-[var(--nezha-line)]"
                       )}
                     >
                       {badge}
@@ -848,36 +796,36 @@ export const AdminModal: React.FC<AdminModalProps> = ({
             resets the scroll position instead of keeping the previous offset. */}
         <div key={activeTab} className="flex-1 overflow-y-auto p-3.5 sm:p-6 space-y-4 sm:space-y-6 animate-fade-in">
           {/* TAB 1: HOSTS — roster only; add and edit live in dialogs. */}
+          {/* TAB 1: HOSTS — roster only; add and edit live in dialogs. */}
           {activeTab === "hosts" && (
             <div className="space-y-5">
               <div className="flex flex-wrap items-end justify-between gap-3">
                 <div>
-                  <h3 className={cn("text-base font-bold", isBlueprint ? "text-slate-900" : "text-zinc-100")}>
-                    主机管理 (Hosts)
+                  <h3 className="text-base font-bold font-mono tracking-tight text-[var(--nezha-ink)]">
+                    [01] 主机集群管理 HOSTS ROSTER
                   </h3>
-                  <p className={cn("text-xs mt-0.5", isBlueprint ? "text-slate-500" : "text-zinc-400")}>
-                    共 {nodes.length} 台 · 在线 {onlineHostCount} 台 · 离线 {nodes.length - onlineHostCount} 台
+                  <p className="text-xs font-mono text-[var(--nezha-ink-3)] mt-0.5">
+                    FLEET TELEMETRY · 共 {nodes.length} 台 · 在线 {onlineHostCount} 台 · 离线 {nodes.length - onlineHostCount} 台
                   </p>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
-                  <Input
+                  <input
                     type="search"
                     value={hostQuery}
                     onChange={(e) => setHostQuery(e.target.value)}
                     placeholder="搜索名称 / ID / 地区 / IP"
                     aria-label="搜索主机"
-                    className="w-full sm:w-64 text-xs"
+                    className="h-8 px-2.5 text-xs font-mono rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] text-[var(--nezha-ink)] focus:border-[var(--nezha-accent)] focus:outline-none w-full sm:w-64"
                   />
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    onPress={() => setIsDeployDialogOpen(true)}
-                    className="font-medium gap-1.5"
+                  <button
+                    type="button"
+                    onClick={() => setIsDeployDialogOpen(true)}
+                    className="h-8 px-3.5 text-xs font-mono font-bold rounded-none bg-[var(--nezha-accent)] text-[#141414] hover:bg-[#E54D16] border border-[#141414]/20 flex items-center gap-1.5 cursor-pointer shrink-0 transition-colors"
                   >
                     <Plus className="h-4 w-4" />
                     <span>添加主机</span>
-                  </Button>
+                  </button>
                 </div>
               </div>
 
@@ -889,7 +837,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
               />
 
               {nodes.length > 0 && filteredHosts.length === 0 && (
-                <p className={cn("text-center text-xs py-2", isBlueprint ? "text-slate-400" : "text-zinc-500")}>
+                <p className="text-center text-xs py-3 font-mono text-[var(--nezha-ink-3)] border border-[var(--nezha-line-soft)] bg-[var(--nezha-panel)]">
                   没有匹配「{hostQuery}」的主机
                 </p>
               )}
@@ -902,42 +850,39 @@ export const AdminModal: React.FC<AdminModalProps> = ({
               {/* Header with Add Button */}
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className={`text-base font-bold font-sans ${isBlueprint ? "text-slate-900" : "text-zinc-100"}`}>
-                    网络质量监测目标 (Network Probes)
+                  <h3 className="text-base font-bold font-mono text-[var(--nezha-ink)]">
+                    [02] 网络质量监测目标 NETWORK PROBES
                   </h3>
-                  <p className={`text-xs font-sans mt-0.5 ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}>
+                  <p className="text-xs font-mono text-[var(--nezha-ink-3)] mt-0.5">
                     各探针节点定时检测目标延迟与丢包率，多节点实时汇总
                   </p>
                 </div>
 
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onPress={openAddTargetModal}
-                  className="font-sans font-medium gap-1.5 shadow-xs"
+                <button
+                  type="button"
+                  onClick={openAddTargetModal}
+                  className="h-8 px-3.5 text-xs font-mono font-bold rounded-none bg-[var(--nezha-accent)] text-[#141414] hover:bg-[#E54D16] border border-[#141414]/20 flex items-center gap-1.5 cursor-pointer shrink-0 transition-colors"
                 >
                   <Plus className="h-4 w-4" />
                   <span>添加监测</span>
-                </Button>
+                </button>
               </div>
 
               {/* Instant ping tester quick bar */}
               <div
-                className={`p-3 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
-                  isBlueprint ? "bg-white border-slate-200/90 shadow-xs" : "bg-zinc-900/60 border-zinc-800"
-                }`}
+                className="p-3 rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] flex flex-col sm:flex-row sm:items-center justify-between gap-3 font-mono"
               >
-                <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-xs font-sans w-full sm:w-auto">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-xs w-full sm:w-auto">
                   <div className="flex items-center gap-2">
-                    <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-500/10 text-amber-500 shrink-0">
+                    <div className="flex h-7 w-7 items-center justify-center rounded-none bg-[var(--nezha-accent-soft)] text-[var(--nezha-accent)] shrink-0 font-bold">
                       <Zap className="h-4 w-4" />
                     </div>
-                    <span className={`font-semibold ${isBlueprint ? "text-slate-800" : "text-zinc-200"}`}>
-                      即时测速:
+                    <span className="font-bold text-[var(--nezha-ink)]">
+                      [即时测速] :
                     </span>
                   </div>
                   <div className="flex items-center gap-2 w-full sm:w-auto">
-                    <Input
+                    <input
                       type="text"
                       placeholder="输入 IP 或域名，如 1.1.1.1"
                       value={instantTargetInput}
@@ -947,21 +892,20 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                           handleTestTarget(instantTargetInput.trim());
                         }
                       }}
-                      className="font-mono text-xs flex-1 sm:w-64"
+                      className="h-8 px-2.5 font-mono text-xs flex-1 sm:w-64 rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel)] text-[var(--nezha-ink)] focus:border-[var(--nezha-accent)] focus:outline-none"
                     />
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      onPress={() => handleTestTarget(instantTargetInput.trim())}
-                      isDisabled={isTesting || !instantTargetInput.trim()}
-                      className="font-sans font-medium shrink-0"
+                    <button
+                      type="button"
+                      onClick={() => handleTestTarget(instantTargetInput.trim())}
+                      disabled={isTesting || !instantTargetInput.trim()}
+                      className="h-8 px-3 font-mono font-bold text-xs shrink-0 rounded-none bg-[var(--nezha-accent)] text-[#141414] hover:bg-[#E54D16] border border-[#141414]/20 shadow-none cursor-pointer disabled:opacity-50 flex items-center gap-1.5 transition-colors"
                     >
                       {isTesting ? "测试中..." : "测试连接"}
-                    </Button>
+                    </button>
                   </div>
                 </div>
-                <div className="flex items-center gap-1.5 text-xs font-sans text-slate-500 dark:text-zinc-400">
-                  <Info className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                <div className="flex items-center gap-1.5 text-xs text-[var(--nezha-ink-3)] font-mono">
+                  <Info className="h-3.5 w-3.5 text-[var(--nezha-accent)] shrink-0" />
                   <span>由探针集群对目标执行临时 ICMP/TCP Ping 检测</span>
                 </div>
               </div>
@@ -969,9 +913,12 @@ export const AdminModal: React.FC<AdminModalProps> = ({
               {/* Instant test result badge */}
               {testResult && (
                 <div
-                  className={`alert py-2.5 px-3.5 text-xs font-sans flex items-center justify-between gap-3 ${
-                    testResult.success ? "alert-success" : "alert-error"
-                  }`}
+                  className={cn(
+                    "rounded-none border px-3.5 py-2.5 text-xs font-mono flex items-center justify-between gap-3",
+                    testResult.success
+                      ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold"
+                      : "border-rose-500/40 bg-rose-500/10 text-rose-600 dark:text-rose-400 font-bold"
+                  )}
                 >
                   <div className="flex items-center gap-2">
                     {testResult.success ? <Check className="h-4 w-4 shrink-0" /> : <AlertCircle className="h-4 w-4 shrink-0" />}
@@ -981,92 +928,75 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                         : `连接失败: ${testResult.error || "网络超时"}`}
                     </span>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
+                  <button
                     type="button"
-                    onPress={() => setTestResult(null)}
+                    onClick={() => setTestResult(null)}
+                    className="p-1 rounded-none border border-current text-xs font-mono"
                   >
                     关闭
-                  </Button>
+                  </button>
                 </div>
               )}
 
               {/* Ping Targets Table */}
               <div
-                className={`rounded-xl border overflow-hidden ${
-                  isBlueprint ? "bg-white border-slate-200/90 shadow-xs" : "bg-zinc-900/60 border-zinc-800"
-                }`}
+                className="rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel)] overflow-hidden font-mono"
               >
                 {/* Desktop Table View */}
                 <div className="hidden md:block overflow-x-auto">
-                  <table className="w-full text-left text-xs font-sans">
+                  <table className="w-full text-left text-xs font-mono">
                     <thead
-                      className={`border-b text-xs font-semibold ${
-                        isBlueprint ? "bg-slate-50/90 text-slate-600 border-slate-200/80" : "bg-zinc-950/80 text-zinc-400 border-zinc-800"
-                      }`}
+                      className="border-b border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)]/80 text-[var(--nezha-ink-3)] text-11 font-bold uppercase tracking-wider"
                     >
                       <tr>
-                        <th className="py-3 px-4">监测目标</th>
-                        <th className="py-3 px-4">目标地址</th>
-                        <th className="py-3 px-4">协议</th>
-                        <th className="py-3 px-4">检测间隔</th>
-                        <th className="py-3 px-4">监测范围</th>
-                        <th className="py-3 px-4">状态</th>
-                        <th className="py-3 px-4 text-right pr-6">操作</th>
+                        <th className="py-3 px-4">[监测目标]</th>
+                        <th className="py-3 px-4">[目标地址]</th>
+                        <th className="py-3 px-4">[协议]</th>
+                        <th className="py-3 px-4">[检测间隔]</th>
+                        <th className="py-3 px-4">[监测范围]</th>
+                        <th className="py-3 px-4">[状态]</th>
+                        <th className="py-3 px-4 text-right pr-6">[操作]</th>
                       </tr>
                     </thead>
-                    <tbody className={`divide-y ${isBlueprint ? "divide-slate-100" : "divide-zinc-800/60"}`}>
+                    <tbody className="divide-y divide-[var(--nezha-line-soft)] text-[var(--nezha-ink)]">
                       {pingTargets.map((t) => (
                         <tr
                           key={t.id || t.label}
-                          className={`transition-colors ${
-                            isBlueprint ? "hover:bg-slate-50/70" : "hover:bg-zinc-800/30"
-                          }`}
+                          className="transition-colors hover:bg-[var(--nezha-panel-sub)]/50"
                         >
                           <td className="py-3 px-4 whitespace-nowrap">
                             <div className="flex items-center gap-2.5">
                               <span
-                                className="h-2.5 w-2.5 rounded-full shrink-0 ring-2 ring-white dark:ring-zinc-900"
-                                style={{ backgroundColor: t.color || "#6366f1" }}
+                                className="h-2.5 w-2.5 rounded-none shrink-0"
+                                style={{ backgroundColor: t.color || "#ff5a1f" }}
                               />
-                              <span className={`font-semibold ${isBlueprint ? "text-slate-800" : "text-zinc-200"}`}>
+                              <span className="font-bold text-[var(--nezha-ink)]">
                                 {t.label}
                               </span>
                             </div>
                           </td>
                           <td className="py-3 px-4 whitespace-nowrap">
-                            <span className={`px-2 py-0.5 rounded text-xs font-mono font-medium border ${
-                              isBlueprint ? "bg-slate-50 text-slate-700 border-slate-200/80" : "bg-zinc-950 text-zinc-300 border-zinc-800"
-                            }`}>
+                            <span className="px-2 py-0.5 rounded-none text-xs font-mono font-medium border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] text-[var(--nezha-ink)]">
                               {t.target}
                             </span>
                           </td>
                           <td className="py-3 px-4 whitespace-nowrap uppercase">
                             <span
-                              className={`px-2 py-0.5 rounded text-11 font-mono font-semibold border ${
-                                t.protocol === "http"
-                                  ? isBlueprint ? "bg-purple-50 text-purple-700 border-purple-200" : "bg-purple-950/40 text-purple-400 border-purple-800/60"
-                                  : t.protocol === "tcp"
-                                  ? isBlueprint ? "bg-sky-50 text-sky-700 border-sky-200" : "bg-sky-950/40 text-sky-400 border-sky-800/60"
-                                  : isBlueprint ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-emerald-950/40 text-emerald-400 border-emerald-800/60"
-                              }`}
+                              className="px-2 py-0.5 rounded-none text-10 font-mono font-bold border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] text-[var(--nezha-ink)]"
                             >
                               {t.protocol || "tcp"}
                             </span>
                           </td>
                           <td className="py-3 px-4 whitespace-nowrap">
-                            <span className={`font-sans text-xs ${isBlueprint ? "text-slate-600" : "text-zinc-400"}`}>
-                              <strong className={`font-mono ${isBlueprint ? "text-slate-800" : "text-zinc-200"}`}>{t.interval || 60}</strong> 秒
+                            <span className="font-mono text-xs text-[var(--nezha-ink)]">
+                              <strong>{t.interval || 60}</strong> 秒
                             </span>
                           </td>
                           <td className="py-3 px-4 whitespace-nowrap">
                             {t.servers && t.servers.length > 0 ? (
-                              <span className={isBlueprint ? "text-slate-600" : "text-zinc-400"}>{t.servers.length} 台服务器</span>
+                              <span className="text-[var(--nezha-ink)]">{t.servers.length} 台服务器</span>
                             ) : (
-                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-11 font-medium border ${
-                                isBlueprint ? "bg-slate-100 text-slate-600 border-slate-200/80" : "bg-zinc-800/80 text-zinc-400 border-zinc-700/60"
-                              }`}>
+                              <span className="inline-flex items-center px-1.5 py-0.2 rounded-none text-10 font-mono bg-[var(--nezha-panel-sub)] text-[var(--nezha-ink-2)] border border-[var(--nezha-line)]">
                                 {t.auto_start === false ? "已接入服务器" : "全部服务器"}
                               </span>
                             )}
@@ -1081,45 +1011,42 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                                 <Switch.Control>
                                   <Switch.Thumb />
                                 </Switch.Control>
-                                <span className={`text-xs font-medium ${
-                                  t.enabled !== false
-                                    ? isBlueprint ? "text-emerald-700" : "text-emerald-400"
-                                    : isBlueprint ? "text-slate-400" : "text-zinc-500"
-                                }`}>
-                                  {t.enabled !== false ? "已启用" : "已停用"}
+                                <span className={cn(
+                                  "text-xs font-bold font-mono",
+                                  t.enabled !== false ? "text-emerald-600 dark:text-emerald-400" : "text-[var(--nezha-ink-3)]"
+                                )}>
+                                  {t.enabled !== false ? "● 启用" : "○ 停用"}
                                 </span>
                               </Switch.Content>
                             </Switch>
                           </td>
                           <td className="py-3 px-4 whitespace-nowrap text-right pr-6">
-                            <div className="flex items-center justify-end gap-1">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onPress={() => openEditTargetModal(t)}
-                                className="text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 dark:text-zinc-400 dark:hover:text-indigo-400 dark:hover:bg-indigo-950/40 font-sans gap-1"
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => openEditTargetModal(t)}
+                                className="h-7 px-2.5 text-11 font-mono font-bold rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] hover:border-[var(--nezha-ink)] text-[var(--nezha-ink)] transition-colors cursor-pointer flex items-center gap-1.5"
                                 aria-label="编辑监测目标"
                               >
-                                <Edit2 className="h-3 w-3" />
+                                <Edit2 className="h-3 w-3 text-[var(--nezha-accent)]" />
                                 <span>编辑</span>
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onPress={() => handleDeleteTarget(t.id)}
-                                className="text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:text-rose-400 dark:hover:bg-rose-950/40 font-sans gap-1"
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteTarget(t.id)}
+                                className="h-7 px-2.5 text-11 font-mono font-bold rounded-none border border-rose-500/30 text-rose-500 hover:bg-rose-500/10 transition-colors cursor-pointer flex items-center gap-1.5"
                                 aria-label="删除监测目标"
                               >
                                 <Trash2 className="h-3 w-3" />
                                 <span>删除</span>
-                              </Button>
+                              </button>
                             </div>
                           </td>
                         </tr>
                       ))}
                       {pingTargets.length === 0 && (
                         <tr>
-                          <td colSpan={7} className="py-10 text-center text-slate-400 font-sans">
+                          <td colSpan={7} className="py-12 text-center text-[var(--nezha-ink-3)] font-mono text-xs">
                             暂无监测目标，请点击右上角「添加监测」
                           </td>
                         </tr>
@@ -1129,34 +1056,22 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                 </div>
 
                 {/* Mobile Responsive Target Cards View */}
-                <div className="block md:hidden divide-y divide-slate-100 dark:divide-zinc-800/60">
+                <div className="block md:hidden divide-y divide-[var(--nezha-line-soft)]">
                   {pingTargets.map((t) => (
                     <div
                       key={t.id || t.label}
-                      className={cn(
-                        "p-3.5 space-y-2.5 transition-colors",
-                        isBlueprint ? "bg-white hover:bg-slate-50/50" : "bg-zinc-900/40 hover:bg-zinc-900/70"
-                      )}
+                      className="p-3.5 space-y-2.5 bg-[var(--nezha-panel)] font-mono transition-colors"
                     >
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2 min-w-0">
                           <span
-                            className="h-2.5 w-2.5 rounded-full shrink-0 ring-2 ring-white dark:ring-zinc-900"
-                            style={{ backgroundColor: t.color || "#6366f1" }}
+                            className="h-2.5 w-2.5 rounded-none shrink-0"
+                            style={{ backgroundColor: t.color || "#ff5a1f" }}
                           />
-                          <span className={cn("font-bold text-xs truncate", isBlueprint ? "text-slate-800" : "text-zinc-200")}>
+                          <span className="font-bold text-xs truncate text-[var(--nezha-ink)]">
                             {t.label}
                           </span>
-                          <span
-                            className={cn(
-                              "px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold uppercase border shrink-0",
-                              t.protocol === "http"
-                                ? isBlueprint ? "bg-purple-50 text-purple-700 border-purple-200" : "bg-purple-950/40 text-purple-400 border-purple-800/60"
-                                : t.protocol === "tcp"
-                                ? isBlueprint ? "bg-sky-50 text-sky-700 border-sky-200" : "bg-sky-950/40 text-sky-400 border-sky-800/60"
-                                : isBlueprint ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-emerald-950/40 text-emerald-400 border-emerald-800/60"
-                            )}
-                          >
+                          <span className="px-1.5 py-0.2 rounded-none text-10 font-mono font-bold uppercase border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] text-[var(--nezha-ink)] shrink-0">
                             {t.protocol || "tcp"}
                           </span>
                         </div>
@@ -1174,48 +1089,44 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                       </div>
 
                       <div className="flex flex-wrap items-center justify-between gap-2 text-11">
-                        <span className={cn(
-                          "px-2 py-0.5 rounded font-mono font-medium border text-xs",
-                          isBlueprint ? "bg-slate-50 text-slate-700 border-slate-200/80" : "bg-zinc-950 text-zinc-300 border-zinc-800"
-                        )}>
+                        <span className="px-2 py-0.5 rounded-none font-mono font-medium border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] text-[var(--nezha-ink)] text-xs">
                           {t.target}
                         </span>
-                        <span className={cn(isBlueprint ? "text-slate-500" : "text-zinc-400")}>
-                          每 <strong className="font-mono">{t.interval || 60}</strong> 秒检测一次
+                        <span className="text-[var(--nezha-ink-3)]">
+                          每 <strong>{t.interval || 60}</strong> 秒检测
                         </span>
                       </div>
 
-                      <div className={cn("flex items-center justify-between pt-1 border-t text-xs", isBlueprint ? "border-slate-100" : "border-zinc-800/60")}>
-                        <span className={cn("text-11", isBlueprint ? "text-slate-500" : "text-zinc-400")}>
+                      <div className="flex items-center justify-between pt-1 border-t border-[var(--nezha-line-soft)] text-xs">
+                        <span className="text-11 text-[var(--nezha-ink-3)]">
                           {t.servers && t.servers.length > 0
                             ? `${t.servers.length} 台服务器`
                             : t.auto_start === false ? "已接入服务器" : "全部服务器"}
                         </span>
-                        <div className="flex items-center gap-1">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onPress={() => openEditTargetModal(t)}
-                            className="h-7 px-2 text-xs font-sans gap-1 text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800/60"
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => openEditTargetModal(t)}
+                            className="h-7 px-2.5 text-11 font-mono font-bold rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] hover:border-[var(--nezha-ink)] text-[var(--nezha-ink)] flex items-center gap-1.5 cursor-pointer"
                           >
-                            <Edit2 className="h-3 w-3" />
+                            <Edit2 className="h-3 w-3 text-[var(--nezha-accent)]" />
                             <span>编辑</span>
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onPress={() => handleDeleteTarget(t.id)}
-                            className="h-7 w-7 p-0 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:text-rose-400 dark:hover:bg-rose-950/40"
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteTarget(t.id)}
+                            className="h-7 px-2.5 text-11 font-mono font-bold rounded-none border border-rose-500/30 text-rose-500 hover:bg-rose-500/10 flex items-center gap-1.5 cursor-pointer"
                           >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
+                            <Trash2 className="h-3 w-3" />
+                            <span>删除</span>
+                          </button>
                         </div>
                       </div>
                     </div>
                   ))}
 
                   {pingTargets.length === 0 && (
-                    <div className="py-8 text-center text-xs text-slate-400 font-sans">
+                    <div className="py-8 text-center text-xs text-[var(--nezha-ink-3)] font-mono">
                       暂无监测目标，请点击右上角「添加监测」
                     </div>
                   )}
@@ -1239,74 +1150,76 @@ export const AdminModal: React.FC<AdminModalProps> = ({
             </div>
           )}
 
-          {/* TAB 3: BILLING & EXCHANGE RATES */}
+          {/* TAB 4: BILLING & EXCHANGE RATES */}
           {activeTab === "billing" && (
-            <div className="space-y-6">
+            <div className="space-y-6 font-mono">
+              <div>
+                <h3 className="text-base font-bold font-mono tracking-tight text-[var(--nezha-ink)]">
+                  [04] 财务计费与实时汇率 BILLING & FX
+                </h3>
+                <p className="text-xs font-mono text-[var(--nezha-ink-3)] mt-0.5">
+                  全集群主机持有成本折算 · 各币种汇率实时换算设定
+                </p>
+              </div>
+
               {/* Financial Cluster Summary */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div
-                  className={`p-5 rounded-xl border ${
-                    isBlueprint ? "bg-white border-slate-200/90 shadow-xs" : "bg-zinc-900/70 border-zinc-800"
-                  }`}
+                  className="p-5 rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)]"
                 >
-                  <div className="flex items-center justify-between text-xs font-sans font-medium text-slate-500 dark:text-zinc-400 mb-1">
-                    <span>集群月度总支出 (折合人民币)</span>
-                    <DollarSign className="h-4 w-4 text-emerald-500" />
+                  <div className="flex items-center justify-between text-xs font-mono font-bold text-[var(--nezha-ink-3)] mb-1">
+                    <span>[04.A] 集群月度总支出 (折合人民币)</span>
+                    <DollarSign className="h-4 w-4 text-[var(--nezha-accent)]" />
                   </div>
-                  <div className="text-2xl font-bold font-mono text-emerald-600 dark:text-emerald-400">
+                  <div className="text-2xl font-bold font-mono tabular-nums text-[var(--nezha-accent-ink)] dark:text-[var(--nezha-accent)]">
                     ¥{totalMonthlySpendCNY.toFixed(2)}
-                    <span className="text-xs font-normal font-sans text-slate-500 dark:text-zinc-500 ml-2">/ 月</span>
+                    <span className="text-xs font-normal text-[var(--nezha-ink-3)] ml-2">/ 月</span>
                   </div>
-                  <div className={`text-xs font-sans mt-2 ${isBlueprint ? "text-slate-400" : "text-zinc-500"}`}>
-                    根据当前各币种实时汇率折算合计支出
+                  <div className="text-xs font-mono text-[var(--nezha-ink-3)] mt-2">
+                    根据当前各币种实时汇率折算合计月付支出
                   </div>
                 </div>
 
                 <div
-                  className={`p-5 rounded-xl border ${
-                    isBlueprint ? "bg-white border-slate-200/90 shadow-xs" : "bg-zinc-900/70 border-zinc-800"
-                  }`}
+                  className="p-5 rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)]"
                 >
-                  <div className="flex items-center justify-between text-xs font-sans font-medium text-slate-500 dark:text-zinc-400 mb-1">
-                    <span>集群剩余总价值 (折合人民币)</span>
-                    <Coins className="h-4 w-4 text-indigo-500" />
+                  <div className="flex items-center justify-between text-xs font-mono font-bold text-[var(--nezha-ink-3)] mb-1">
+                    <span>[04.B] 集群剩余总价值 (折合人民币)</span>
+                    <Coins className="h-4 w-4 text-[var(--nezha-accent)]" />
                   </div>
-                  <div className="text-2xl font-bold font-mono text-indigo-600 dark:text-indigo-400">
+                  <div className="text-2xl font-bold font-mono tabular-nums text-[var(--nezha-ink)]">
                     ¥{totalRemainingValueCNY.toFixed(2)}
                   </div>
-                  <div className={`text-xs font-sans mt-2 ${isBlueprint ? "text-slate-400" : "text-zinc-500"}`}>
-                    根据各主机到期时间和剩余天数实时动态计算
+                  <div className="text-xs font-mono text-[var(--nezha-ink-3)] mt-2">
+                    根据各主机到期时间和剩余天数实时动态计算剩余价值
                   </div>
                 </div>
               </div>
 
               {/* Exchange Rates Config */}
               <div
-                className={`rounded-xl border p-5 space-y-4 ${
-                  isBlueprint ? "bg-white border-slate-200/90 shadow-xs" : "bg-zinc-900/70 border-zinc-800"
-                }`}
+                className="rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel)] p-5 space-y-4"
               >
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-3 border-slate-200/80 dark:border-zinc-800">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--nezha-line-soft)] pb-3">
                   <div>
-                    <h3 className={`text-sm font-bold font-sans ${isBlueprint ? "text-slate-900" : "text-zinc-100"}`}>
-                      外汇汇率换算表 (Exchange Rates to {systemSettings.base_currency})
+                    <h3 className="text-sm font-bold font-mono text-[var(--nezha-ink)]">
+                      外汇汇率换算表 (EXCHANGE RATES TO {systemSettings.base_currency})
                     </h3>
-                    <p className={`text-xs font-sans mt-0.5 ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}>
+                    <p className="text-xs font-mono text-[var(--nezha-ink-3)] mt-0.5">
                       用于将外币主机（USD、EUR、HKD、GBP、JPY）自动换算为本币成本
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-2 font-sans text-xs">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onPress={handleRefreshRates}
-                      isDisabled={isRefreshingRates}
-                      className="text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 font-sans gap-1"
+                  <div className="flex items-center gap-2 font-mono text-xs">
+                    <button
+                      type="button"
+                      onClick={handleRefreshRates}
+                      disabled={isRefreshingRates}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono font-bold rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] hover:border-[var(--nezha-ink)] text-[var(--nezha-ink)] transition-colors cursor-pointer disabled:opacity-50"
                     >
                       <RefreshCw className={`h-3.5 w-3.5 ${isRefreshingRates ? "animate-spin" : ""}`} />
                       <span>获取最新实时汇率</span>
-                    </Button>
+                    </button>
                   </div>
                 </div>
 
@@ -1314,11 +1227,9 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                   {Object.entries(systemSettings.exchange_rates).map(([cur, rate]) => (
                     <div
                       key={cur}
-                      className={`p-3 rounded-xl border ${
-                        isBlueprint ? "bg-slate-50/70 border-slate-200/80" : "bg-zinc-950 border-zinc-800"
-                      }`}
+                      className="p-3 rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)]"
                     >
-                      <div className={`text-11 font-bold mb-1 ${isBlueprint ? "text-slate-700" : "text-zinc-400"}`}>
+                      <div className="text-11 font-bold text-[var(--nezha-ink-3)] mb-1">
                         1 {cur} =
                       </div>
                       <div className="flex items-center gap-1">
@@ -1335,129 +1246,123 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                               },
                             })
                           }
-                          className={`w-full font-bold focus:outline-none bg-transparent ${
-                            isBlueprint ? "text-slate-900" : "text-zinc-100"
-                          }`}
+                          className="w-full font-bold font-mono tabular-nums focus:outline-none bg-transparent text-[var(--nezha-ink)]"
                         />
-                        <span className="text-slate-400 font-medium font-sans">{systemSettings.base_currency}</span>
+                        <span className="text-[var(--nezha-ink-3)] font-mono text-11">{systemSettings.base_currency}</span>
                       </div>
                     </div>
                   ))}
                 </div>
 
                 <div className="flex items-center justify-between pt-2">
-                  <span className={`text-xs font-sans ${isBlueprint ? "text-slate-400" : "text-zinc-500"}`}>
+                  <span className="text-xs font-mono text-[var(--nezha-ink-3)]">
                     上次汇率更新: {systemSettings.last_rate_update ? new Date(systemSettings.last_rate_update * 1000).toLocaleString() : "默认初始值"}
                   </span>
 
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 font-mono">
                     {rateSaveSuccess && (
-                      <span className="inline-flex items-center gap-1 text-xs font-sans font-medium text-emerald-600 dark:text-emerald-400">
-                        <Check className="h-3.5 w-3.5" /> 汇率保存成功
+                      <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                        <Check className="h-3.5 w-3.5" /> [OK] 汇率保存成功
                       </span>
                     )}
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      onPress={handleSaveRates}
-                      className="font-sans font-medium"
+                    <button
+                      type="button"
+                      onClick={handleSaveRates}
+                      className="h-8 px-4 text-xs font-mono font-bold rounded-none bg-[var(--nezha-accent)] hover:bg-[#E54D16] text-[#141414] border border-[#141414]/20 shadow-none transition-colors cursor-pointer"
                     >
                       保存汇率设定
-                    </Button>
+                    </button>
                   </div>
                 </div>
               </div>
             </div>
           )}
 
-          {/* TAB 4: TOKENS */}
+          {/* TAB 5: TOKENS */}
           {activeTab === "tokens" && (
-            <div className="space-y-6">
+            <div className="space-y-6 font-mono">
+              <div>
+                <h3 className="text-base font-bold font-mono tracking-tight text-[var(--nezha-ink)]">
+                  [05] 通信鉴权密钥 AGENT TOKENS
+                </h3>
+                <p className="text-xs font-mono text-[var(--nezha-ink-3)] mt-0.5">
+                  用于探针 Agent 接入验证通信的安全凭证
+                </p>
+              </div>
+
               {/* Create token bar */}
               <div
-                className={`p-3.5 rounded-xl border flex flex-wrap items-center gap-3 ${
-                  isBlueprint ? "bg-white border-slate-200/90 shadow-xs" : "bg-zinc-900/70 border-zinc-800"
-                }`}
+                className="p-3.5 rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] flex flex-wrap items-center gap-3"
               >
                 <div className="flex-1 w-full min-w-0">
-                  <Input
+                  <input
                     type="text"
                     placeholder="输入新 Token 标签备注 (如: 美国VPS专用)..."
                     value={newTokenLabel}
                     onChange={(e) => setNewTokenLabel(e.target.value)}
-                    className="w-full font-sans text-xs"
+                    className="w-full px-3 py-2 text-xs font-mono rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel)] text-[var(--nezha-ink)] focus:outline-none focus:border-[var(--nezha-accent)]"
                   />
                 </div>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onPress={handleCreateToken}
-                  className="w-full sm:w-auto font-sans font-medium gap-1.5 shrink-0"
+                <button
+                  type="button"
+                  onClick={handleCreateToken}
+                  className="flex items-center gap-1.5 px-4 py-2 text-xs font-mono font-bold rounded-none bg-[var(--nezha-accent)] hover:bg-[#E54D16] text-[#141414] border border-[#141414]/20 shadow-none transition-colors cursor-pointer"
                 >
                   <Plus className="h-4 w-4" />
                   <span>生成新 Token</span>
-                </Button>
+                </button>
               </div>
 
               {/* Tokens list */}
               <div
-                className={`rounded-xl border overflow-hidden ${
-                  isBlueprint ? "bg-white border-slate-200/90 shadow-xs" : "bg-zinc-900/60 border-zinc-800"
-                }`}
+                className="rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel)] overflow-hidden font-mono"
               >
                 {/* Desktop Table View */}
                 <div className="hidden sm:block overflow-x-auto">
-                  <table className="w-full text-left text-xs font-sans">
+                  <table className="w-full text-left text-xs font-mono">
                     <thead
-                      className={`border-b text-xs font-semibold ${
-                        isBlueprint ? "bg-slate-50/50 text-slate-600 border-slate-200/80" : "bg-zinc-950 text-zinc-400 border-zinc-800"
-                      }`}
+                      className="border-b border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)]/80 text-[var(--nezha-ink-3)] text-11 font-bold uppercase tracking-wider"
                     >
                       <tr>
-                        <th className="py-3 px-4">Token 令牌</th>
-                        <th className="py-3 px-4">备注标签</th>
-                        <th className="py-3 px-4">创建时间</th>
-                        <th className="py-3 px-4 text-right pr-6">操作</th>
+                        <th className="py-3 px-4">[Token 令牌]</th>
+                        <th className="py-3 px-4">[备注标签]</th>
+                        <th className="py-3 px-4">[创建时间]</th>
+                        <th className="py-3 px-4 text-right pr-6">[操作]</th>
                       </tr>
                     </thead>
-                    <tbody className={`divide-y ${isBlueprint ? "divide-slate-100" : "divide-zinc-800/60"}`}>
+                    <tbody className="divide-y divide-[var(--nezha-line-soft)] text-[var(--nezha-ink)]">
                       {tokens.map((t) => (
                         <tr
                           key={t.token}
-                          className={`transition-colors ${
-                            isBlueprint ? "hover:bg-slate-50/70" : "hover:bg-zinc-800/30"
-                          }`}
+                          className="transition-colors hover:bg-[var(--nezha-panel-sub)]/50"
                         >
                           <td className="py-3 px-4 whitespace-nowrap">
-                            <span className={`px-2 py-0.5 rounded font-mono text-xs font-medium border ${
-                              isBlueprint ? "bg-slate-50 text-slate-800 border-slate-200" : "bg-zinc-950 text-emerald-400 border-zinc-800"
-                            }`}>
+                            <span className="px-2 py-0.5 rounded-none font-mono text-xs font-bold border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] text-[var(--nezha-ink)]">
                               {t.token}
                             </span>
                           </td>
-                          <td className="py-3 px-4 whitespace-nowrap font-medium text-slate-800 dark:text-zinc-200">
+                          <td className="py-3 px-4 whitespace-nowrap font-bold text-[var(--nezha-ink)]">
                             {t.label}
                           </td>
-                          <td className="py-3 px-4 whitespace-nowrap text-xs text-slate-400 dark:text-zinc-500 font-mono">
+                          <td className="py-3 px-4 whitespace-nowrap text-xs text-[var(--nezha-ink-3)] font-mono">
                             {t.created_at ? new Date(t.created_at * 1000).toLocaleString() : "--"}
                           </td>
                           <td className="py-3 px-4 whitespace-nowrap text-right pr-6">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onPress={() => copyToClipboard(t.token, t.token)}
-                              className="text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 dark:text-zinc-400 dark:hover:text-indigo-400 dark:hover:bg-indigo-950/40 font-sans gap-1"
+                            <button
+                              type="button"
+                              onClick={() => copyToClipboard(t.token, t.token)}
+                              className="flex items-center gap-1 px-2.5 py-1 text-xs font-mono font-bold rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] hover:border-[var(--nezha-ink)] text-[var(--nezha-ink)] transition-colors cursor-pointer ml-auto"
                             >
-                              {copiedCmd === t.token ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+                              {copiedCmd === t.token ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3 text-[var(--nezha-accent)]" />}
                               <span>{copiedCmd === t.token ? "已复制" : "复制"}</span>
-                            </Button>
+                            </button>
                           </td>
                         </tr>
                       ))}
 
                       {tokens.length === 0 && (
                         <tr>
-                          <td colSpan={4} className="py-10 text-center text-slate-400 font-sans">
+                          <td colSpan={4} className="py-12 text-center text-[var(--nezha-ink-3)] font-mono text-xs">
                             暂无通信 Token，请在上方输入备注标签并生成
                           </td>
                         </tr>
@@ -1467,43 +1372,36 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                 </div>
 
                 {/* Mobile Responsive Tokens Cards View */}
-                <div className="block sm:hidden divide-y divide-slate-100 dark:divide-zinc-800/60">
+                <div className="block sm:hidden divide-y divide-[var(--nezha-line-soft)]">
                   {tokens.map((t) => (
                     <div
                       key={t.token}
-                      className={cn(
-                        "p-3.5 space-y-2 transition-colors",
-                        isBlueprint ? "bg-white hover:bg-slate-50/50" : "bg-zinc-900/40 hover:bg-zinc-900/70"
-                      )}
+                      className="p-3.5 space-y-2 bg-[var(--nezha-panel)] font-mono transition-colors"
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <span className={cn("font-bold text-xs truncate", isBlueprint ? "text-slate-900" : "text-zinc-100")}>
+                        <span className="font-bold text-xs truncate text-[var(--nezha-ink)]">
                           {t.label || "默认令牌"}
                         </span>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onPress={() => copyToClipboard(t.token, t.token)}
-                          className="h-7 px-2 text-xs font-sans gap-1 text-indigo-600 dark:text-indigo-400"
+                        <button
+                          type="button"
+                          onClick={() => copyToClipboard(t.token, t.token)}
+                          className="h-7 px-2 text-xs font-mono font-bold rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] hover:border-[var(--nezha-ink)] text-[var(--nezha-ink)] flex items-center gap-1 cursor-pointer"
                         >
-                          {copiedCmd === t.token ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+                          {copiedCmd === t.token ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3 text-[var(--nezha-accent)]" />}
                           <span>{copiedCmd === t.token ? "已复制" : "复制"}</span>
-                        </Button>
+                        </button>
                       </div>
-                      <div className={cn(
-                        "p-2 rounded font-mono text-11 break-all border",
-                        isBlueprint ? "bg-slate-50 text-slate-800 border-slate-200" : "bg-zinc-950 text-emerald-400 border-zinc-800"
-                      )}>
+                      <div className="p-2 rounded-none font-mono text-11 break-all border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] text-[var(--nezha-ink)]">
                         {t.token}
                       </div>
-                      <div className={cn("text-10 font-mono", isBlueprint ? "text-slate-400" : "text-zinc-500")}>
+                      <div className="text-10 font-mono text-[var(--nezha-ink-3)]">
                         创建时间: {t.created_at ? new Date(t.created_at * 1000).toLocaleString() : "--"}
                       </div>
                     </div>
                   ))}
 
                   {tokens.length === 0 && (
-                    <div className="py-8 text-center text-xs text-slate-400 font-sans">
+                    <div className="py-8 text-center text-xs text-[var(--nezha-ink-3)] font-mono">
                       暂无通信 Token，请在上方输入备注标签并生成
                     </div>
                   )}
@@ -1512,78 +1410,71 @@ export const AdminModal: React.FC<AdminModalProps> = ({
             </div>
           )}
 
-          {/* TAB 5: NOTIFICATIONS & ALERTS */}
+          {/* TAB 6: NOTIFICATIONS & ALERTS */}
           {activeTab === "notifications" && (
-            <div className="space-y-6">
+            <div className="space-y-6 font-mono">
               {/* Header Action Card */}
-              <div
-                className={`rounded-xl border p-5 shadow-xs transition-all ${
-                  isBlueprint ? "bg-white border-slate-200/90" : "bg-zinc-900/80 border-zinc-800"
-                }`}
-              >
+              <div className="rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel)] p-5">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div className="flex items-start gap-3">
-                    <div className="p-2.5 rounded-xl shrink-0 bg-indigo-50 border border-indigo-200/70 text-indigo-600 dark:bg-indigo-950/40 dark:border-indigo-800/60 dark:text-indigo-400">
+                    <div className="p-2.5 rounded-none shrink-0 bg-[var(--nezha-panel-sub)] border border-[var(--nezha-line)] text-[var(--nezha-accent)]">
                       <Bell className="h-5 w-5" />
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
-                        <h3 className={`text-base font-bold font-sans tracking-tight ${isBlueprint ? "text-slate-900" : "text-zinc-100"}`}>
-                          自定义告警与通知设置
+                        <h3 className="text-base font-bold font-mono tracking-tight text-[var(--nezha-ink)]">
+                          [06] 自定义告警与通知设置 ALERTS & CHANNELS
                         </h3>
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-10 font-semibold bg-indigo-50 text-indigo-600 border border-indigo-200/70 dark:bg-indigo-950/40 dark:text-indigo-400 dark:border-indigo-800/60">
-                          多通道支持
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-none text-10 font-mono font-bold bg-[var(--nezha-panel-sub)] text-[var(--nezha-ink)] border border-[var(--nezha-line)]">
+                          多通道冗余
                         </span>
                       </div>
-                      <p className={`text-xs font-sans mt-1 ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}>
+                      <p className="text-xs font-mono text-[var(--nezha-ink-3)] mt-1">
                         配置 Telegram 机器人、企业级 Webhook（飞书/钉钉/企微/Bark）及 Discord 频道，实时接收节点离线、上线恢复、流量预警与定时全网日报。
                       </p>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2.5 shrink-0 self-end md:self-auto font-sans text-xs">
-                    <Button
-                      variant="ghost"
-                      size="sm"
+                  <div className="flex items-center gap-2.5 shrink-0 self-end md:self-auto font-mono text-xs">
+                    <button
                       type="button"
-                      isDisabled={testingChannel !== null}
-                      onPress={() => handleTestNotification("all")}
-                      className="text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-zinc-300 dark:hover:bg-zinc-800 font-sans font-medium gap-1.5"
+                      disabled={testingChannel !== null}
+                      onClick={() => handleTestNotification("all")}
+                      className="h-8 flex items-center gap-1.5 px-3 text-xs font-mono font-bold rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] hover:border-[var(--nezha-ink)] text-[var(--nezha-ink)] transition-colors cursor-pointer disabled:opacity-50"
                     >
                       {testingChannel === "all" ? (
                         <RefreshCw className="h-3.5 w-3.5 animate-spin" />
                       ) : (
-                        <Send className="h-3.5 w-3.5" />
+                        <Send className="h-3.5 w-3.5 text-[var(--nezha-accent)]" />
                       )}
                       <span>{testingChannel === "all" ? "测试中..." : "全通道测试"}</span>
-                    </Button>
+                    </button>
 
-                    <Button
-                      variant="primary"
-                      size="sm"
+                    <button
                       type="button"
-                      isDisabled={isSavingNotif}
-                      onPress={handleSaveNotificationSettings}
-                      className="font-sans font-medium gap-1.5"
+                      disabled={isSavingNotif}
+                      onClick={handleSaveNotificationSettings}
+                      className="h-8 flex items-center gap-1.5 px-4 text-xs font-mono font-bold rounded-none bg-[var(--nezha-accent)] text-[#141414] hover:bg-[#E54D16] border border-[#141414]/20 transition-colors cursor-pointer shadow-none disabled:opacity-50"
                     >
                       {isSavingNotif ? (
                         <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                      ) : notifSaveSuccess ? (
-                        <Check className="h-3.5 w-3.5 text-white" />
                       ) : (
-                        <Check className="h-3.5 w-3.5" />
+                        <Check className="h-3.5 w-3.5 text-[#141414]" />
                       )}
                       <span>{notifSaveSuccess ? "已保存配置" : "保存通知配置"}</span>
-                    </Button>
+                    </button>
                   </div>
                 </div>
 
                 {/* Banner notice for test result */}
                 {testNotice && (
                   <div
-                    className={`mt-4 alert py-2.5 px-3.5 text-xs font-sans flex items-center justify-between ${
-                      testNotice.success ? "alert-success" : "alert-error"
-                    }`}
+                    className={cn(
+                      "mt-4 rounded-none border px-3.5 py-2.5 text-xs font-mono flex items-center justify-between",
+                      testNotice.success
+                        ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold"
+                        : "border-rose-500/40 bg-rose-500/10 text-rose-600 dark:text-rose-400 font-bold"
+                    )}
                   >
                     <div className="flex items-center gap-2">
                       {testNotice.success ? (
@@ -1593,50 +1484,39 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                       )}
                       <span>{testNotice.msg}</span>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
+                    <button
                       type="button"
-                      onPress={() => setTestNotice(null)}
+                      onClick={() => setTestNotice(null)}
+                      className="p-1 rounded-none border border-current text-xs font-mono cursor-pointer"
                     >
                       <X className="h-3.5 w-3.5" />
-                    </Button>
+                    </button>
                   </div>
                 )}
               </div>
 
               {/* 1. NOTIFICATION CHANNELS (3 CARDS) */}
               <div>
-                <div className="flex items-center justify-between mb-3 font-sans">
-                  <h4 className={`text-sm font-bold flex items-center gap-2 ${isBlueprint ? "text-slate-800" : "text-zinc-200"}`}>
-                    <span>1. 告警推送通道配置 (Channels)</span>
+                <div className="flex items-center justify-between mb-3 font-mono">
+                  <h4 className="text-sm font-bold flex items-center gap-2 text-[var(--nezha-ink)]">
+                    <span>[06.A] 告警推送通道配置 (CHANNELS)</span>
                   </h4>
-                  <span className={`text-xs ${isBlueprint ? "text-slate-400" : "text-zinc-500"}`}>
+                  <span className="text-xs text-[var(--nezha-ink-3)] font-mono">
                     可同时启用多个通道进行冗余推送
                   </span>
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                   {/* Telegram Bot */}
-                  <div
-                    className={`rounded-xl border p-4 flex flex-col justify-between transition-all ${
-                      notificationSettings.telegram.enabled
-                        ? isBlueprint
-                          ? "bg-blue-50/30 border-blue-200/80 shadow-xs"
-                          : "bg-blue-950/20 border-blue-900/60 shadow-xs"
-                        : isBlueprint
-                        ? "bg-white border-slate-200/90 shadow-xs"
-                        : "bg-zinc-900/60 border-zinc-800"
-                    }`}
-                  >
+                  <div className="rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel)] p-4 flex flex-col justify-between">
                     <div>
-                      <div className="flex items-center justify-between pb-3 border-b mb-3.5 border-slate-100 dark:border-zinc-800">
+                      <div className="flex items-center justify-between pb-3 border-b border-[var(--nezha-line-soft)] mb-3.5">
                         <div className="flex items-center gap-2">
-                          <div className="w-6 h-6 rounded-lg bg-[#229ED9]/15 flex items-center justify-center text-[#229ED9]">
+                          <div className="w-6 h-6 rounded-none bg-[var(--nezha-panel-sub)] border border-[var(--nezha-line)] flex items-center justify-center text-[var(--nezha-accent)]">
                             <Send className="h-3.5 w-3.5" />
                           </div>
                           <div>
-                            <span className="font-semibold font-sans text-xs">Telegram 机器人</span>
+                            <span className="font-bold font-mono text-xs text-[var(--nezha-ink)]">Telegram 机器人</span>
                           </div>
                         </div>
                         <Switch
@@ -1658,12 +1538,12 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                         </Switch>
                       </div>
 
-                      <div className="space-y-3 text-xs font-sans">
+                      <div className="space-y-3 text-xs font-mono">
                         <div>
-                          <label className={`block text-11 font-medium mb-1 ${isBlueprint ? "text-slate-600" : "text-zinc-400"}`}>
+                          <label className="block text-11 font-bold text-[var(--nezha-ink-3)] mb-1">
                             Bot Token
                           </label>
-                          <Input
+                          <input
                             type="text"
                             value={notificationSettings.telegram.bot_token}
                             onChange={(e) =>
@@ -1673,15 +1553,15 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                               })
                             }
                             placeholder="如: 123456789:ABCdef-ghI..."
-                            className="w-full font-mono text-xs"
+                            className="w-full font-mono text-xs rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] text-[var(--nezha-ink)] px-2.5 py-1.5 focus:border-[var(--nezha-ink)] focus:outline-none"
                           />
                         </div>
 
                         <div>
-                          <label className={`block text-11 font-medium mb-1 ${isBlueprint ? "text-slate-600" : "text-zinc-400"}`}>
+                          <label className="block text-11 font-bold text-[var(--nezha-ink-3)] mb-1">
                             Chat ID (用户或群组ID)
                           </label>
-                          <Input
+                          <input
                             type="text"
                             value={notificationSettings.telegram.chat_id}
                             onChange={(e) =>
@@ -1691,49 +1571,37 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                               })
                             }
                             placeholder="如: -100123456789 或 98765432"
-                            className="w-full font-mono text-xs"
+                            className="w-full font-mono text-xs rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] text-[var(--nezha-ink)] px-2.5 py-1.5 focus:border-[var(--nezha-ink)] focus:outline-none"
                           />
                         </div>
                       </div>
                     </div>
 
-                    <div className="mt-4 pt-3 border-t border-slate-100 dark:border-zinc-800 flex items-center justify-between text-xs font-sans">
-                      <span className={`text-11 ${isBlueprint ? "text-slate-400" : "text-zinc-500"}`}>
+                    <div className="mt-4 pt-3 border-t border-[var(--nezha-line-soft)] flex items-center justify-between text-xs font-mono">
+                      <span className="text-11 text-[var(--nezha-ink-3)]">
                         Markdown 格式排版
                       </span>
-                      <Button
-                        variant="ghost"
-                        size="sm"
+                      <button
                         type="button"
-                        isDisabled={testingChannel !== null}
-                        onPress={() => handleTestNotification("telegram")}
-                        className="text-sky-600 hover:bg-sky-50 dark:text-sky-400 dark:hover:bg-sky-950/40 font-sans font-medium"
+                        disabled={testingChannel !== null}
+                        onClick={() => handleTestNotification("telegram")}
+                        className="px-2.5 py-1 text-xs font-mono font-bold rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] hover:border-[var(--nezha-ink)] text-[var(--nezha-ink)] transition-colors cursor-pointer disabled:opacity-50"
                       >
                         {testingChannel === "telegram" ? "测试中..." : "测试 Telegram"}
-                      </Button>
+                      </button>
                     </div>
                   </div>
 
                   {/* Webhook (Feishu, DingTalk, WeCom, Bark, Custom) */}
-                  <div
-                    className={`rounded-xl border p-4 flex flex-col justify-between transition-all ${
-                      notificationSettings.webhook.enabled
-                        ? isBlueprint
-                          ? "bg-emerald-50/30 border-emerald-200/80 shadow-xs"
-                          : "bg-emerald-950/20 border-emerald-900/60 shadow-xs"
-                        : isBlueprint
-                        ? "bg-white border-slate-200/90 shadow-xs"
-                        : "bg-zinc-900/60 border-zinc-800"
-                    }`}
-                  >
+                  <div className="rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel)] p-4 flex flex-col justify-between">
                     <div>
-                      <div className="flex items-center justify-between pb-3 border-b mb-3.5 border-slate-100 dark:border-zinc-800">
+                      <div className="flex items-center justify-between pb-3 border-b border-[var(--nezha-line-soft)] mb-3.5">
                         <div className="flex items-center gap-2">
-                          <div className="w-6 h-6 rounded-lg bg-emerald-500/15 flex items-center justify-center text-emerald-500">
+                          <div className="w-6 h-6 rounded-none bg-[var(--nezha-panel-sub)] border border-[var(--nezha-line)] flex items-center justify-center text-[var(--nezha-accent)]">
                             <Zap className="h-3.5 w-3.5" />
                           </div>
                           <div>
-                            <span className="font-semibold font-sans text-xs">通用 / 企业 Webhook</span>
+                            <span className="font-bold font-mono text-xs text-[var(--nezha-ink)]">通用 / 企业 Webhook</span>
                           </div>
                         </div>
                         <Switch
@@ -1755,43 +1623,35 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                         </Switch>
                       </div>
 
-                      <div className="space-y-3 text-xs font-sans">
+                      <div className="space-y-3 text-xs font-mono">
                         <div>
-                          <label className={`block text-11 font-medium mb-1 ${isBlueprint ? "text-slate-600" : "text-zinc-400"}`}>
+                          <label className="block text-11 font-bold text-[var(--nezha-ink-3)] mb-1">
                             平台协议类型
                           </label>
-                          <Select
-                            selectedKey={notificationSettings.webhook.format}
-                            onSelectionChange={(key) =>
+                          <select
+                            value={notificationSettings.webhook.format}
+                            onChange={(e) =>
                               setNotificationSettings({
                                 ...notificationSettings,
-                                webhook: { ...notificationSettings.webhook, format: String(key) as any },
+                                webhook: { ...notificationSettings.webhook, format: e.target.value as any },
                               })
                             }
                             aria-label="平台协议类型"
-                            fullWidth
+                            className="w-full font-mono text-xs rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] text-[var(--nezha-ink)] px-2.5 py-1.5 focus:border-[var(--nezha-ink)] focus:outline-none"
                           >
-                            <Select.Trigger className="font-sans text-xs">
-                              <Select.Value />
-                              <Select.Indicator />
-                            </Select.Trigger>
-                            <Select.Popover>
-                              <ListBox>
-                                {WEBHOOK_FORMAT_OPTIONS.map((o) => (
-                                  <ListBox.Item key={o.key} id={o.key} textValue={o.label}>
-                                    {o.label}
-                                  </ListBox.Item>
-                                ))}
-                              </ListBox>
-                            </Select.Popover>
-                          </Select>
+                            {WEBHOOK_FORMAT_OPTIONS.map((o) => (
+                              <option key={o.key} value={o.key} className="bg-[var(--nezha-panel)] text-[var(--nezha-ink)]">
+                                {o.label}
+                              </option>
+                            ))}
+                          </select>
                         </div>
 
                         <div>
-                          <label className={`block text-11 font-medium mb-1 ${isBlueprint ? "text-slate-600" : "text-zinc-400"}`}>
+                          <label className="block text-11 font-bold text-[var(--nezha-ink-3)] mb-1">
                             Webhook URL
                           </label>
-                          <Input
+                          <input
                             type="text"
                             value={notificationSettings.webhook.url}
                             onChange={(e) =>
@@ -1801,15 +1661,15 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                               })
                             }
                             placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/..."
-                            className="w-full font-mono text-xs"
+                            className="w-full font-mono text-xs rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] text-[var(--nezha-ink)] px-2.5 py-1.5 focus:border-[var(--nezha-ink)] focus:outline-none"
                           />
                         </div>
 
                         <div>
-                          <label className={`block text-11 font-medium mb-1 ${isBlueprint ? "text-slate-600" : "text-zinc-400"}`}>
+                          <label className="block text-11 font-bold text-[var(--nezha-ink-3)] mb-1">
                             Secret 密钥 / 签名 (可选)
                           </label>
-                          <Input
+                          <input
                             type="text"
                             value={notificationSettings.webhook.secret || ""}
                             onChange={(e) =>
@@ -1819,49 +1679,37 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                               })
                             }
                             placeholder="可选签名密钥或 Token"
-                            className="w-full font-mono text-xs"
+                            className="w-full font-mono text-xs rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] text-[var(--nezha-ink)] px-2.5 py-1.5 focus:border-[var(--nezha-ink)] focus:outline-none"
                           />
                         </div>
                       </div>
                     </div>
 
-                    <div className="mt-4 pt-3 border-t border-slate-100 dark:border-zinc-800 flex items-center justify-between text-xs font-sans">
-                      <span className={`text-11 ${isBlueprint ? "text-slate-400" : "text-zinc-500"}`}>
+                    <div className="mt-4 pt-3 border-t border-[var(--nezha-line-soft)] flex items-center justify-between text-xs font-mono">
+                      <span className="text-11 text-[var(--nezha-ink-3)]">
                         原生适配 Markdown
                       </span>
-                      <Button
-                        variant="ghost"
-                        size="sm"
+                      <button
                         type="button"
-                        isDisabled={testingChannel !== null}
-                        onPress={() => handleTestNotification("webhook")}
-                        className="text-emerald-600 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/40 font-sans font-medium"
+                        disabled={testingChannel !== null}
+                        onClick={() => handleTestNotification("webhook")}
+                        className="px-2.5 py-1 text-xs font-mono font-bold rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] hover:border-[var(--nezha-ink)] text-[var(--nezha-ink)] transition-colors cursor-pointer disabled:opacity-50"
                       >
                         {testingChannel === "webhook" ? "测试中..." : "测试 Webhook"}
-                      </Button>
+                      </button>
                     </div>
                   </div>
 
                   {/* Discord Webhook */}
-                  <div
-                    className={`rounded-xl border p-4 flex flex-col justify-between transition-all ${
-                      notificationSettings.discord.enabled
-                        ? isBlueprint
-                          ? "bg-indigo-50/30 border-indigo-200/80 shadow-xs"
-                          : "bg-indigo-950/20 border-indigo-900/60 shadow-xs"
-                        : isBlueprint
-                        ? "bg-white border-slate-200/90 shadow-xs"
-                        : "bg-zinc-900/60 border-zinc-800"
-                    }`}
-                  >
+                  <div className="rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel)] p-4 flex flex-col justify-between">
                     <div>
-                      <div className="flex items-center justify-between pb-3 border-b mb-3.5 border-slate-100 dark:border-zinc-800">
+                      <div className="flex items-center justify-between pb-3 border-b border-[var(--nezha-line-soft)] mb-3.5">
                         <div className="flex items-center gap-2">
-                          <div className="w-6 h-6 rounded-lg bg-[#5865F2]/15 flex items-center justify-center text-[#5865F2]">
+                          <div className="w-6 h-6 rounded-none bg-[var(--nezha-panel-sub)] border border-[var(--nezha-line)] flex items-center justify-center text-[var(--nezha-accent)]">
                             <MessageSquare className="h-3.5 w-3.5" />
                           </div>
                           <div>
-                            <span className="font-semibold font-sans text-xs">Discord 频道</span>
+                            <span className="font-bold font-mono text-xs text-[var(--nezha-ink)]">Discord 频道</span>
                           </div>
                         </div>
                         <Switch
@@ -1883,12 +1731,12 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                         </Switch>
                       </div>
 
-                      <div className="space-y-3 text-xs font-sans">
+                      <div className="space-y-3 text-xs font-mono">
                         <div>
-                          <label className={`block text-11 font-medium mb-1 ${isBlueprint ? "text-slate-600" : "text-zinc-400"}`}>
+                          <label className="block text-11 font-bold text-[var(--nezha-ink-3)] mb-1">
                             Discord Webhook URL
                           </label>
-                          <Input
+                          <input
                             type="text"
                             value={notificationSettings.discord.webhook_url}
                             onChange={(e) =>
@@ -1898,15 +1746,15 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                               })
                             }
                             placeholder="https://discord.com/api/webhooks/..."
-                            className="w-full font-mono text-xs"
+                            className="w-full font-mono text-xs rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] text-[var(--nezha-ink)] px-2.5 py-1.5 focus:border-[var(--nezha-ink)] focus:outline-none"
                           />
                         </div>
 
                         <div>
-                          <label className={`block text-11 font-medium mb-1 ${isBlueprint ? "text-slate-600" : "text-zinc-400"}`}>
+                          <label className="block text-11 font-bold text-[var(--nezha-ink-3)] mb-1">
                             机器人自定义名称 (可选)
                           </label>
-                          <Input
+                          <input
                             type="text"
                             value={notificationSettings.discord.username || ""}
                             onChange={(e) =>
@@ -1916,26 +1764,24 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                               })
                             }
                             placeholder="CyberProbe Monitor"
-                            className="w-full font-sans text-xs"
+                            className="w-full font-mono text-xs rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] text-[var(--nezha-ink)] px-2.5 py-1.5 focus:border-[var(--nezha-ink)] focus:outline-none"
                           />
                         </div>
                       </div>
                     </div>
 
-                    <div className="mt-4 pt-3 border-t border-slate-100 dark:border-zinc-800 flex items-center justify-between text-xs font-sans">
-                      <span className={`text-11 ${isBlueprint ? "text-slate-400" : "text-zinc-500"}`}>
+                    <div className="mt-4 pt-3 border-t border-[var(--nezha-line-soft)] flex items-center justify-between text-xs font-mono">
+                      <span className="text-11 text-[var(--nezha-ink-3)]">
                         Discord Embed 富文本卡片
                       </span>
-                      <Button
-                        variant="ghost"
-                        size="sm"
+                      <button
                         type="button"
-                        isDisabled={testingChannel !== null}
-                        onPress={() => handleTestNotification("discord")}
-                        className="text-indigo-600 hover:bg-indigo-50 dark:text-indigo-400 dark:hover:bg-indigo-950/40 font-sans font-medium"
+                        disabled={testingChannel !== null}
+                        onClick={() => handleTestNotification("discord")}
+                        className="px-2.5 py-1 text-xs font-mono font-bold rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] hover:border-[var(--nezha-ink)] text-[var(--nezha-ink)] transition-colors cursor-pointer disabled:opacity-50"
                       >
                         {testingChannel === "discord" ? "测试中..." : "测试 Discord"}
-                      </Button>
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -1943,24 +1789,20 @@ export const AdminModal: React.FC<AdminModalProps> = ({
 
               {/* 2. ALERT RULES & SCHEDULED REPORTS */}
               <div>
-                <div className="flex items-center justify-between mb-3 font-sans">
-                  <h4 className={`text-sm font-bold flex items-center gap-2 ${isBlueprint ? "text-slate-800" : "text-zinc-200"}`}>
-                    <span>2. 智能告警规则与定时报告 (Rules & Schedules)</span>
+                <div className="flex items-center justify-between mb-3 font-mono">
+                  <h4 className="text-sm font-bold flex items-center gap-2 text-[var(--nezha-ink)]">
+                    <span>[06.B] 智能告警规则与定时报告 (RULES & SCHEDULES)</span>
                   </h4>
-                  <span className={`text-xs ${isBlueprint ? "text-slate-400" : "text-zinc-500"}`}>
+                  <span className="text-xs text-[var(--nezha-ink-3)] font-mono">
                     自动检测异常并在关键指标越限时分发通知
                   </span>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 font-sans text-xs">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 font-mono text-xs">
                   {/* Rule 1: Node Offline & Recovery */}
-                  <div
-                    className={`rounded-xl border p-4 transition-all ${
-                      isBlueprint ? "bg-white border-slate-200/90 shadow-xs" : "bg-zinc-900/60 border-zinc-800"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 font-bold mb-3">
-                      <Radio className="h-4 w-4 text-rose-500" />
+                  <div className="rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel)] p-4">
+                    <div className="flex items-center gap-2 font-bold mb-3 text-[var(--nezha-ink)]">
+                      <Radio className="h-4 w-4 text-[var(--nezha-accent)]" />
                       <span>节点失联与恢复告警</span>
                     </div>
 
@@ -1976,7 +1818,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                         size="sm"
                       >
                         <Switch.Content className="w-full justify-between">
-                          <span className={isBlueprint ? "text-slate-700 font-medium" : "text-zinc-300 font-medium"}>
+                          <span className="text-[var(--nezha-ink)] font-bold">
                             开启节点离线告警
                           </span>
                           <Switch.Control>
@@ -1986,37 +1828,29 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                       </Switch>
 
                       <div>
-                        <span className={`block text-11 mb-1 font-medium ${isBlueprint ? "text-slate-600" : "text-zinc-400"}`}>
+                        <span className="block text-11 mb-1 font-bold text-[var(--nezha-ink-3)]">
                           离线判定超时秒数
                         </span>
-                        <Select
-                          selectedKey={String(notificationSettings.rules.offline_threshold_sec)}
-                          onSelectionChange={(key) =>
+                        <select
+                          value={String(notificationSettings.rules.offline_threshold_sec)}
+                          onChange={(e) =>
                             setNotificationSettings({
                               ...notificationSettings,
                               rules: {
                                 ...notificationSettings.rules,
-                                offline_threshold_sec: parseInt(String(key)) || 60,
+                                offline_threshold_sec: parseInt(e.target.value) || 60,
                               },
                             })
                           }
                           aria-label="离线判定超时秒数"
-                          fullWidth
+                          className="w-full font-mono text-xs rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] text-[var(--nezha-ink)] px-2.5 py-1.5 focus:border-[var(--nezha-ink)] focus:outline-none"
                         >
-                          <Select.Trigger className="font-sans text-xs">
-                            <Select.Value />
-                            <Select.Indicator />
-                          </Select.Trigger>
-                          <Select.Popover>
-                            <ListBox>
-                              {OFFLINE_THRESHOLD_OPTIONS.map((o) => (
-                                <ListBox.Item key={o.key} id={o.key} textValue={o.label}>
-                                  {o.label}
-                                </ListBox.Item>
-                              ))}
-                            </ListBox>
-                          </Select.Popover>
-                        </Select>
+                          {OFFLINE_THRESHOLD_OPTIONS.map((o) => (
+                            <option key={o.key} value={o.key} className="bg-[var(--nezha-panel)] text-[var(--nezha-ink)]">
+                              {o.label}
+                            </option>
+                          ))}
+                        </select>
                       </div>
 
                       <Switch
@@ -2028,10 +1862,10 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                           })
                         }
                         size="sm"
-                        className="pt-2 border-t border-slate-100 dark:border-zinc-800"
+                        className="pt-2 border-t border-[var(--nezha-line-soft)]"
                       >
                         <Switch.Content className="w-full justify-between">
-                          <span className={isBlueprint ? "text-slate-700 font-medium" : "text-zinc-300 font-medium"}>
+                          <span className="text-[var(--nezha-ink)] font-bold">
                             恢复上线通知 (含离线时长)
                           </span>
                           <Switch.Control>
@@ -2043,13 +1877,9 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                   </div>
 
                   {/* Rule 2: Bandwidth Quota Warning */}
-                  <div
-                    className={`rounded-xl border p-4 transition-all ${
-                      isBlueprint ? "bg-white border-slate-200/90 shadow-xs" : "bg-zinc-900/60 border-zinc-800"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 font-bold mb-3">
-                      <AlertTriangle className="h-4 w-4 text-amber-500" />
+                  <div className="rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel)] p-4">
+                    <div className="flex items-center gap-2 font-bold mb-3 text-[var(--nezha-ink)]">
+                      <AlertTriangle className="h-4 w-4 text-[var(--nezha-accent)]" />
                       <span>流量配额消耗预警</span>
                     </div>
 
@@ -2065,7 +1895,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                         size="sm"
                       >
                         <Switch.Content className="w-full justify-between">
-                          <span className={isBlueprint ? "text-slate-700 font-medium" : "text-zinc-300 font-medium"}>
+                          <span className="text-[var(--nezha-ink)] font-bold">
                             开启超额预警通知
                           </span>
                           <Switch.Control>
@@ -2075,53 +1905,41 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                       </Switch>
 
                       <div>
-                        <span className={`block text-11 mb-1 font-medium ${isBlueprint ? "text-slate-600" : "text-zinc-400"}`}>
+                        <span className="block text-11 mb-1 font-bold text-[var(--nezha-ink-3)]">
                           预警触发比例阈值
                         </span>
-                        <Select
-                          selectedKey={String(notificationSettings.rules.traffic_threshold_pct)}
-                          onSelectionChange={(key) =>
+                        <select
+                          value={String(notificationSettings.rules.traffic_threshold_pct)}
+                          onChange={(e) =>
                             setNotificationSettings({
                               ...notificationSettings,
                               rules: {
                                 ...notificationSettings.rules,
-                                traffic_threshold_pct: parseInt(String(key)) || 85,
+                                traffic_threshold_pct: parseInt(e.target.value) || 85,
                               },
                             })
                           }
                           aria-label="预警触发比例阈值"
-                          fullWidth
+                          className="w-full font-mono text-xs rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] text-[var(--nezha-ink)] px-2.5 py-1.5 focus:border-[var(--nezha-ink)] focus:outline-none"
                         >
-                          <Select.Trigger className="font-sans text-xs">
-                            <Select.Value />
-                            <Select.Indicator />
-                          </Select.Trigger>
-                          <Select.Popover>
-                            <ListBox>
-                              {TRAFFIC_THRESHOLD_OPTIONS.map((o) => (
-                                <ListBox.Item key={o.key} id={o.key} textValue={o.label}>
-                                  {o.label}
-                                </ListBox.Item>
-                              ))}
-                            </ListBox>
-                          </Select.Popover>
-                        </Select>
+                          {TRAFFIC_THRESHOLD_OPTIONS.map((o) => (
+                            <option key={o.key} value={o.key} className="bg-[var(--nezha-panel)] text-[var(--nezha-ink)]">
+                              {o.label}
+                            </option>
+                          ))}
+                        </select>
                       </div>
 
-                      <p className={`text-11 pt-2 border-t border-slate-100 dark:border-zinc-800 ${isBlueprint ? "text-slate-400" : "text-zinc-500"}`}>
+                      <p className="text-11 pt-2 border-t border-[var(--nezha-line-soft)] text-[var(--nezha-ink-3)]">
                         当节点出入网总流量达标时推送预警，内置 12 小时静默窗口避免频繁通知。
                       </p>
                     </div>
                   </div>
 
                   {/* Rule 3: Daily Summary Report */}
-                  <div
-                    className={`rounded-xl border p-4 transition-all ${
-                      isBlueprint ? "bg-white border-slate-200/90 shadow-xs" : "bg-zinc-900/60 border-zinc-800"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 font-bold mb-3">
-                      <Clock className="h-4 w-4 text-cyan-500" />
+                  <div className="rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel)] p-4">
+                    <div className="flex items-center gap-2 font-bold mb-3 text-[var(--nezha-ink)]">
+                      <Clock className="h-4 w-4 text-[var(--nezha-accent)]" />
                       <span>定时全网流量与监控简报</span>
                     </div>
 
@@ -2137,7 +1955,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                         size="sm"
                       >
                         <Switch.Content className="w-full justify-between">
-                          <span className={isBlueprint ? "text-slate-700 font-medium" : "text-zinc-300 font-medium"}>
+                          <span className="text-[var(--nezha-ink)] font-bold">
                             开启每日定时播报
                           </span>
                           <Switch.Control>
@@ -2147,10 +1965,10 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                       </Switch>
 
                       <div>
-                        <span className={`block text-11 mb-1 font-medium ${isBlueprint ? "text-slate-600" : "text-zinc-400"}`}>
+                        <span className="block text-11 mb-1 font-bold text-[var(--nezha-ink-3)]">
                           每日推送时间 (24小时制)
                         </span>
-                        <Input
+                        <input
                           type="time"
                           value={notificationSettings.rules.daily_report_time || "09:00"}
                           onChange={(e) =>
@@ -2159,11 +1977,11 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                               rules: { ...notificationSettings.rules, daily_report_time: e.target.value },
                             })
                           }
-                          className="w-full font-mono text-xs"
+                          className="w-full font-mono text-xs rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] text-[var(--nezha-ink)] px-2.5 py-1.5 focus:border-[var(--nezha-ink)] focus:outline-none"
                         />
                       </div>
 
-                      <p className={`text-11 pt-2 border-t border-slate-100 dark:border-zinc-800 ${isBlueprint ? "text-slate-400" : "text-zinc-500"}`}>
+                      <p className="text-11 pt-2 border-t border-[var(--nezha-line-soft)] text-[var(--nezha-ink-3)]">
                         定时汇总集群在线率、全网吞吐量 (Tx/Rx) 及高负荷节点清单推送至已启用通道。
                       </p>
                     </div>
@@ -2171,124 +1989,109 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                 </div>
               </div>
 
-
               {/* 3. RECENT NOTIFICATION AUDIT LOGS */}
-              <div
-                className={`rounded-xl border p-5 transition-all shadow-xs ${
-                  isBlueprint ? "bg-white border-slate-200/90" : "bg-zinc-900/80 border-zinc-800"
-                }`}
-              >
-                <div className="flex items-center justify-between mb-4 font-sans">
+              <div className="rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel)] p-5 font-mono">
+                <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
-                    <h4 className={`text-sm font-bold ${isBlueprint ? "text-slate-800" : "text-zinc-200"}`}>
-                      3. 告警推送记录与审计日志 (Recent Logs)
+                    <h4 className="text-sm font-bold text-[var(--nezha-ink)]">
+                      [06.C] 告警推送记录与审计日志 (AUDIT LOGS)
                     </h4>
-                    <span className="px-2 py-0.5 rounded-full text-10 font-semibold bg-slate-100 text-slate-600 dark:bg-zinc-800 dark:text-zinc-400 border border-slate-200/60 dark:border-zinc-700/60">
+                    <span className="px-2 py-0.5 rounded-none text-10 font-mono font-bold bg-[var(--nezha-panel-sub)] text-[var(--nezha-ink)] border border-[var(--nezha-line)]">
                       共 {logTotal} 条记录
                     </span>
                   </div>
 
                   <div className="flex items-center gap-2 text-xs">
-                    <Button
-                      variant="ghost"
-                      size="sm"
+                    <button
                       type="button"
-                      onPress={() => fetchNotificationLogs(logPage)}
-                      className="text-slate-600 hover:text-slate-900 dark:text-zinc-300 font-sans gap-1"
+                      onClick={() => fetchNotificationLogs(logPage)}
+                      className="flex items-center gap-1 px-2.5 py-1 text-xs font-mono font-bold rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] hover:border-[var(--nezha-ink)] text-[var(--nezha-ink)] transition-colors cursor-pointer"
                     >
                       <RefreshCw className="h-3 w-3" />
                       <span>刷新</span>
-                    </Button>
+                    </button>
                     {notificationLogs.length > 0 && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
+                      <button
                         type="button"
-                        onPress={handleClearNotificationLogs}
-                        className="text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-sans gap-1"
+                        onClick={handleClearNotificationLogs}
+                        className="flex items-center gap-1 px-2.5 py-1 text-xs font-mono font-bold rounded-none border border-rose-500/30 text-rose-500 hover:bg-rose-500/10 transition-colors cursor-pointer"
                       >
                         <Trash2 className="h-3 w-3" />
                         <span>清空历史</span>
-                      </Button>
+                      </button>
                     )}
                   </div>
                 </div>
 
                 {/* Desktop Table View */}
                 <div className="hidden md:block overflow-x-auto">
-                  <table className="w-full text-left font-sans text-xs">
-                    <thead
-                      className={`border-b text-xs font-semibold ${
-                        isBlueprint ? "bg-slate-50/50 text-slate-600 border-slate-200/80" : "bg-zinc-950 text-zinc-400 border-zinc-800"
-                      }`}
-                    >
+                  <table className="w-full text-left font-mono text-xs">
+                    <thead className="border-b border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)]/80 text-[var(--nezha-ink-3)] text-11 font-bold uppercase tracking-wider">
                       <tr>
-                        <th className="py-2.5 px-3">时间</th>
-                        <th className="py-2.5 px-3">推送通道</th>
-                        <th className="py-2.5 px-3">事件类型</th>
-                        <th className="py-2.5 px-3">消息标题与详情</th>
-                        <th className="py-2.5 px-3 text-right pr-4">投递状态</th>
+                        <th className="py-2.5 px-3">[时间]</th>
+                        <th className="py-2.5 px-3">[推送通道]</th>
+                        <th className="py-2.5 px-3">[事件类型]</th>
+                        <th className="py-2.5 px-3">[消息标题与详情]</th>
+                        <th className="py-2.5 px-3 text-right pr-4">[投递状态]</th>
                       </tr>
                     </thead>
-                    <tbody className={`divide-y ${isBlueprint ? "divide-slate-100" : "divide-zinc-800/60"}`}>
+                    <tbody className="divide-y divide-[var(--nezha-line-soft)] text-[var(--nezha-ink)]">
                       {notificationLogs.map((logItem) => {
                         let typeText = "通知";
-                        let typeClass = "bg-slate-100 text-slate-600 border-slate-200 dark:bg-zinc-800 dark:text-zinc-400";
+                        let typeClass = "border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] text-[var(--nezha-ink)]";
                         if (logItem.type === "offline") {
-                          typeClass = "bg-rose-50 text-rose-700 border-rose-200/80 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800/60";
+                          typeClass = "border-rose-500/40 bg-rose-500/10 text-rose-500";
                           typeText = "节点离线";
                         } else if (logItem.type === "recovery") {
-                          typeClass = "bg-emerald-50 text-emerald-700 border-emerald-200/80 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800/60";
+                          typeClass = "border-emerald-500/40 bg-emerald-500/10 text-emerald-500";
                           typeText = "上线恢复";
                         } else if (logItem.type === "traffic") {
-                          typeClass = "bg-amber-50 text-amber-700 border-amber-200/80 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800/60";
+                          typeClass = "border-amber-500/40 bg-amber-500/10 text-amber-500";
                           typeText = "流量预警";
                         } else if (logItem.type === "daily_report") {
-                          typeClass = "bg-sky-50 text-sky-700 border-sky-200/80 dark:bg-sky-950/40 dark:text-sky-400 dark:border-sky-800/60";
+                          typeClass = "border-sky-500/40 bg-sky-500/10 text-sky-500";
                           typeText = "每日简报";
                         } else if (logItem.type === "test") {
-                          typeClass = "bg-indigo-50 text-indigo-700 border-indigo-200/80 dark:bg-indigo-950/40 dark:text-indigo-400 dark:border-indigo-800/60";
+                          typeClass = "border-[var(--nezha-accent)]/40 bg-[var(--nezha-accent)]/10 text-[var(--nezha-accent)]";
                           typeText = "测试消息";
                         }
 
                         return (
                           <tr
                             key={logItem.id}
-                            className={`transition-colors ${
-                              isBlueprint ? "hover:bg-slate-50/70" : "hover:bg-zinc-800/30"
-                            }`}
+                            className="transition-colors hover:bg-[var(--nezha-panel-sub)]/50"
                           >
-                            <td className="py-2.5 px-3 whitespace-nowrap text-slate-400 font-mono text-11">
+                            <td className="py-2.5 px-3 whitespace-nowrap text-[var(--nezha-ink-3)] font-mono text-11">
                               {new Date(logItem.timestamp * 1000).toLocaleString()}
                             </td>
                             <td className="py-2.5 px-3 whitespace-nowrap">
-                              <span className="px-2 py-0.5 rounded-full text-10 font-mono font-bold uppercase bg-indigo-50 text-indigo-600 border border-indigo-200/70 dark:bg-indigo-950/40 dark:text-indigo-400 dark:border-indigo-800/60">
+                              <span className="px-2 py-0.5 rounded-none text-10 font-mono font-bold uppercase bg-[var(--nezha-panel-sub)] text-[var(--nezha-ink)] border border-[var(--nezha-line)]">
                                 {logItem.channel}
                               </span>
                             </td>
                             <td className="py-2.5 px-3 whitespace-nowrap">
-                              <span className={`px-2 py-0.5 rounded-full text-10 font-medium border ${typeClass}`}>
+                              <span className={`px-2 py-0.5 rounded-none text-10 font-mono font-bold border ${typeClass}`}>
                                 {typeText}
                               </span>
                             </td>
 
                             <td className="py-2.5 px-3 max-w-md">
-                              <div className={`font-medium truncate ${isBlueprint ? "text-slate-900" : "text-zinc-200"}`}>
+                              <div className="font-bold truncate text-[var(--nezha-ink)]">
                                 {logItem.title}
                               </div>
-                              <div className="text-11 text-slate-400 dark:text-zinc-500 truncate mt-0.5">
+                              <div className="text-11 text-[var(--nezha-ink-3)] truncate mt-0.5 font-mono">
                                 {logItem.content.replace(/\n/g, " · ")}
                               </div>
                             </td>
                             <td className="py-2.5 px-3 whitespace-nowrap text-right pr-4">
                               {logItem.status === "success" ? (
-                                <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium text-xs">
+                                <span className="inline-flex items-center gap-1 text-emerald-500 font-bold text-xs">
                                   <Check className="h-3.5 w-3.5" />
                                   <span>已送达</span>
                                 </span>
                               ) : (
                                 <span
-                                  className="inline-flex items-center gap-1 text-rose-500 font-medium text-xs"
+                                  className="inline-flex items-center gap-1 text-rose-500 font-bold text-xs"
                                   title={logItem.error_msg || "投递失败"}
                                 >
                                   <AlertCircle className="h-3.5 w-3.5" />
@@ -2302,7 +2105,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
 
                       {notificationLogs.length === 0 && (
                         <tr>
-                          <td colSpan={5} className="py-10 text-center text-slate-400 font-sans">
+                          <td colSpan={5} className="py-10 text-center text-[var(--nezha-ink-3)] font-mono text-xs">
                             {logPage > 0
                               ? "这一页没有记录了，可能刚被清空或已翻过末页。"
                               : "暂无告警推送记录。当节点状态发生变化或点击测试通知时，将在此记录审计日志。"}
@@ -2314,52 +2117,49 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                 </div>
 
                 {/* Mobile Responsive Notification Logs View */}
-                <div className="block md:hidden divide-y divide-slate-100 dark:divide-zinc-800/60">
+                <div className="block md:hidden divide-y divide-[var(--nezha-line-soft)]">
                   {notificationLogs.map((logItem) => {
                     let typeText = "通知";
-                    let typeClass = "bg-slate-100 text-slate-600 border-slate-200 dark:bg-zinc-800 dark:text-zinc-400";
+                    let typeClass = "border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] text-[var(--nezha-ink)]";
                     if (logItem.type === "offline") {
-                      typeClass = "bg-rose-50 text-rose-700 border-rose-200/80 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800/60";
+                      typeClass = "border-rose-500/40 bg-rose-500/10 text-rose-500";
                       typeText = "节点离线";
                     } else if (logItem.type === "recovery") {
-                      typeClass = "bg-emerald-50 text-emerald-700 border-emerald-200/80 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800/60";
+                      typeClass = "border-emerald-500/40 bg-emerald-500/10 text-emerald-500";
                       typeText = "上线恢复";
                     } else if (logItem.type === "traffic") {
-                      typeClass = "bg-amber-50 text-amber-700 border-amber-200/80 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800/60";
+                      typeClass = "border-amber-500/40 bg-amber-500/10 text-amber-500";
                       typeText = "流量预警";
                     } else if (logItem.type === "daily_report") {
-                      typeClass = "bg-sky-50 text-sky-700 border-sky-200/80 dark:bg-sky-950/40 dark:text-sky-400 dark:border-sky-800/60";
+                      typeClass = "border-sky-500/40 bg-sky-500/10 text-sky-500";
                       typeText = "每日简报";
                     } else if (logItem.type === "test") {
-                      typeClass = "bg-indigo-50 text-indigo-700 border-indigo-200/80 dark:bg-indigo-950/40 dark:text-indigo-400 dark:border-indigo-800/60";
+                      typeClass = "border-[var(--nezha-accent)]/40 bg-[var(--nezha-accent)]/10 text-[var(--nezha-accent)]";
                       typeText = "测试消息";
                     }
 
                     return (
                       <div
                         key={logItem.id}
-                        className={cn(
-                          "p-3.5 space-y-1.5 transition-colors",
-                          isBlueprint ? "bg-white hover:bg-slate-50/50" : "bg-zinc-900/40 hover:bg-zinc-900/70"
-                        )}
+                        className="p-3.5 space-y-1.5 bg-[var(--nezha-panel)] font-mono transition-colors"
                       >
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="px-2 py-0.5 rounded-full text-10 font-mono font-bold uppercase bg-indigo-50 text-indigo-600 border border-indigo-200/70 dark:bg-indigo-950/40 dark:text-indigo-400 dark:border-indigo-800/60">
+                            <span className="px-2 py-0.5 rounded-none text-10 font-mono font-bold uppercase bg-[var(--nezha-panel-sub)] text-[var(--nezha-ink)] border border-[var(--nezha-line)]">
                               {logItem.channel}
                             </span>
-                            <span className={`px-2 py-0.5 rounded-full text-10 font-medium border ${typeClass}`}>
+                            <span className={`px-2 py-0.5 rounded-none text-10 font-mono font-bold border ${typeClass}`}>
                               {typeText}
                             </span>
                           </div>
                           {logItem.status === "success" ? (
-                            <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium text-xs shrink-0">
+                            <span className="inline-flex items-center gap-1 text-emerald-500 font-bold text-xs shrink-0">
                               <Check className="h-3.5 w-3.5" />
                               <span>已送达</span>
                             </span>
                           ) : (
                             <span
-                              className="inline-flex items-center gap-1 text-rose-500 font-medium text-xs shrink-0"
+                              className="inline-flex items-center gap-1 text-rose-500 font-bold text-xs shrink-0"
                               title={logItem.error_msg || "投递失败"}
                             >
                               <AlertCircle className="h-3.5 w-3.5" />
@@ -2368,13 +2168,13 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                           )}
                         </div>
 
-                        <div className={`font-medium text-xs ${isBlueprint ? "text-slate-900" : "text-zinc-200"}`}>
+                        <div className="font-bold text-xs text-[var(--nezha-ink)]">
                           {logItem.title}
                         </div>
-                        <div className="text-11 text-slate-500 dark:text-zinc-400 break-words">
+                        <div className="text-11 text-[var(--nezha-ink-3)] break-words font-mono">
                           {logItem.content}
                         </div>
-                        <div className="text-10 font-mono text-slate-400 dark:text-zinc-500 pt-0.5">
+                        <div className="text-10 font-mono text-[var(--nezha-ink-3)] pt-0.5">
                           {new Date(logItem.timestamp * 1000).toLocaleString()}
                         </div>
                       </div>
@@ -2382,7 +2182,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                   })}
 
                   {notificationLogs.length === 0 && (
-                    <div className="py-8 text-center text-xs text-slate-400 font-sans">
+                    <div className="py-8 text-center text-xs text-[var(--nezha-ink-3)] font-mono">
                       {logPage > 0
                         ? "这一页没有记录了，可能刚被清空或已翻过末页。"
                         : "暂无告警推送记录。当节点状态发生变化或点击测试通知时，将在此记录审计日志。"}
@@ -2390,14 +2190,9 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                   )}
                 </div>
 
-                {/* Pager. Hidden while everything fits on one page. */}
+                {/* Pager */}
                 {logTotal > LOG_PAGE_SIZE && (
-                  <div
-                    className={cn(
-                      "mt-3 flex items-center justify-between gap-3 border-t pt-3 font-sans text-11",
-                      isBlueprint ? "border-slate-100 text-slate-500" : "border-zinc-800/60 text-zinc-400"
-                    )}
-                  >
+                  <div className="mt-3 flex items-center justify-between gap-3 border-t border-[var(--nezha-line-soft)] pt-3 font-mono text-11 text-[var(--nezha-ink-3)]">
                     <span>
                       第 {logPage * LOG_PAGE_SIZE + 1}–
                       {Math.min((logPage + 1) * LOG_PAGE_SIZE, logTotal)} 条 · 共{" "}
@@ -2405,28 +2200,24 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                     </span>
 
                     <div className="flex items-center gap-1.5">
-                      <Button
-                        variant="ghost"
-                        size="sm"
+                      <button
                         type="button"
-                        isDisabled={logPage === 0}
-                        onPress={() => fetchNotificationLogs(logPage - 1)}
-                        className="gap-1 font-sans"
+                        disabled={logPage === 0}
+                        onClick={() => fetchNotificationLogs(logPage - 1)}
+                        className="px-2.5 py-1 text-xs font-mono font-bold rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] hover:border-[var(--nezha-ink)] text-[var(--nezha-ink)] flex items-center gap-1 cursor-pointer disabled:opacity-40"
                       >
                         <ChevronLeft className="h-3 w-3" />
                         <span>上一页</span>
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
+                      </button>
+                      <button
                         type="button"
-                        isDisabled={(logPage + 1) * LOG_PAGE_SIZE >= logTotal}
-                        onPress={() => fetchNotificationLogs(logPage + 1)}
-                        className="gap-1 font-sans"
+                        disabled={(logPage + 1) * LOG_PAGE_SIZE >= logTotal}
+                        onClick={() => fetchNotificationLogs(logPage + 1)}
+                        className="px-2.5 py-1 text-xs font-mono font-bold rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] hover:border-[var(--nezha-ink)] text-[var(--nezha-ink)] flex items-center gap-1 cursor-pointer disabled:opacity-40"
                       >
                         <span>下一页</span>
                         <ChevronRight className="h-3 w-3" />
-                      </Button>
+                      </button>
                     </div>
                   </div>
                 )}
@@ -2438,67 +2229,62 @@ export const AdminModal: React.FC<AdminModalProps> = ({
 
       {/* MODAL: Add / Edit Ping Target */}
       {isTargetModalOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fade-in font-sans">
-          <div
-            className={`relative w-full max-w-lg rounded-2xl border p-6 shadow-2xl transition-colors ${
-              isBlueprint ? "bg-white border-slate-200/90 text-slate-900 shadow-slate-300/60" : "bg-zinc-900 border-zinc-800 text-zinc-100 shadow-black/80"
-            }`}
-          >
-            <div className={`flex items-center justify-between border-b pb-4 mb-5 ${isBlueprint ? "border-slate-100" : "border-zinc-800"}`}>
-              <h2 className={`text-lg font-bold font-sans tracking-tight ${isBlueprint ? "text-slate-900" : "text-zinc-100"}`}>
-                {editingTargetId ? "编辑监测目标" : "添加网络监测目标"}
-              </h2>
-              <Button
-                variant="ghost"
-                size="sm"
-                isIconOnly
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-fade-in font-mono">
+          <div className="relative w-full max-w-lg rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel)] text-[var(--nezha-ink)] shadow-2xl p-6 font-mono">
+            <div className="flex items-center justify-between border-b border-[var(--nezha-line-soft)] pb-4 mb-5">
+              <div>
+                <h2 className="text-base font-bold font-mono tracking-tight text-[var(--nezha-ink)]">
+                  [ CONFIG · PING TARGET ]
+                </h2>
+                <div className="text-11 font-mono text-[var(--nezha-ink-3)] mt-0.5">
+                  // {editingTargetId ? "编辑网络监测目标" : "添加网络监测目标"}
+                </div>
+              </div>
+              <button
                 type="button"
-                onPress={() => setIsTargetModalOpen(false)}
+                onClick={() => setIsTargetModalOpen(false)}
+                className="h-7 w-7 flex items-center justify-center rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] hover:border-[var(--nezha-ink)] text-[var(--nezha-ink)] cursor-pointer"
                 aria-label="关闭"
               >
                 <X className="h-4 w-4" />
-              </Button>
+              </button>
             </div>
 
-            <div className="space-y-4 font-sans text-sm">
+            <div className="space-y-4 font-mono text-xs">
               {/* 1. 名称 */}
               <div>
-                <label className={`block font-medium text-xs mb-1.5 ${isBlueprint ? "text-slate-700" : "text-zinc-300"}`}>
+                <label className="block font-bold text-11 mb-1.5 text-[var(--nezha-ink-3)] uppercase">
                   目标名称 (Label)
                 </label>
-                <Input
+                <input
                   type="text"
                   value={targetFormName}
                   onChange={(e) => setTargetFormName(e.target.value)}
                   placeholder="如: Google, 电信, YouTube"
-                  className="w-full font-sans text-xs"
+                  className="w-full font-mono text-xs rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] text-[var(--nezha-ink)] px-3 py-2 focus:border-[var(--nezha-ink)] focus:outline-none"
                 />
               </div>
 
               {/* 2. 目标地址 */}
               <div>
-                <label className={`block font-medium text-xs mb-1.5 ${isBlueprint ? "text-slate-700" : "text-zinc-300"}`}>
+                <label className="block font-bold text-11 mb-1.5 text-[var(--nezha-ink-3)] uppercase">
                   目标地址 (Target IP 或域名)
                 </label>
-                <Input
+                <input
                   type="text"
                   value={targetFormAddress}
                   onChange={(e) => setTargetFormAddress(e.target.value)}
                   placeholder="如: 8.8.8.8, 223.5.5.5, www.google.com"
-                  className="w-full font-mono text-xs"
+                  className="w-full font-mono text-xs rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] text-[var(--nezha-ink)] px-3 py-2 focus:border-[var(--nezha-ink)] focus:outline-none"
                 />
               </div>
 
               {/* 3. 类型 */}
               <div>
-                <label className={`block font-medium text-xs mb-1.5 ${isBlueprint ? "text-slate-700" : "text-zinc-300"}`}>
+                <label className="block font-bold text-11 mb-1.5 text-[var(--nezha-ink-3)] uppercase">
                   监测协议类型 (Protocol)
                 </label>
-                <div
-                  className={`rounded-xl border p-1.5 space-y-1 ${
-                    isBlueprint ? "border-slate-200/90 bg-slate-50/60" : "border-zinc-800 bg-zinc-950/60"
-                  }`}
-                >
+                <div className="rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] p-1.5 space-y-1">
                   {(["icmp", "tcp", "http"] as const).map((typeKey) => {
                     const isSelected = targetFormType === typeKey;
                     const labelText = typeKey.toUpperCase();
@@ -2507,32 +2293,29 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                         key={typeKey}
                         type="button"
                         onClick={() => setTargetFormType(typeKey)}
-                        className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg cursor-pointer transition-all active:scale-[0.99] text-left text-xs font-sans ${
+                        className={cn(
+                          "w-full flex items-center gap-2.5 px-3 py-2 rounded-none cursor-pointer transition-colors text-left text-xs font-mono",
                           isSelected
-                            ? isBlueprint
-                              ? "bg-white text-indigo-700 font-bold shadow-xs border border-slate-200"
-                              : "bg-zinc-800/90 text-indigo-400 font-bold shadow-xs border border-zinc-700"
-                            : isBlueprint
-                            ? "hover:bg-slate-100 text-slate-600"
-                            : "hover:bg-zinc-900 text-zinc-400"
-                        }`}
+                            ? "bg-[var(--nezha-accent)] text-[#141414] font-bold"
+                            : "hover:bg-[var(--nezha-panel)] text-[var(--nezha-ink)]"
+                        )}
                       >
-                        <span className="w-4 text-center font-bold text-indigo-600 dark:text-indigo-400">
+                        <span className="w-4 text-center font-bold">
                           {isSelected ? "✓" : ""}
                         </span>
                         <span className="font-bold">{labelText}</span>
                         {typeKey === "icmp" && (
-                          <span className={`text-11 ml-auto font-normal ${isBlueprint ? "text-slate-500" : "text-zinc-500"}`}>
+                          <span className={cn("text-11 ml-auto font-normal", isSelected ? "text-[#141414]/80" : "text-[var(--nezha-ink-3)]")}>
                             网络层 Ping (ICMP Echo)
                           </span>
                         )}
                         {typeKey === "tcp" && (
-                          <span className={`text-11 ml-auto font-normal ${isBlueprint ? "text-slate-500" : "text-zinc-500"}`}>
+                          <span className={cn("text-11 ml-auto font-normal", isSelected ? "text-[#141414]/80" : "text-[var(--nezha-ink-3)]")}>
                             TCP 端口连接测试
                           </span>
                         )}
                         {typeKey === "http" && (
-                          <span className={`text-11 ml-auto font-normal ${isBlueprint ? "text-slate-500" : "text-zinc-500"}`}>
+                          <span className={cn("text-11 ml-auto font-normal", isSelected ? "text-[#141414]/80" : "text-[var(--nezha-ink-3)]")}>
                             Web HTTP(S) 响应探测
                           </span>
                         )}
@@ -2545,36 +2328,34 @@ export const AdminModal: React.FC<AdminModalProps> = ({
               {/* TCP Port field if TCP */}
               {targetFormType === "tcp" && (
                 <div>
-                  <label className={`block font-medium text-xs mb-1.5 ${isBlueprint ? "text-slate-700" : "text-zinc-300"}`}>
+                  <label className="block font-bold text-11 mb-1.5 text-[var(--nezha-ink-3)] uppercase">
                     TCP 端口 (Port)
                   </label>
-                  <Input
+                  <input
                     type="number"
                     value={targetFormPort}
                     onChange={(e) => setTargetFormPort(parseInt(e.target.value) || 443)}
                     placeholder="443"
-                    className="w-full font-mono text-xs"
+                    className="w-full font-mono text-xs rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] text-[var(--nezha-ink)] px-3 py-2 focus:border-[var(--nezha-ink)] focus:outline-none"
                   />
                 </div>
               )}
 
               {/* 4. 服务器选择 */}
               <div>
-                <label className={`block font-medium text-xs mb-1.5 ${isBlueprint ? "text-slate-700" : "text-zinc-300"}`}>
+                <label className="block font-bold text-11 mb-1.5 text-[var(--nezha-ink-3)] uppercase">
                   执行监测的探针服务器
                 </label>
                 <div className="flex items-center gap-3">
-                  <Button
-                    variant="outline"
-                    size="sm"
+                  <button
                     type="button"
-                    onPress={() => setIsServerPickerOpen(!isServerPickerOpen)}
-                    className="font-sans font-medium gap-1.5"
+                    onClick={() => setIsServerPickerOpen(!isServerPickerOpen)}
+                    className="px-3 py-1.5 text-xs font-mono font-bold rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] hover:border-[var(--nezha-ink)] text-[var(--nezha-ink)] flex items-center gap-1.5 cursor-pointer"
                   >
                     <span>{isServerPickerOpen ? "收起选择" : "选择服务器"}</span>
                     <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 ${isServerPickerOpen ? "rotate-180" : ""}`} />
-                  </Button>
-                  <span className={`text-xs font-sans font-medium ${isBlueprint ? "text-slate-700" : "text-zinc-300"}`}>
+                  </button>
+                  <span className="text-xs font-mono text-[var(--nezha-ink)] font-bold">
                     {targetFormServers.length === 0
                       ? (targetFormAutoStart ? "所有服务器 (含新接入)" : "当前已接入服务器")
                       : `已选 ${targetFormServers.length} 台服务器`}
@@ -2583,28 +2364,21 @@ export const AdminModal: React.FC<AdminModalProps> = ({
 
                 {/* Server Picker dropdown */}
                 {isServerPickerOpen && (
-                  <div
-                    className={`mt-2 p-2 rounded-xl border space-y-1 max-h-44 overflow-y-auto ${
-                      isBlueprint ? "bg-white border-slate-200 shadow-lg" : "bg-zinc-950 border-zinc-800"
-                    }`}
-                  >
+                  <div className="mt-2 p-2 rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel)] space-y-1 max-h-44 overflow-y-auto">
                     <button
                       type="button"
                       onClick={() => setTargetFormServers([])}
-                      className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg cursor-pointer text-xs font-sans transition-colors text-left ${
+                      className={cn(
+                        "w-full flex items-center gap-2 px-2.5 py-1.5 rounded-none cursor-pointer text-xs font-mono transition-colors text-left",
                         targetFormServers.length === 0
-                          ? isBlueprint
-                            ? "bg-indigo-50 text-indigo-700 font-bold border border-indigo-200"
-                            : "bg-indigo-500/15 text-indigo-300 font-bold border border-indigo-500/30"
-                          : isBlueprint
-                          ? "hover:bg-slate-100 text-slate-700"
-                          : "hover:bg-zinc-900 text-zinc-300"
-                      }`}
+                          ? "bg-[var(--nezha-panel-sub)] text-[var(--nezha-accent)] font-bold border border-[var(--nezha-line)]"
+                          : "hover:bg-[var(--nezha-panel-sub)] text-[var(--nezha-ink)]"
+                      )}
                     >
                       {targetFormServers.length === 0 ? (
-                        <CheckSquare className="h-4 w-4 text-indigo-600 shrink-0" />
+                        <CheckSquare className="h-4 w-4 text-[var(--nezha-accent)] shrink-0" />
                       ) : (
-                        <Square className="h-4 w-4 text-slate-400 shrink-0" />
+                        <Square className="h-4 w-4 text-[var(--nezha-ink-3)] shrink-0" />
                       )}
                       <span>{targetFormAutoStart ? "全部服务器 (含新接入节点)" : "当前已接入服务器"}</span>
                     </button>
@@ -2621,22 +2395,19 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                               setTargetFormServers([...targetFormServers, node.node_id]);
                             }
                           }}
-                          className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg cursor-pointer text-xs font-sans transition-colors text-left ${
+                          className={cn(
+                            "w-full flex items-center gap-2 px-2.5 py-1.5 rounded-none cursor-pointer text-xs font-mono transition-colors text-left",
                             isChecked
-                              ? isBlueprint
-                                ? "bg-indigo-50 text-indigo-700 font-bold border border-indigo-200"
-                                : "bg-indigo-500/15 text-indigo-300 font-bold border border-indigo-500/30"
-                              : isBlueprint
-                              ? "hover:bg-slate-100 text-slate-700"
-                              : "hover:bg-zinc-900 text-zinc-300"
-                          }`}
+                              ? "bg-[var(--nezha-panel-sub)] text-[var(--nezha-accent)] font-bold border border-[var(--nezha-line)]"
+                              : "hover:bg-[var(--nezha-panel-sub)] text-[var(--nezha-ink)]"
+                          )}
                         >
                           {isChecked ? (
-                            <CheckSquare className="h-4 w-4 text-indigo-600 shrink-0" />
+                            <CheckSquare className="h-4 w-4 text-[var(--nezha-accent)] shrink-0" />
                           ) : (
-                            <Square className="h-4 w-4 text-slate-400 shrink-0" />
+                            <Square className="h-4 w-4 text-[var(--nezha-ink-3)] shrink-0" />
                           )}
-                          <span className="truncate">{node.name} <span className="font-mono text-11 text-slate-400 dark:text-zinc-500">({node.node_id})</span></span>
+                          <span className="truncate">{node.name} <span className="font-mono text-11 text-[var(--nezha-ink-3)]">({node.node_id})</span></span>
                         </button>
                       );
                     })}
@@ -2654,12 +2425,12 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                       <Switch.Control>
                         <Switch.Thumb />
                       </Switch.Control>
-                      <span className={`text-xs font-medium ${isBlueprint ? "text-slate-800" : "text-zinc-200"}`}>
+                      <span className="text-xs font-bold font-mono text-[var(--nezha-ink)]">
                         默认自动开启监测
                       </span>
                     </Switch.Content>
                   </Switch>
-                  <p className={`text-11 mt-0.5 ml-11 ${isBlueprint ? "text-slate-400" : "text-zinc-500"}`}>
+                  <p className="text-11 mt-0.5 ml-11 text-[var(--nezha-ink-3)] font-mono">
                     开启后，新接入的服务器将自动启动对该目标的监控，已存在的服务器不受影响。
                   </p>
                 </div>
@@ -2667,40 +2438,36 @@ export const AdminModal: React.FC<AdminModalProps> = ({
 
               {/* 5. 间隔 (秒) */}
               <div>
-                <label className={`block font-medium text-xs mb-1.5 ${isBlueprint ? "text-slate-700" : "text-zinc-300"}`}>
+                <label className="block font-bold text-11 mb-1.5 text-[var(--nezha-ink-3)] uppercase">
                   检测采样间隔 (秒)
                 </label>
-                <Input
+                <input
                   type="number"
                   min="5"
                   value={targetFormInterval}
                   onChange={(e) => setTargetFormInterval(parseInt(e.target.value) || 60)}
                   placeholder="60"
-                  className="w-full font-mono text-xs"
+                  className="w-full font-mono text-xs rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] text-[var(--nezha-ink)] px-3 py-2 focus:border-[var(--nezha-ink)] focus:outline-none"
                 />
               </div>
             </div>
 
             {/* Modal Actions */}
-            <div className={`mt-6 flex items-center justify-end gap-3 font-sans text-xs pt-4 border-t ${isBlueprint ? "border-slate-100" : "border-zinc-800"}`}>
-              <Button
-                variant="ghost"
-                size="sm"
+            <div className="mt-6 flex items-center justify-end gap-3 font-mono text-xs pt-4 border-t border-[var(--nezha-line-soft)]">
+              <button
                 type="button"
-                onPress={() => setIsTargetModalOpen(false)}
-                className="font-sans text-slate-600 dark:text-zinc-400"
+                onClick={() => setIsTargetModalOpen(false)}
+                className="h-8 px-4 text-xs font-mono font-bold rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] text-[var(--nezha-ink)] hover:border-[var(--nezha-ink)] transition-colors cursor-pointer"
               >
                 关闭
-              </Button>
-              <Button
-                variant="primary"
-                size="sm"
+              </button>
+              <button
                 type="button"
-                onPress={handleSavePingTargetModal}
-                className="font-sans font-medium"
+                onClick={handleSavePingTargetModal}
+                className="h-8 px-4 text-xs font-mono font-bold rounded-none bg-[var(--nezha-accent)] text-[#141414] hover:bg-[#E54D16] border border-[#141414]/20 transition-colors cursor-pointer shadow-none"
               >
                 {editingTargetId ? "保存修改" : "确认添加"}
-              </Button>
+              </button>
             </div>
           </div>
         </div>

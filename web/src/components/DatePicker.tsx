@@ -1,8 +1,6 @@
-import React, { useMemo, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Calendar as CalendarIcon, Clock, X } from "lucide-react";
-import { Button, Calendar, DatePicker as HeroDatePicker } from "@heroui/react";
-import { parseDate, type DateValue } from "@internationalized/date";
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Clock, X } from "lucide-react";
 import { ThemeMode } from "../types";
 import { cn } from "../lib/utils";
 import { NumberTicker } from "./ui/NumberTicker";
@@ -13,48 +11,143 @@ interface DatePickerProps {
   theme?: ThemeMode;
 }
 
-export const DatePicker: React.FC<DatePickerProps> = ({ value, onChange, theme = "dark" }) => {
-  const isDark = theme === "dark" || theme === "btop" || theme === "blueprint-dark";
-  const isLight = !isDark;
-  const isBlueprint = isLight;
+const WEEKDAYS = ["日", "一", "二", "三", "四", "五", "六"];
 
-  // react-aria positions the popover against `triggerRef`, which it normally
-  // supplies through GroupContext — i.e. only when a DateInputGroup renders the
-  // `Group` element. This layout uses a plain button as the trigger, so that ref
-  // stays null and the popover lands at the viewport origin. Passing the trigger
-  // ref explicitly restores the anchor (props win over context in mergeProps).
-  const triggerRef = useRef<HTMLButtonElement | null>(null);
+export const DatePicker: React.FC<DatePickerProps> = ({ value, onChange }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Parse current value
+  const parsedValue = useMemo(() => {
+    if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+    const [y, m, d] = value.split("-").map(Number);
+    return { year: y, month: m - 1, day: d };
+  }, [value]);
+
+  // Calendar view year and month
+  const today = useMemo(() => new Date(), []);
+  const [viewYear, setViewYear] = useState(() => parsedValue ? parsedValue.year : today.getFullYear());
+  const [viewMonth, setViewMonth] = useState(() => parsedValue ? parsedValue.month : today.getMonth());
+
+  // Update view month when value changes and calendar opens
+  useEffect(() => {
+    if (parsedValue) {
+      setViewYear(parsedValue.year);
+      setViewMonth(parsedValue.month);
+    }
+  }, [parsedValue]);
+
+  // Click outside and escape handling
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleClickOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isOpen]);
+
+  // Month navigation
+  const prevMonth = () => {
+    if (viewMonth === 0) {
+      setViewYear((y) => y - 1);
+      setViewMonth(11);
+    } else {
+      setViewMonth((m) => m - 1);
+    }
+  };
+
+  const nextMonth = () => {
+    if (viewMonth === 11) {
+      setViewYear((y) => y + 1);
+      setViewMonth(0);
+    } else {
+      setViewMonth((m) => m + 1);
+    }
+  };
+
+  // Calendar cells calculation
+  const calendarCells = useMemo(() => {
+    const firstDayOfWeek = new Date(viewYear, viewMonth, 1).getDay();
+    const daysInCurrentMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+    const daysInPrevMonth = new Date(viewYear, viewMonth, 0).getDate();
+
+    const cells: Array<{
+      day: number;
+      isCurrentMonth: boolean;
+      year: number;
+      month: number;
+    }> = [];
+
+    // Previous month padding days
+    for (let i = firstDayOfWeek - 1; i >= 0; i--) {
+      const prevM = viewMonth === 0 ? 11 : viewMonth - 1;
+      const prevY = viewMonth === 0 ? viewYear - 1 : viewYear;
+      cells.push({
+        day: daysInPrevMonth - i,
+        isCurrentMonth: false,
+        year: prevY,
+        month: prevM,
+      });
+    }
+
+    // Current month days
+    for (let d = 1; d <= daysInCurrentMonth; d++) {
+      cells.push({
+        day: d,
+        isCurrentMonth: true,
+        year: viewYear,
+        month: viewMonth,
+      });
+    }
+
+    // Next month padding days to complete grid
+    const remaining = (7 - (cells.length % 7)) % 7;
+    for (let d = 1; d <= remaining; d++) {
+      const nextM = viewMonth === 11 ? 0 : viewMonth + 1;
+      const nextY = viewMonth === 11 ? viewYear + 1 : viewYear;
+      cells.push({
+        day: d,
+        isCurrentMonth: false,
+        year: nextY,
+        month: nextM,
+      });
+    }
+
+    return cells;
+  }, [viewYear, viewMonth]);
+
+  const selectDate = (y: number, m: number, d: number) => {
+    const yStr = String(y);
+    const mStr = String(m + 1).padStart(2, "0");
+    const dStr = String(d).padStart(2, "0");
+    onChange(`${yStr}-${mStr}-${dStr}`);
+    setIsOpen(false);
+  };
 
   // Calculate days remaining
   let daysRemaining: number | null = null;
   if (value && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
     const target = new Date(value + "T00:00:00");
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const diffTime = target.getTime() - today.getTime();
+    const t = new Date();
+    t.setHours(0, 0, 0, 0);
+    const diffTime = target.getTime() - t.getTime();
     daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   }
-
-  // Safe parse DateValue for HeroUI DatePicker/Calendar
-  const dateValue = useMemo<DateValue | null>(() => {
-    if (!value || typeof value !== "string") return null;
-    try {
-      if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-        return parseDate(value);
-      }
-    } catch {
-      return null;
-    }
-    return null;
-  }, [value]);
-
-  const handleDateChange = (val: DateValue | null) => {
-    if (!val) {
-      onChange("");
-    } else {
-      onChange(val.toString());
-    }
-  };
 
   // Quick preset adder
   const addPeriod = (months: number) => {
@@ -67,86 +160,147 @@ export const DatePicker: React.FC<DatePickerProps> = ({ value, onChange, theme =
   };
 
   return (
-    <div className="space-y-2 font-sans">
+    <div className="space-y-2 font-mono text-xs">
       <div className="flex flex-wrap items-center gap-2">
-        <HeroDatePicker
-          value={dateValue}
-          onChange={handleDateChange}
-          aria-label="服务到期时间"
-          className="flex-1 min-w-[220px]"
-        >
-          <HeroDatePicker.Trigger
-            ref={triggerRef}
+        <div ref={containerRef} className="relative flex-1 min-w-[220px]">
+          {/* Custom Trigger */}
+          <button
+            type="button"
+            onClick={() => setIsOpen(!isOpen)}
             className={cn(
-              "relative w-full flex items-center justify-between rounded-xl border px-3 py-2 text-xs transition-colors cursor-pointer outline-none",
-              isBlueprint
-                ? "bg-white border-slate-200 hover:border-indigo-400 text-slate-800 shadow-xs"
-                : "bg-zinc-950 border-zinc-800 hover:border-indigo-500 text-zinc-100"
+              "w-full h-8 px-2.5 flex items-center justify-between rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] text-[var(--nezha-ink)] hover:border-[var(--nezha-ink)] focus:border-[var(--nezha-accent)] focus:outline-none transition-colors cursor-pointer text-xs font-mono",
+              isOpen && "border-[var(--nezha-accent)]"
             )}
+            aria-label="服务到期时间选择器"
+            aria-expanded={isOpen}
           >
-            <div className="flex items-center gap-2.5">
-              <CalendarIcon className={cn("h-4 w-4 shrink-0", isBlueprint ? "text-slate-500" : "text-zinc-400")} />
-              <span className={dateValue ? "font-semibold font-mono" : isBlueprint ? "text-slate-400 font-sans" : "text-zinc-500 font-sans"}>
+            <div className="flex items-center gap-2 min-w-0">
+              <CalendarIcon className="h-3.5 w-3.5 text-[var(--nezha-accent)] shrink-0" />
+              <span className={cn("truncate font-bold", !value && "text-[var(--nezha-ink-3)] font-normal")}>
                 {value || "点击选择服务到期日期..."}
               </span>
             </div>
-            <div className="flex items-center gap-1">
+
+            <div className="flex items-center gap-1 shrink-0 ml-1">
               {value && (
-                <button
-                  type="button"
+                <span
+                  role="button"
+                  tabIndex={0}
                   onClick={(e) => {
                     e.stopPropagation();
                     onChange("");
                   }}
-                  className={cn(
-                    "p-0.5 rounded-md transition-all cursor-pointer active:scale-90 mr-1",
-                    isBlueprint
-                      ? "text-slate-400 hover:text-slate-700 hover:bg-slate-100"
-                      : "text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800"
-                  )}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.stopPropagation();
+                      onChange("");
+                    }
+                  }}
+                  className="p-0.5 rounded-none text-[var(--nezha-ink-3)] hover:text-rose-500 transition-colors cursor-pointer"
                   title="清除日期"
                 >
                   <X className="h-3.5 w-3.5" />
-                </button>
+                </span>
               )}
-              <HeroDatePicker.TriggerIndicator />
             </div>
-          </HeroDatePicker.Trigger>
+          </button>
 
-          <HeroDatePicker.Popover
-            triggerRef={triggerRef}
-            placement="bottom start"
-            className={cn(
-              "p-3 rounded-2xl border shadow-xl z-[70] animate-fade-in",
-              isBlueprint
-                ? "bg-white border-slate-200 text-slate-800 shadow-slate-200/80"
-                : "bg-zinc-900 border-zinc-700 text-zinc-100 shadow-black/80"
-            )}
-          >
-            <Calendar aria-label="服务到期时间日历">
-              <Calendar.Header className="flex items-center justify-between pb-3">
-                <Calendar.NavButton slot="previous" />
-                <Calendar.Heading className="text-xs font-bold font-sans" />
-                <Calendar.NavButton slot="next" />
-              </Calendar.Header>
-              <Calendar.Grid>
-                <Calendar.GridHeader>
-                  {(day) => (
-                    <Calendar.HeaderCell className={cn(
-                      "text-11 font-semibold pb-1.5",
-                      isBlueprint ? "text-slate-500" : "text-zinc-400"
-                    )}>
-                      {day}
-                    </Calendar.HeaderCell>
-                  )}
-                </Calendar.GridHeader>
-                <Calendar.GridBody>
-                  {(date) => <Calendar.Cell date={date} />}
-                </Calendar.GridBody>
-              </Calendar.Grid>
-            </Calendar>
-          </HeroDatePicker.Popover>
-        </HeroDatePicker>
+          {/* In-tree Custom Calendar Popup: Guaranteed Anchored Underneath */}
+          {isOpen && (
+            <div
+              className="absolute top-full left-0 z-[100] mt-1 w-72 p-3 rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel)] shadow-2xl font-mono text-xs animate-in fade-in-0 zoom-in-95"
+            >
+              {/* Header: Month / Year Navigation */}
+              <div className="flex items-center justify-between mb-3 pb-2 border-b border-[var(--nezha-line-soft)]">
+                <button
+                  type="button"
+                  onClick={prevMonth}
+                  className="h-6 w-6 flex items-center justify-center rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] hover:border-[var(--nezha-ink)] text-[var(--nezha-ink)] cursor-pointer"
+                  title="上个月"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                </button>
+
+                <div className="font-bold text-xs text-[var(--nezha-ink)]">
+                  {viewYear}年 {viewMonth + 1}月
+                </div>
+
+                <button
+                  type="button"
+                  onClick={nextMonth}
+                  className="h-6 w-6 flex items-center justify-center rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] hover:border-[var(--nezha-ink)] text-[var(--nezha-ink)] cursor-pointer"
+                  title="下个月"
+                >
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
+
+              {/* Weekday Row */}
+              <div className="grid grid-cols-7 gap-1 text-center font-bold text-10 text-[var(--nezha-ink-3)] mb-1">
+                {WEEKDAYS.map((w, idx) => (
+                  <div key={idx} className={idx === 0 || idx === 6 ? "text-amber-500/80" : ""}>
+                    {w}
+                  </div>
+                ))}
+              </div>
+
+              {/* Day Grid */}
+              <div className="grid grid-cols-7 gap-1 text-center font-mono text-11">
+                {calendarCells.map((cell, idx) => {
+                  const isSelected =
+                    parsedValue &&
+                    parsedValue.year === cell.year &&
+                    parsedValue.month === cell.month &&
+                    parsedValue.day === cell.day;
+
+                  const isToday =
+                    today.getFullYear() === cell.year &&
+                    today.getMonth() === cell.month &&
+                    today.getDate() === cell.day;
+
+                  return (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => selectDate(cell.year, cell.month, cell.day)}
+                      className={cn(
+                        "h-7 w-full flex items-center justify-center rounded-none font-bold transition-colors cursor-pointer",
+                        !cell.isCurrentMonth && "opacity-30 text-[var(--nezha-ink-3)]",
+                        cell.isCurrentMonth && "text-[var(--nezha-ink)] hover:bg-[var(--nezha-panel-sub)] hover:text-[var(--nezha-accent)]",
+                        isToday && !isSelected && "border border-[var(--nezha-accent)] text-[var(--nezha-accent)]",
+                        isSelected && "bg-[var(--nezha-accent)] text-[#141414] hover:bg-[#E54D16] hover:text-[#141414]"
+                      )}
+                    >
+                      {cell.day}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Footer Quick Actions */}
+              <div className="flex items-center justify-between mt-3 pt-2 border-t border-[var(--nezha-line-soft)] text-11">
+                <button
+                  type="button"
+                  onClick={() => selectDate(today.getFullYear(), today.getMonth(), today.getDate())}
+                  className="px-2 py-0.5 rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] hover:border-[var(--nezha-ink)] text-[var(--nezha-ink)] cursor-pointer font-bold"
+                >
+                  今天
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    onChange("");
+                    setIsOpen(false);
+                  }}
+                  className="px-2 py-0.5 rounded-none border border-rose-500/30 text-rose-500 hover:bg-rose-500/10 cursor-pointer font-bold"
+                >
+                  清除
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* Days remaining badge */}
         <AnimatePresence>
@@ -158,18 +312,12 @@ export const DatePicker: React.FC<DatePickerProps> = ({ value, onChange, theme =
               exit={{ opacity: 0, scale: 0.9 }}
               transition={{ duration: 0.16 }}
               className={cn(
-                "flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-mono font-semibold shrink-0 border",
+                "h-8 flex items-center gap-1.5 px-2.5 rounded-none text-xs font-mono font-bold shrink-0 border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)]",
                 daysRemaining > 30
-                  ? isBlueprint
-                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                    : "bg-emerald-950/40 text-emerald-400 border-emerald-800/60"
+                  ? "text-emerald-600 dark:text-emerald-400"
                   : daysRemaining >= 0
-                  ? isBlueprint
-                    ? "bg-amber-50 text-amber-700 border-amber-200"
-                    : "bg-amber-950/40 text-amber-400 border-amber-800/60"
-                  : isBlueprint
-                  ? "bg-rose-50 text-rose-700 border-rose-200"
-                  : "bg-rose-950/40 text-rose-400 border-rose-800/60"
+                  ? "text-amber-600 dark:text-amber-400"
+                  : "text-rose-600 dark:text-rose-400"
               )}
             >
               <Clock className="h-3.5 w-3.5" />
@@ -190,8 +338,8 @@ export const DatePicker: React.FC<DatePickerProps> = ({ value, onChange, theme =
       </div>
 
       {/* Quick Presets */}
-      <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-        <span className={cn("text-xs font-medium", isBlueprint ? "text-slate-500" : "text-zinc-400")}>
+      <div className="flex flex-wrap items-center gap-1.5 pt-0.5 font-mono">
+        <span className="text-11 font-bold text-[var(--nezha-ink-3)]">
           快捷设定:
         </span>
         {[
@@ -206,12 +354,7 @@ export const DatePicker: React.FC<DatePickerProps> = ({ value, onChange, theme =
             key={p.label}
             type="button"
             onClick={() => addPeriod(p.months)}
-            className={cn(
-              "h-auto rounded-md border px-2 py-0.5 font-sans text-xs font-medium transition-all active:scale-95 cursor-pointer",
-              isBlueprint
-                ? "bg-slate-50 hover:bg-indigo-50 border-slate-200 hover:border-indigo-300 text-slate-600 hover:text-indigo-600"
-                : "bg-zinc-900 hover:bg-zinc-800 border-zinc-800 hover:border-indigo-500/50 text-zinc-400 hover:text-indigo-300"
-            )}
+            className="h-6 px-2 rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] hover:border-[var(--nezha-ink)] hover:bg-[var(--nezha-panel)] text-[var(--nezha-ink)] font-mono text-11 font-bold transition-colors cursor-pointer"
           >
             {p.label}
           </button>
@@ -220,12 +363,7 @@ export const DatePicker: React.FC<DatePickerProps> = ({ value, onChange, theme =
           <button
             type="button"
             onClick={() => onChange("")}
-            className={cn(
-              "h-auto rounded-md border px-2 py-0.5 font-sans text-xs font-medium transition-all active:scale-95 cursor-pointer",
-              isBlueprint
-                ? "bg-slate-50 hover:bg-rose-50 border-slate-200 hover:border-rose-200 text-rose-600"
-                : "bg-zinc-900 hover:bg-rose-950/40 border-zinc-800 hover:border-rose-800/50 text-rose-400"
-            )}
+            className="h-6 px-2 rounded-none border border-rose-500/30 text-rose-500 hover:bg-rose-500/10 font-mono text-11 font-bold transition-colors cursor-pointer"
           >
             清空/设为永久
           </button>

@@ -434,9 +434,7 @@ export function App() {
   if (isAdminRoute) {
     if (!auth.authenticated) {
       return (
-        <div className={`min-h-screen ${
-          isBtopLight ? "btop-light-grid bg-[#ebe7ee]" : "btop-grid bg-[#06080d]"
-        }`}>
+        <div className="min-h-screen nezha-grid bg-[var(--nezha-sea)] text-[var(--nezha-ink)] font-mono">
           <LoginScreen
             onLogin={auth.login}
             theme={theme}
@@ -453,9 +451,7 @@ export function App() {
     }
 
     return (
-      <div className={`min-h-screen w-full flex flex-col font-sans transition-colors ${
-        isBtopLight ? "bg-slate-100 text-slate-900" : "bg-[#06080d] text-zinc-100"
-      }`}>
+      <div className="min-h-screen w-full flex flex-col font-sans transition-colors nezha-grid bg-[var(--nezha-sea)] text-[var(--nezha-ink)]">
         <Suspense fallback={null}>
           <AdminModal
             isOpen={true}

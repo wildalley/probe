@@ -1,8 +1,6 @@
 import React, { useState } from "react";
 import { Check, Copy, Globe, RefreshCw, Shield, Terminal, X } from "lucide-react";
-import { Button, Input } from "@heroui/react";
 import { ThemeMode } from "../../../types";
-import { cn } from "../../../lib/utils";
 
 interface HostDeployDialogProps {
   /** Token embedded into the install command; owned by the parent so the
@@ -16,14 +14,9 @@ interface HostDeployDialogProps {
 
 export const HostDeployDialog: React.FC<HostDeployDialogProps> = ({
   deployToken,
-  theme = "dark",
   onClose,
   onRegenerateToken,
 }) => {
-  const isDark = theme === "dark" || theme === "btop" || theme === "blueprint-dark";
-  const isLight = !isDark;
-  const isBlueprint = isLight;
-
   const [deployName, setDeployName] = useState("node-01");
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isRegenerating, setIsRegenerating] = useState(false);
@@ -55,87 +48,67 @@ export const HostDeployDialog: React.FC<HostDeployDialogProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-0 sm:p-4 lg:p-6 bg-black/75 backdrop-blur-sm animate-fade-in font-sans">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-0 sm:p-4 lg:p-6 bg-black/80 backdrop-blur-sm animate-fade-in font-mono">
       <div
-        className={cn(
-          "relative flex flex-col w-full max-w-2xl h-[100dvh] sm:h-auto sm:max-h-[90vh] rounded-none sm:rounded-2xl border shadow-2xl overflow-hidden transition-colors",
-          isBlueprint
-            ? "bg-white border-slate-200/90 text-slate-900 shadow-slate-300/60"
-            : "bg-zinc-900 border-zinc-800 text-zinc-100 shadow-black/80"
-        )}
+        className="relative flex flex-col w-full max-w-2xl h-[100dvh] sm:h-auto sm:max-h-[90vh] rounded-none border-1.5 border-[var(--nezha-line)] bg-[var(--nezha-panel)] text-[var(--nezha-ink)] shadow-2xl overflow-hidden transition-colors"
       >
         {/* Dialog header */}
         <div
-          className={cn(
-            "flex items-center justify-between gap-3 px-4 py-3 sm:px-6 sm:py-4 border-b shrink-0",
-            isBlueprint ? "border-slate-200/80 bg-slate-50/70" : "border-zinc-800 bg-zinc-950/40"
-          )}
+          className="flex items-center justify-between gap-3 px-4 py-3 sm:px-6 sm:py-3.5 border-b border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] shrink-0"
         >
           <div className="flex items-center gap-2.5 min-w-0">
-            <div
-              className={cn(
-                "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border",
-                isBlueprint
-                  ? "bg-emerald-50 border-emerald-200/70 text-emerald-600"
-                  : "bg-emerald-500/15 border-emerald-500/30 text-emerald-400"
-              )}
-            >
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel)] text-[var(--nezha-accent)]">
               <Terminal className="h-4 w-4" />
             </div>
             <div className="min-w-0">
-              <h2
-                className={cn(
-                  "text-base font-bold tracking-tight",
-                  isBlueprint ? "text-slate-900" : "text-zinc-100"
-                )}
-              >
-                添加主机 · 一键部署命令
+              <h2 className="text-sm sm:text-base font-bold tracking-tight text-[var(--nezha-ink)]">
+                [ DEPLOY · AGENT ] // 一键接入部署
               </h2>
-              <p className={cn("text-xs mt-0.5", isBlueprint ? "text-slate-500" : "text-zinc-400")}>
+              <p className="text-11 text-[var(--nezha-ink-3)] mt-0.5 truncate">
                 自动识别地区 · 内嵌通信令牌 · 自动注册 Systemd 守护进程
               </p>
             </div>
           </div>
-          <Button variant="ghost" size="sm" isIconOnly type="button" onPress={onClose} aria-label="关闭">
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1.5 rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel)] hover:bg-[var(--nezha-accent)] hover:text-[#141414] text-[var(--nezha-ink)] cursor-pointer"
+            aria-label="关闭"
+          >
             <X className="h-4 w-4" />
-          </Button>
+          </button>
         </div>
 
         {/* Scrollable body */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 text-xs">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 text-xs font-mono">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label
-                className={cn("block mb-1.5 font-medium", isBlueprint ? "text-slate-700" : "text-zinc-300")}
+                className="block mb-1.5 text-11 font-bold text-[var(--nezha-ink)]"
                 htmlFor="deploy-node-name"
               >
-                节点名称 (Name)
+                [01] 节点标识名称 (Host Name)
               </label>
-              <Input
+              <input
                 id="deploy-node-name"
                 type="text"
                 value={deployName}
                 onChange={(e) => setDeployName(e.target.value)}
                 placeholder="node-01"
-                className="w-full font-mono text-xs"
+                className="w-full h-8 px-2.5 text-xs font-mono rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] text-[var(--nezha-ink)] focus:outline-none focus:border-[var(--nezha-accent)]"
               />
             </div>
             <div className="flex flex-col justify-end">
               <div
-                className={cn(
-                  "p-2 rounded-lg border flex items-center gap-2 min-h-[38px]",
-                  isBlueprint
-                    ? "bg-slate-50/70 border-slate-200/80 text-slate-700"
-                    : "bg-zinc-950/80 border-zinc-800 text-zinc-300"
-                )}
+                className="h-8 p-2 border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] flex items-center gap-2 text-xs"
               >
-                <Globe className="h-4 w-4 text-sky-500 shrink-0" />
+                <Globe className="h-4 w-4 text-[var(--nezha-accent)] shrink-0" />
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="font-medium">地区与线路:</span>
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-11 font-medium bg-sky-50 text-sky-700 border border-sky-200/70 dark:bg-sky-950/40 dark:text-sky-400 dark:border-sky-800/60">
-                    ● 全自动识别
+                  <span className="font-bold text-[var(--nezha-ink)]">地区与线路:</span>
+                  <span className="px-1.5 py-0.2 text-10 font-bold bg-[var(--nezha-ink)] text-[var(--nezha-panel)] rounded-none">
+                    AUTO-DETECT
                   </span>
-                  <span className="text-11 text-slate-500 dark:text-zinc-500">公网 IP 智能匹配</span>
+                  <span className="text-10 text-[var(--nezha-ink-3)]">公网 IP 自动映射</span>
                 </div>
               </div>
             </div>
@@ -143,130 +116,110 @@ export const HostDeployDialog: React.FC<HostDeployDialogProps> = ({
 
           {/* Token badge */}
           <div
-            className={cn(
-              "flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3.5 py-2.5 transition-colors",
-              isBlueprint
-                ? "bg-slate-50/60 border-slate-200/80 shadow-xs"
-                : "bg-zinc-950/80 border-zinc-800/80"
-            )}
+            className="flex flex-wrap items-center justify-between gap-2 border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] px-3.5 py-2.5 transition-colors"
           >
             <div className="flex items-center gap-2">
-              <Shield className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
-              <span className={isBlueprint ? "text-slate-700 font-medium" : "text-zinc-300"}>通信 Token:</span>
-              <code className="text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 text-xs font-mono">
+              <Shield className="h-3.5 w-3.5 text-[var(--nezha-accent)] shrink-0" />
+              <span className="font-bold text-[var(--nezha-ink)]">通信 Token:</span>
+              <code className="text-xs font-mono font-bold px-2 py-0.5 border border-[var(--nezha-line)] bg-[var(--nezha-panel)] text-[var(--nezha-accent-ink)] dark:text-[var(--nezha-accent)]">
                 {deployToken.slice(0, 14)}...{deployToken.slice(-6)}
               </code>
-              <span className={cn("text-11 hidden sm:inline", isBlueprint ? "text-slate-500" : "text-zinc-400")}>
-                (已自动嵌入下方安装命令)
+              <span className="text-11 text-[var(--nezha-ink-3)] hidden sm:inline">
+                (已自动嵌入下方脚本)
               </span>
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
+            <button
               type="button"
-              onPress={handleRegenerate}
-              isDisabled={isRegenerating}
-              className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 font-medium gap-1"
+              onClick={handleRegenerate}
+              disabled={isRegenerating}
+              className="h-7 px-2.5 text-11 font-mono font-bold rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel)] hover:border-[var(--nezha-ink)] text-[var(--nezha-ink)] transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1"
               aria-label="重新生成并更换一个新 Token"
             >
-              <RefreshCw className={cn("h-3 w-3", isRegenerating && "animate-spin")} />
+              <RefreshCw className={`h-3 w-3 ${isRegenerating ? "animate-spin" : ""}`} />
               <span>更换 Token</span>
-            </Button>
+            </button>
           </div>
 
           {tokenError && (
-            <p className="text-rose-600 dark:text-rose-400 font-medium" role="alert">
+            <p className="text-rose-500 font-bold text-xs" role="alert">
               {tokenError}
             </p>
           )}
 
           {/* One-click install */}
-          <div>
-            <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
-              <span className={isBlueprint ? "text-slate-600 font-medium" : "text-zinc-400"}>
-                推荐：Linux 一键全自动安装 (内置 Systemd 守护与开机自启)
+          <div className="space-y-1.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="font-bold text-[var(--nezha-ink)]">
+                [METHOD 1] Linux 一键脚本 (内置 Systemd 守护与开机自启)
               </span>
-              <Button
-                variant="primary"
-                size="sm"
+              <button
                 type="button"
-                onPress={() => copyToClipboard(oneClickCmd, "oneclick")}
-                className="font-medium shadow-sm gap-1.5"
+                onClick={() => copyToClipboard(oneClickCmd, "oneclick")}
+                className="h-7 px-3 text-xs font-mono font-bold rounded-none bg-[var(--nezha-accent)] text-[#141414] hover:bg-[#E54D16] border border-[#141414]/20 transition-all cursor-pointer shadow-none flex items-center gap-1.5"
               >
                 {copiedId === "oneclick" ? (
-                  <Check className="h-3.5 w-3.5 text-white" />
+                  <Check className="h-3.5 w-3.5" />
                 ) : (
                   <Copy className="h-3.5 w-3.5" />
                 )}
-                <span>{copiedId === "oneclick" ? "已复制" : "复制命令"}</span>
-              </Button>
+                <span>{copiedId === "oneclick" ? "已复制命令" : "复制命令"}</span>
+              </button>
             </div>
-            <pre className="p-3.5 sm:p-4 rounded-xl border border-slate-800 bg-slate-950 text-emerald-400 font-mono text-xs overflow-x-auto whitespace-pre-wrap break-all select-all leading-relaxed shadow-inner">
+            <pre className="p-3 sm:p-4 rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-sea)] text-[var(--nezha-ink)] font-mono text-xs overflow-x-auto whitespace-pre-wrap break-all select-all leading-relaxed">
               {oneClickCmd}
             </pre>
           </div>
 
           {/* Direct binary run */}
-          <div>
-            <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
-              <span className={isBlueprint ? "text-slate-600 font-medium" : "text-zinc-400"}>
-                方式二：直接前台运行二进制 (免 root / 测试调试)
+          <div className="space-y-1.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="font-bold text-[var(--nezha-ink-2)]">
+                [METHOD 2] 直接前台运行二进制 (免 root / 容器测试)
               </span>
-              <Button
-                variant="ghost"
-                size="sm"
+              <button
                 type="button"
-                onPress={() => copyToClipboard(binaryCmd, "binary")}
-                className="gap-1 font-medium text-indigo-600 dark:text-indigo-400"
+                onClick={() => copyToClipboard(binaryCmd, "binary")}
+                className="h-7 px-3 text-xs font-mono font-bold rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] hover:border-[var(--nezha-ink)] text-[var(--nezha-ink)] cursor-pointer flex items-center gap-1"
               >
-                {copiedId === "binary" ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                {copiedId === "binary" ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
                 <span>{copiedId === "binary" ? "已复制" : "复制命令"}</span>
-              </Button>
+              </button>
             </div>
-            <pre
-              className={cn(
-                "p-3 rounded-xl border font-mono text-xs overflow-x-auto whitespace-pre-wrap break-all select-all",
-                isBlueprint
-                  ? "bg-slate-100 border-slate-200 text-slate-800"
-                  : "bg-zinc-950 border-zinc-800 text-zinc-300"
-              )}
-            >
+            <pre className="p-3 rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-sea)] text-[var(--nezha-ink)] font-mono text-xs overflow-x-auto whitespace-pre-wrap break-all select-all">
               {binaryCmd}
             </pre>
           </div>
 
           {/* Post-install tips */}
           <div
-            className={cn(
-              "text-11 border-t pt-3 flex flex-wrap justify-between gap-2",
-              isBlueprint ? "border-slate-100 text-slate-500" : "border-zinc-800/80 text-zinc-400"
-            )}
+            className="text-11 border-t border-[var(--nezha-line-soft)] pt-3 flex flex-wrap justify-between gap-2 text-[var(--nezha-ink-3)] font-mono"
           >
             <span>
-              查看日志: <code className="font-mono">journalctl -u probe-agent -f</code>
+              查看日志: <code className="font-bold text-[var(--nezha-ink)]">journalctl -u probe-agent -f</code>
             </span>
             <span>
-              重启服务: <code className="font-mono">systemctl restart probe-agent</code>
+              重启服务: <code className="font-bold text-[var(--nezha-ink)]">systemctl restart probe-agent</code>
             </span>
             <span>
-              卸载程序: <code className="font-mono">bash install.sh --uninstall</code>
+              卸载清理: <code className="font-bold text-[var(--nezha-ink)]">bash install.sh --uninstall</code>
             </span>
           </div>
         </div>
 
         {/* Footer */}
         <div
-          className={cn(
-            "flex items-center justify-end gap-3 px-4 py-3 sm:px-6 sm:py-4 border-t shrink-0 text-xs",
-            isBlueprint ? "border-slate-200/80 bg-slate-50/70" : "border-zinc-800 bg-zinc-950/40"
-          )}
+          className="flex items-center justify-end gap-3 px-4 py-3 sm:px-6 sm:py-3.5 border-t border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] shrink-0 text-xs font-mono"
         >
-          <span className={cn("mr-auto hidden sm:inline", isBlueprint ? "text-slate-500" : "text-zinc-500")}>
-            在目标机器执行命令后，主机会自动出现在列表中
+          <span className="mr-auto hidden sm:inline text-11 text-[var(--nezha-ink-3)]">
+            目标机器执行命令后，主机会自动出现在监控与管理列表中
           </span>
-          <Button variant="ghost" size="sm" type="button" onPress={onClose} className="text-slate-600 dark:text-zinc-400">
-            关闭
-          </Button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-8 px-4 text-xs font-mono font-bold rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel)] hover:border-[var(--nezha-ink)] text-[var(--nezha-ink)] transition-colors cursor-pointer"
+          >
+            关闭窗口
+          </button>
         </div>
       </div>
     </div>

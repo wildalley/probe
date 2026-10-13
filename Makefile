@@ -17,6 +17,12 @@ build-web:
 	@echo "==> Building Web frontend..."
 	cd web && npm install && npm run build
 
+build-theme-nezha:
+	@echo "==> Building Nezha Live Theme (dist + zip)..."
+	cd web && npm run build:nezha
+	python3 -c "import zipfile, os; zf = zipfile.ZipFile('themes/nezha-live.zip', 'w', zipfile.ZIP_DEFLATED); [zf.write(os.path.join(r, f), os.path.relpath(os.path.join(r, f), 'themes')) for r, _, fs in os.walk('themes/nezha-live') for f in fs]; zf.close()"
+
+
 build-agent:
 	@echo "==> Building Probe Agent (Static & Stripped)..."
 	mkdir -p bin

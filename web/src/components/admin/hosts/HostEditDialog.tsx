@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from "react";
 import { Check, CheckCircle2, Globe, Sliders, Ticket, X, Zap } from "lucide-react";
-import { Button, Chip, Input, ListBox, Select, Switch } from "@heroui/react";
+import { Switch } from "@heroui/react";
 import { NodeSettings, NodeState, ThemeMode } from "../../../types";
 import { getRegionFlag } from "../../../utils/flags";
-import { cn } from "../../../lib/utils";
 import { TagInput } from "../../TagInput";
 import { DatePicker } from "../../DatePicker";
 import { BandwidthConfig } from "../../BandwidthConfig";
+import { BlueprintSelect } from "../../ui/BlueprintSelect";
 import { BILLING_CYCLE_OPTIONS, CURRENCY_OPTIONS } from "./billingOptions";
 
 interface HostEditDialogProps {
@@ -18,15 +18,6 @@ interface HostEditDialogProps {
   onSaved?: () => void;
 }
 
-/**
- * Derives the editable draft from a live node.
- *
- * Nothing here invents a value the node never reported: an unconfigured host
- * opens with empty/zero fields so a save cannot silently pin a made-up price,
- * quota or traffic figure onto it. `bandwidth_used` is the operator's
- * calibration baseline (0 = 未校准，直接按网卡累计), not the currently displayed
- * usage, so reopening the dialog never re-pins the live counter.
- */
 const toDraft = (node: NodeState): NodeSettings => ({
   node_id: node.node_id,
   name: node.name,
@@ -51,10 +42,6 @@ export const HostEditDialog: React.FC<HostEditDialogProps> = ({
   onClose,
   onSaved,
 }) => {
-  const isDark = theme === "dark" || theme === "btop" || theme === "blueprint-dark";
-  const isLight = !isDark;
-  const isBlueprint = isLight;
-
   const [draft, setDraft] = useState<NodeSettings>(() => toDraft(node));
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [settingsLoadError, setSettingsLoadError] = useState<string | null>(null);
@@ -69,19 +56,11 @@ export const HostEditDialog: React.FC<HostEditDialogProps> = ({
   const patch = (fields: Partial<NodeSettings>) => setDraft((prev) => ({ ...prev, ...fields }));
 
   const liveTotalBytes = (node.network.bytes_sent || 0) + (node.network.bytes_recv || 0);
-  // Split taken from the same two fields the total is summed from, so the
-  // ↑/↓ detail can never disagree with the total shown beside it. The
-  // billing.bandwidth_live_* pair carries the identical reading, but mixing the
-  // two sources would let them drift apart by one report.
   const liveSplit = {
     up: node.network.bytes_sent || 0,
     down: node.network.bytes_recv || 0,
   };
 
-  // The live node carries effective usage, not the saved baseline. Wait for the
-  // persisted row before mounting BandwidthConfig: it initializes its input
-  // state from props only once, and mounting it with the draft's initial zero
-  // would keep showing zero even after this request completes.
   useEffect(() => {
     let cancelled = false;
     setSettingsLoaded(false);
@@ -178,209 +157,156 @@ export const HostEditDialog: React.FC<HostEditDialogProps> = ({
     }
   };
 
-  const labelCls = cn(
-    "block mb-1 text-xs font-semibold tracking-tight font-sans",
-    isBlueprint ? "text-slate-700" : "text-zinc-300"
-  );
+  const labelCls = "block mb-1 text-11 font-mono font-bold text-[var(--nezha-ink-3)] uppercase";
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-0 sm:p-4 lg:p-6 bg-black/75 backdrop-blur-sm animate-fade-in font-sans">
-      <div
-        className={cn(
-          "relative flex flex-col w-full max-w-3xl h-[100dvh] sm:h-auto sm:max-h-[90vh] rounded-none sm:rounded-2xl border-0 sm:border shadow-2xl overflow-hidden transition-colors",
-          isBlueprint
-            ? "bg-white border-slate-200/90 text-slate-900 shadow-slate-300/60"
-            : "bg-zinc-900 border-zinc-800 text-zinc-100 shadow-black/80"
-        )}
-      >
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-0 sm:p-4 lg:p-6 bg-black/80 backdrop-blur-sm animate-fade-in font-mono">
+      <div className="relative flex flex-col w-full max-w-3xl h-[100dvh] sm:h-auto sm:max-h-[90vh] rounded-none border-1.5 border-[var(--nezha-line)] bg-[var(--nezha-panel)] text-[var(--nezha-ink)] shadow-2xl overflow-hidden transition-colors">
         {/* Dialog header */}
-        <div
-          className={cn(
-            "flex items-center justify-between gap-2.5 sm:gap-3 px-4 py-3 sm:px-6 sm:py-4 border-b shrink-0",
-            isBlueprint ? "border-slate-200/80 bg-slate-50/70" : "border-zinc-800 bg-zinc-950/40"
-          )}
-        >
+        <div className="flex items-center justify-between gap-2.5 sm:gap-3 px-4 py-3 sm:px-6 sm:py-3.5 border-b border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] shrink-0">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div
-              className={cn(
-                "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border",
-                isBlueprint
-                  ? "bg-indigo-50 border-indigo-200/80 text-indigo-600"
-                  : "bg-indigo-950/50 border-indigo-800/60 text-indigo-400"
-              )}
-            >
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel)] text-[var(--nezha-accent)]">
               <Sliders className="h-4 w-4" />
             </div>
             <div className="min-w-0">
-              <h2
-                className={cn(
-                  "text-base font-bold tracking-tight truncate",
-                  isBlueprint ? "text-slate-900" : "text-zinc-100"
-                )}
-              >
-                配置主机：{draft.name || draft.node_id}
+              <h2 className="text-sm sm:text-base font-bold tracking-tight truncate text-[var(--nezha-ink)]">
+                [ CONFIG · HOST ] // {draft.name || draft.node_id}
               </h2>
-              <p className={cn("text-11 font-mono mt-0.5", isBlueprint ? "text-slate-500" : "text-zinc-500")}>
-                {draft.node_id}
+              <p className="text-11 font-mono text-[var(--nezha-ink-3)] mt-0.5">
+                IDENTIFIER: {draft.node_id}
               </p>
             </div>
           </div>
-          <Button variant="ghost" size="sm" isIconOnly type="button" onPress={onClose} aria-label="关闭">
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1.5 rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel)] hover:bg-[var(--nezha-accent)] hover:text-[#141414] text-[var(--nezha-ink)] cursor-pointer"
+            aria-label="关闭"
+          >
             <X className="h-4 w-4" />
-          </Button>
+          </button>
         </div>
 
         {/* Scrollable body */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 text-xs">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 text-xs font-mono">
           {geoNotice && (
-            <div className="alert alert-success py-2.5 px-3.5 text-xs flex items-center gap-2">
+            <div className="border border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 py-2.5 px-3.5 text-xs flex items-center gap-2 rounded-none font-bold">
               <CheckCircle2 className="h-4 w-4 shrink-0" />
               <span>{geoNotice}</span>
             </div>
           )}
           {geoError && (
-            <div className="alert alert-danger py-2.5 px-3.5 text-xs flex items-center gap-2" role="alert">
+            <div className="border border-rose-500/40 bg-rose-500/10 text-rose-600 dark:text-rose-400 py-2.5 px-3.5 text-xs flex items-center gap-2 rounded-none font-bold" role="alert">
               <X className="h-4 w-4 shrink-0" />
               <span>{geoError}</span>
             </div>
           )}
 
           {/* Auto-identified region & provider */}
-          <div
-            className={cn(
-              "rounded-xl border p-3 flex flex-wrap items-center justify-between gap-3 font-sans transition-colors",
-              isBlueprint
-                ? "bg-slate-50/80 border-slate-200/90 text-slate-800"
-                : "bg-zinc-900/60 border-zinc-800 text-zinc-200"
-            )}
-          >
+          <div className="border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] p-3 flex flex-wrap items-center justify-between gap-3 text-xs rounded-none">
             <div className="flex flex-wrap items-center gap-3">
-              <div className="flex items-center gap-1.5 text-xs font-semibold">
-                <Globe className="h-4 w-4 text-indigo-500 shrink-0" />
-                <span className={isBlueprint ? "text-slate-600" : "text-zinc-400"}>归属地区:</span>
-                <span
-                  className={cn(
-                    "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-semibold shadow-2xs",
-                    isBlueprint
-                      ? "bg-white border-slate-200 text-slate-800"
-                      : "bg-zinc-800 border-zinc-700 text-zinc-100"
-                  )}
-                >
+              <div className="flex items-center gap-1.5 text-xs font-bold">
+                <Globe className="h-4 w-4 text-[var(--nezha-accent)] shrink-0" />
+                <span className="text-[var(--nezha-ink-3)]">归属地区:</span>
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel)] text-[var(--nezha-ink)] text-xs font-bold">
                   <span className="text-sm leading-none">{getRegionFlag(draft.region || "")}</span>
                   <span className="leading-none">{draft.region || "自动识别中"}</span>
                 </span>
               </div>
 
-              <div className="flex items-center gap-1.5 text-xs font-semibold">
-                <span className={isBlueprint ? "text-slate-600" : "text-zinc-400"}>服务商/线路:</span>
-                <span
-                  className={cn(
-                    "inline-flex items-center px-2.5 py-1 rounded-lg border text-xs font-semibold shadow-2xs",
-                    isBlueprint
-                      ? "bg-white border-slate-200 text-slate-800"
-                      : "bg-zinc-800 border-zinc-700 text-zinc-100",
-                    !draft.provider && "italic text-slate-400 dark:text-zinc-500"
-                  )}
-                >
+              <div className="flex items-center gap-1.5 text-xs font-bold">
+                <span className="text-[var(--nezha-ink-3)]">服务商/线路:</span>
+                <span className="inline-flex items-center px-2.5 py-1 rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel)] text-[var(--nezha-ink)] text-xs font-bold">
                   {draft.provider || "智能测定中..."}
                 </span>
               </div>
 
               {draft.public_ip && (
-                <span className={cn("text-[11px] font-mono", isBlueprint ? "text-slate-500" : "text-zinc-500")}>
+                <span className="text-11 font-mono text-[var(--nezha-ink-3)]">
                   (出口 IP: {draft.public_ip})
                 </span>
               )}
             </div>
 
             <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
+              <button
                 type="button"
-                onPress={handleAutoResolveGeo}
-                isDisabled={isResolvingGeo}
-                className={cn(
-                  "gap-1 font-medium text-xs",
-                  isBlueprint
-                    ? "bg-white hover:bg-slate-100 border-slate-200 text-slate-700"
-                    : "bg-zinc-800 hover:bg-zinc-700 border-zinc-700 text-zinc-200"
-                )}
+                onClick={handleAutoResolveGeo}
+                disabled={isResolvingGeo}
+                className="h-7 px-2.5 text-11 font-mono font-bold rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel)] hover:border-[var(--nezha-ink)] text-[var(--nezha-ink)] flex items-center gap-1 cursor-pointer disabled:opacity-50"
                 aria-label="根据该节点公网 IP 自动重新解析国家地区与网络线路"
               >
-                <Zap className={cn("h-3 w-3 text-indigo-500", isResolvingGeo && "animate-spin")} />
+                <Zap className={`h-3 w-3 text-[var(--nezha-accent)] ${isResolvingGeo ? "animate-spin" : ""}`} />
                 <span>{isResolvingGeo ? "识别中..." : "重新识别"}</span>
-              </Button>
+              </button>
 
-              <Button
-                variant="ghost"
-                size="sm"
+              <button
                 type="button"
-                onPress={() => setShowManualOverride(!showManualOverride)}
-                className="text-11 text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-200"
+                onClick={() => setShowManualOverride(!showManualOverride)}
+                className="h-7 px-2 text-11 font-mono text-[var(--nezha-ink-3)] hover:text-[var(--nezha-ink)] flex items-center gap-1 cursor-pointer"
               >
-                {showManualOverride ? "收起手动覆盖" : "手动微调 ▾"}
-              </Button>
+                {showManualOverride ? "收起微调 ▴" : "手动微调 ▾"}
+              </button>
             </div>
           </div>
 
           {/* Manual overrides, collapsed by default */}
           {showManualOverride && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 p-3 rounded-xl border border-dashed border-slate-200 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-950/40 animate-fade-in">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 p-3 rounded-none border border-dashed border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)]">
               <div>
                 <label className={labelCls} htmlFor="host-region-override">
                   强制指定地区 (覆盖自动识别)
                 </label>
-                <Input
+                <input
                   id="host-region-override"
                   type="text"
                   value={draft.region || ""}
                   onChange={(e) => patch({ region: e.target.value })}
                   placeholder="如 HK, US, JP, SG 等"
-                  className="w-full text-xs"
+                  className="w-full h-8 px-2.5 text-xs font-mono rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel)] text-[var(--nezha-ink)] focus:border-[var(--nezha-accent)] focus:outline-none"
                 />
               </div>
               <div>
                 <label className={labelCls} htmlFor="host-provider-override">
                   强制指定服务商/线路 (覆盖自动识别)
                 </label>
-                <Input
+                <input
                   id="host-provider-override"
                   type="text"
                   value={draft.provider || ""}
                   onChange={(e) => patch({ provider: e.target.value })}
                   placeholder="如 BandwagonHost CN2 GIA, Oracle"
-                  className="w-full text-xs"
+                  className="w-full h-8 px-2.5 text-xs font-mono rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel)] text-[var(--nezha-ink)] focus:border-[var(--nezha-accent)] focus:outline-none"
                 />
               </div>
               <div>
                 <label className={labelCls} htmlFor="host-public-ip">
                   公网 IPv4 (覆盖自动探测)
                 </label>
-                <Input
+                <input
                   id="host-public-ip"
                   type="text"
                   value={draft.public_ip || ""}
                   onChange={(e) => patch({ public_ip: e.target.value })}
                   placeholder={node.system.public_ip || "留空则用 Agent 探测结果"}
-                  className="w-full text-xs font-mono"
+                  className="w-full h-8 px-2.5 text-xs font-mono rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel)] text-[var(--nezha-ink)] focus:border-[var(--nezha-accent)] focus:outline-none"
                 />
               </div>
               <div>
                 <label className={labelCls} htmlFor="host-public-ipv6">
                   公网 IPv6 (覆盖自动探测)
                 </label>
-                <Input
+                <input
                   id="host-public-ipv6"
                   type="text"
                   value={draft.public_ipv6 || ""}
                   onChange={(e) => patch({ public_ipv6: e.target.value })}
                   placeholder={node.system.public_ipv6 || "留空则用 Agent 探测结果"}
-                  className="w-full text-xs font-mono"
+                  className="w-full h-8 px-2.5 text-xs font-mono rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel)] text-[var(--nezha-ink)] focus:border-[var(--nezha-accent)] focus:outline-none"
                 />
               </div>
-              <p className={cn("sm:col-span-2 text-10", isBlueprint ? "text-slate-500" : "text-zinc-500")}>
-                NAT/Docker 环境下 Agent 可能只看到内网地址。这两项一旦填写就以你填的为准，留空则回退到 Agent 探测值。
+              <p className="sm:col-span-2 text-10 text-[var(--nezha-ink-3)] font-mono">
+                NAT/Docker 环境下 Agent 可能只看到内网地址。填写后以此为准，留空则回退到 Agent 探测值。
               </p>
             </div>
           )}
@@ -390,77 +316,49 @@ export const HostEditDialog: React.FC<HostEditDialogProps> = ({
               <label className={labelCls} htmlFor="host-name">
                 主机展示名称 (Name)
               </label>
-              <Input
+              <input
                 id="host-name"
                 type="text"
                 value={draft.name || ""}
                 onChange={(e) => patch({ name: e.target.value })}
-                className="w-full text-xs"
+                className="w-full h-8 px-2.5 text-xs font-mono rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] text-[var(--nezha-ink)] focus:border-[var(--nezha-accent)] focus:outline-none"
               />
             </div>
             <div>
               <label className={labelCls} htmlFor="host-price">
                 计费单价 (Price)
               </label>
-              <Input
+              <input
                 id="host-price"
                 type="number"
                 step="0.01"
                 value={draft.price}
                 onChange={(e) => patch({ price: parseFloat(e.target.value) || 0 })}
-                className="w-full font-mono text-xs font-bold"
+                className="w-full h-8 px-2.5 font-mono text-xs font-bold rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] text-[var(--nezha-ink)] focus:border-[var(--nezha-accent)] focus:outline-none"
               />
             </div>
             <div>
               <label className={labelCls}>货币单位 (Currency)</label>
-              <Select
-                selectedKey={draft.currency}
-                onSelectionChange={(key) => patch({ currency: String(key) })}
+              <BlueprintSelect
+                value={draft.currency || "USD"}
+                options={CURRENCY_OPTIONS}
+                onChange={(val) => patch({ currency: val })}
                 aria-label="货币单位"
-                fullWidth
-              >
-                <Select.Trigger className="font-mono text-xs font-bold">
-                  <Select.Value />
-                  <Select.Indicator />
-                </Select.Trigger>
-                <Select.Popover>
-                  <ListBox>
-                    {CURRENCY_OPTIONS.map((o) => (
-                      <ListBox.Item key={o.key} id={o.key} textValue={o.label}>
-                        {o.label}
-                      </ListBox.Item>
-                    ))}
-                  </ListBox>
-                </Select.Popover>
-              </Select>
+              />
             </div>
             <div>
               <label className={labelCls}>计费周期 (Billing Cycle)</label>
-              <Select
-                selectedKey={draft.billing_cycle}
-                onSelectionChange={(key) => patch({ billing_cycle: String(key) })}
+              <BlueprintSelect
+                value={draft.billing_cycle || "monthly"}
+                options={BILLING_CYCLE_OPTIONS}
+                onChange={(val) => patch({ billing_cycle: val })}
                 aria-label="计费周期"
-                fullWidth
-              >
-                <Select.Trigger className="text-xs font-semibold">
-                  <Select.Value />
-                  <Select.Indicator />
-                </Select.Trigger>
-                <Select.Popover>
-                  <ListBox>
-                    {BILLING_CYCLE_OPTIONS.map((o) => (
-                      <ListBox.Item key={o.key} id={o.key} textValue={o.label}>
-                        {o.label}
-                      </ListBox.Item>
-                    ))}
-                  </ListBox>
-                </Select.Popover>
-              </Select>
+              />
             </div>
           </div>
 
           <div>
-            <label className={cn(labelCls, "text-xs")}>服务到期时间 (Expiry Date)</label>
+            <label className={labelCls}>服务到期时间 (Expiry Date)</label>
             <DatePicker
               value={draft.expiry_date || ""}
               onChange={(dateVal) => patch({ expiry_date: dateVal })}
@@ -469,7 +367,7 @@ export const HostEditDialog: React.FC<HostEditDialogProps> = ({
           </div>
 
           <div>
-            <label className={cn(labelCls, "text-xs")}>流量配额与使用量设置 (Bandwidth Settings)</label>
+            <label className={labelCls}>流量配额与使用量设置 (Bandwidth Settings)</label>
             {settingsLoaded ? (
               <BandwidthConfig
                 quotaBytes={draft.bandwidth_quota}
@@ -482,14 +380,14 @@ export const HostEditDialog: React.FC<HostEditDialogProps> = ({
                 theme={theme}
               />
             ) : (
-              <p className="text-xs text-slate-500 dark:text-zinc-400">
+              <p className="text-xs text-[var(--nezha-ink-3)] font-mono">
                 {settingsLoadError || "正在读取主机设置..."}
               </p>
             )}
           </div>
 
           <div>
-            <label className={cn(labelCls, "text-xs")}>线路与特性标签 (Tags)</label>
+            <label className={labelCls}>线路与特性标签 (Tags)</label>
             <TagInput
               tags={draft.tags || []}
               onChange={(newTags) => patch({ tags: newTags })}
@@ -499,23 +397,23 @@ export const HostEditDialog: React.FC<HostEditDialogProps> = ({
 
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label className={cn(labelCls, "text-xs mb-0 flex items-center gap-1.5")} htmlFor="host-note">
-                <Ticket className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+              <label className={`${labelCls} mb-0 flex items-center gap-1.5`} htmlFor="host-note">
+                <Ticket className="h-3.5 w-3.5 text-[var(--nezha-accent)] shrink-0" />
                 <span>备注备忘 / 优惠折扣码 (Notes & Promo Code)</span>
               </label>
-              <span className={cn("text-10", isBlueprint ? "text-slate-400" : "text-zinc-500")}>
+              <span className="text-10 text-[var(--nezha-ink-3)] font-mono">
                 选填 · 支持随时修改
               </span>
             </div>
-            <Input
+            <input
               id="host-note"
               type="text"
               value={draft.note || ""}
               onChange={(e) => patch({ note: e.target.value })}
               placeholder="如：续费循环5折码 PROMO50 / 购买渠道 / 账号备忘"
-              className="w-full text-xs font-mono"
+              className="w-full h-8 px-2.5 text-xs font-mono rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] text-[var(--nezha-ink)] focus:border-[var(--nezha-accent)] focus:outline-none"
             />
-            <p className={cn("mt-1 text-[11px]", isBlueprint ? "text-slate-500" : "text-zinc-400")}>
+            <p className="mt-1 text-10 text-[var(--nezha-ink-3)] font-mono">
               保存后会在主机卡片和详情页醒目标出，支持在卡片与详情页一键复制。
             </p>
           </div>
@@ -525,13 +423,12 @@ export const HostEditDialog: React.FC<HostEditDialogProps> = ({
               isSelected={draft.auto_renewal}
               onChange={(v) => patch({ auto_renewal: v })}
               size="sm"
-              className="text-xs font-medium"
             >
               <Switch.Content className="gap-2">
                 <Switch.Control>
                   <Switch.Thumb />
                 </Switch.Control>
-                <span className={isBlueprint ? "text-slate-800" : "text-zinc-200"}>
+                <span className="text-xs font-bold font-mono text-[var(--nezha-ink)]">
                   开启到期自动续费 (Auto Renewal)
                 </span>
               </Switch.Content>
@@ -540,40 +437,32 @@ export const HostEditDialog: React.FC<HostEditDialogProps> = ({
         </div>
 
         {/* Sticky footer actions */}
-        <div
-          className={cn(
-            "flex flex-wrap items-center justify-end gap-3 px-4 py-3 sm:px-6 sm:py-4 border-t shrink-0 text-xs",
-            isBlueprint ? "border-slate-200/80 bg-slate-50/70" : "border-zinc-800 bg-zinc-950/40"
-          )}
-        >
+        <div className="flex flex-wrap items-center justify-end gap-3 px-4 py-3 sm:px-6 sm:py-3.5 border-t border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] shrink-0 text-xs font-mono">
           {saveError && (
-            <span className="mr-auto text-rose-600 dark:text-rose-400 font-medium" role="alert">
+            <span className="mr-auto text-rose-500 font-bold" role="alert">
               {saveError}
             </span>
           )}
           {saveSuccess && (
-            <Chip color="success" variant="soft" size="sm" className="mr-auto flex items-center gap-1 font-medium">
-              <Check className="h-3.5 w-3.5" /> 配置保存成功！
-            </Chip>
+            <span className="mr-auto inline-flex items-center gap-1 font-bold text-emerald-600 dark:text-emerald-400">
+              <Check className="h-3.5 w-3.5" /> [OK] 配置保存成功！
+            </span>
           )}
-          <Button
-            variant="ghost"
-            size="sm"
+          <button
             type="button"
-            onPress={onClose}
-            className="text-slate-600 dark:text-zinc-400"
+            onClick={onClose}
+            className="h-8 px-4 text-xs font-mono font-bold rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel)] hover:border-[var(--nezha-ink)] text-[var(--nezha-ink)] cursor-pointer"
           >
             取消
-          </Button>
-          <Button
-            size="sm"
+          </button>
+          <button
             type="button"
-            onPress={handleSave}
-            isDisabled={isSaving || !settingsLoaded}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs px-4 py-2 rounded-xl shadow-xs transition-colors cursor-pointer"
+            onClick={handleSave}
+            disabled={isSaving || !settingsLoaded}
+            className="h-8 px-4 text-xs font-mono font-bold rounded-none border border-[#141414]/30 bg-[var(--nezha-accent)] hover:bg-[#E54D16] text-[#141414] shadow-none transition-colors cursor-pointer disabled:opacity-50"
           >
             {isSaving ? "保存中..." : !settingsLoaded && !settingsLoadError ? "读取中..." : "保存主机设置"}
-          </Button>
+          </button>
         </div>
       </div>
     </div>

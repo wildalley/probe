@@ -1,26 +1,33 @@
 import React, { useRef, useState } from "react";
-import { RefreshCw, Infinity as InfinityIcon, XCircle } from "lucide-react";
-import { Input, ListBox, Select } from "@heroui/react";
+import { Infinity as InfinityIcon, RefreshCw, XCircle } from "lucide-react";
 import { ThemeMode } from "../types";
 import { formatBytes } from "../utils/format";
 import type { TrafficSplit } from "../utils/traffic";
 import { cn } from "../lib/utils";
+import { BlueprintSelect, SelectOption } from "./ui/BlueprintSelect";
 
 interface BandwidthConfigProps {
   quotaBytes: number;
   usedBytes: number;
   liveTotalBytes?: number;
-  /**
-   * 网卡累计的上下行明细，仅用于展示。校准基线本身是服务商面板上的单一合并
-   * 数字，方向占比无从得知，所以这里不提供按方向分别填入的入口——那会造出一个
-   * 操作者无法正确填写的字段。
-   */
   liveSplit?: TrafficSplit | null;
   onChange: (quotaBytes: number, usedBytes: number) => void;
   theme?: ThemeMode;
 }
 
 type Unit = "MB" | "GB" | "TB";
+
+const QUOTA_UNIT_OPTIONS: SelectOption[] = [
+  { key: "TB", label: "TB" },
+  { key: "GB", label: "GB" },
+  { key: "MB", label: "MB" },
+];
+
+const USED_UNIT_OPTIONS: SelectOption[] = [
+  { key: "GB", label: "GB" },
+  { key: "TB", label: "TB" },
+  { key: "MB", label: "MB" },
+];
 
 const UNIT_MULTIPLIERS: Record<Unit, number> = {
   MB: 1024 * 1024,
@@ -45,29 +52,16 @@ export const BandwidthConfig: React.FC<BandwidthConfigProps> = ({
   liveTotalBytes = 0,
   liveSplit = null,
   onChange,
-  theme = "dark",
 }) => {
-  const isDark = theme === "dark" || theme === "btop" || theme === "blueprint-dark";
-  const isLight = !isDark;
-  const isBlueprint = isLight;
-
   const isUnlimited = quotaBytes <= 0;
 
-  // Quota state. No prefill: an unset quota means unlimited, and inventing a
-  // 2TB default here made every unconfigured host look like it had one.
   const initialQuota = getBestUnit(quotaBytes);
   const [quotaVal, setQuotaVal] = useState<number>(initialQuota.value);
   const [quotaUnit, setQuotaUnit] = useState<Unit>(initialQuota.unit);
 
-  // Calibration baseline. This is the number the operator reads off their
-  // provider's panel; the server counts real traffic on top of it from the
-  // moment it is saved. Empty (0) means "no calibration, count from the
-  // interface counter", so it must not be seeded from the live counter.
   const initialUsed = getBestUnit(usedBytes);
   const [usedVal, setUsedVal] = useState<number>(initialUsed.value);
   const [usedUnit, setUsedUnit] = useState<Unit>(initialUsed.unit);
-  // Keep the byte value exact while changing quota or display units. Rounding
-  // the visible number and sending it back would silently recalibrate usage.
   const usedBytesRef = useRef(usedBytes);
 
   // Sync to parent whenever values change
@@ -115,45 +109,28 @@ export const BandwidthConfig: React.FC<BandwidthConfigProps> = ({
   const remainingBytes = Math.max(0, totalCalcQuota - totalCalcUsed);
 
   return (
-    <div className="space-y-3 font-sans text-xs">
+    <div className="space-y-3 font-mono text-xs">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {/* 1. 流量总额配置 */}
-        <div
-          className={`p-3 rounded-xl border ${
-            isBlueprint ? "bg-white border-slate-200" : "bg-zinc-950/70 border-zinc-800"
-          }`}
-        >
+        <div className="p-3 rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)]">
           <div className="flex items-center justify-between mb-2">
-            <span className={`font-semibold ${isBlueprint ? "text-slate-800" : "text-zinc-200"}`}>
+            <span className="font-bold text-[var(--nezha-ink)]">
               流量总配额 (Quota)
             </span>
             <button
               type="button"
               onClick={() => handleQuotaChange(quotaVal > 0 ? quotaVal : 2, quotaUnit, !isUnlimited)}
-              className={cn(
-                "flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer select-none active:scale-95 border",
-                isUnlimited
-                  ? isBlueprint
-                    ? "bg-indigo-50 text-indigo-700 border-indigo-200 shadow-2xs hover:bg-indigo-100"
-                    : "bg-indigo-500/20 text-indigo-300 border-indigo-500/40 hover:bg-indigo-500/30"
-                  : isBlueprint
-                  ? "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 hover:text-slate-800"
-                  : "bg-zinc-900 text-zinc-400 border-zinc-800 hover:bg-zinc-800 hover:text-zinc-200"
-              )}
+              className="h-7 px-2.5 text-11 font-mono font-bold rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel)] hover:border-[var(--nezha-ink)] text-[var(--nezha-ink)] cursor-pointer flex items-center gap-1.5 transition-colors"
               title={isUnlimited ? "点击关闭无限制并设置具体配额" : "点击开启无限制流量"}
             >
-              <InfinityIcon className={cn("h-3.5 w-3.5", isUnlimited ? "text-indigo-600 dark:text-indigo-400" : isBlueprint ? "text-slate-400" : "text-zinc-500")} />
+              <InfinityIcon className={cn("h-3.5 w-3.5", isUnlimited ? "text-[var(--nezha-accent)]" : "text-[var(--nezha-ink-3)]")} />
               <span>无限制</span>
               <span
                 className={cn(
-                  "px-1 py-0.5 rounded text-[10px] uppercase font-bold",
+                  "px-1 py-0.2 rounded-none text-9 font-bold",
                   isUnlimited
-                    ? isBlueprint
-                      ? "bg-indigo-100 text-indigo-700"
-                      : "bg-indigo-500/30 text-indigo-200"
-                    : isBlueprint
-                    ? "bg-slate-200 text-slate-600"
-                    : "bg-zinc-800 text-zinc-500"
+                    ? "bg-[var(--nezha-accent)] text-[#141414]"
+                    : "bg-[var(--nezha-panel-sub)] text-[var(--nezha-ink-3)] border border-[var(--nezha-line)]"
                 )}
               >
                 {isUnlimited ? "ON" : "OFF"}
@@ -163,7 +140,7 @@ export const BandwidthConfig: React.FC<BandwidthConfigProps> = ({
 
           {!isUnlimited ? (
             <div className="flex items-center gap-1.5">
-              <Input
+              <input
                 type="number"
                 min="0"
                 step="any"
@@ -171,74 +148,28 @@ export const BandwidthConfig: React.FC<BandwidthConfigProps> = ({
                 onChange={(e) => handleQuotaChange(parseFloat(e.target.value) || 0, quotaUnit, false)}
                 placeholder="2"
                 aria-label="流量总配额数值"
-                className="flex-1 font-mono font-bold"
+                className="w-full h-8 px-2.5 text-xs font-mono font-bold rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel)] text-[var(--nezha-ink)] focus:border-[var(--nezha-accent)] focus:outline-none"
               />
-              <Select
-                selectedKey={quotaUnit}
-                onSelectionChange={(key) => handleUnitSwitchQuota(key as Unit)}
+              <BlueprintSelect
+                value={quotaUnit}
+                options={QUOTA_UNIT_OPTIONS}
+                onChange={(val) => handleUnitSwitchQuota(val as Unit)}
                 aria-label="流量总配额单位"
-              >
-                <Select.Trigger className={cn(
-                  "relative inline-flex items-center justify-between min-w-[76px] h-9 pl-3 pr-7 font-mono font-bold text-xs rounded-xl border transition-all cursor-pointer",
-                  isBlueprint
-                    ? "bg-white border-slate-200 hover:border-slate-300 text-slate-800 shadow-xs"
-                    : "bg-zinc-900 border-zinc-800 hover:border-zinc-700 text-zinc-100"
-                )}>
-                  <Select.Value />
-                  <Select.Indicator className="text-slate-400 dark:text-zinc-500" />
-                </Select.Trigger>
-                <Select.Popover className={cn(
-                  "p-1 rounded-xl border shadow-xl z-[70] min-w-[76px] animate-fade-in outline-none",
-                  isBlueprint
-                    ? "bg-white border-slate-200 text-slate-800 shadow-slate-200/80"
-                    : "bg-zinc-900 border-zinc-700 text-zinc-100 shadow-black/80"
-                )}>
-                  <ListBox className="outline-none">
-                    {(["TB", "GB", "MB"] as const).map((u) => (
-                      <ListBox.Item
-                        key={u}
-                        id={u}
-                        className={cn(
-                          "px-3 py-1.5 text-xs font-mono font-medium rounded-lg cursor-pointer transition-colors outline-none",
-                          isBlueprint
-                            ? "hover:bg-slate-100 text-slate-800 data-[selected=true]:bg-indigo-50 data-[selected=true]:text-indigo-600 data-[selected=true]:font-bold"
-                            : "hover:bg-zinc-800 text-zinc-200 data-[selected=true]:bg-indigo-500/20 data-[selected=true]:text-indigo-300 data-[selected=true]:font-bold"
-                        )}
-                      >
-                        {u}
-                      </ListBox.Item>
-                    ))}
-                  </ListBox>
-                </Select.Popover>
-              </Select>
+                align="right"
+                className="w-20 shrink-0"
+              />
             </div>
           ) : (
-            <div className={`py-2 px-3 rounded-xl border flex items-center justify-between gap-2 ${
-              isBlueprint ? "bg-slate-50/80 border-slate-200 text-slate-700" : "bg-zinc-900/60 border-zinc-800 text-zinc-300"
-            }`}>
-              <div className="flex items-center gap-2">
-                <div className={`p-1.5 rounded-lg shrink-0 ${
-                  isBlueprint ? "bg-indigo-50 text-indigo-600 border border-indigo-200/80" : "bg-indigo-500/20 text-indigo-400"
-                }`}>
-                  <InfinityIcon className="h-4 w-4" />
-                </div>
-                <div>
-                  <div className={`font-semibold text-xs ${isBlueprint ? "text-slate-900" : "text-zinc-100"}`}>
-                    无限流量模式
-                  </div>
-                  <div className={`text-10 ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}>
-                    不限制服务器月度流量总额
-                  </div>
-                </div>
+            <div className="h-8 px-3 rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel)] flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5">
+                <InfinityIcon className="h-3.5 w-3.5 text-[var(--nezha-accent)]" />
+                <span className="font-bold text-xs text-[var(--nezha-ink)]">无限流量模式</span>
+                <span className="text-10 text-[var(--nezha-ink-3)]">(不限制服务器月度流量总额)</span>
               </div>
               <button
                 type="button"
                 onClick={() => handleQuotaChange(quotaVal > 0 ? quotaVal : 2, quotaUnit, false)}
-                className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all cursor-pointer shrink-0 active:scale-95 ${
-                  isBlueprint
-                    ? "bg-white border-slate-200 text-slate-700 hover:bg-slate-50 shadow-2xs"
-                    : "bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700"
-                }`}
+                className="h-6 px-2 text-11 font-mono font-bold rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] text-[var(--nezha-ink)] hover:border-[var(--nezha-ink)] cursor-pointer"
               >
                 自定义配额
               </button>
@@ -247,24 +178,17 @@ export const BandwidthConfig: React.FC<BandwidthConfigProps> = ({
         </div>
 
         {/* 2. 已用流量配置 / 校准 */}
-        <div
-          className={`p-3 rounded-xl border ${
-            isBlueprint ? "bg-white border-slate-200" : "bg-zinc-950/70 border-zinc-800"
-          }`}
-        >
+        <div className="p-3 rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)]">
           <div className="flex items-center justify-between mb-2">
-            <span className={`font-semibold ${isBlueprint ? "text-slate-800" : "text-zinc-200"}`}>
+            <span className="font-bold text-[var(--nezha-ink)]">
               已用流量校准基线
             </span>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               {totalCalcUsed > 0 && (
                 <button
                   type="button"
                   onClick={() => handleUsedChange(0, usedUnit)}
-                  className={cn(
-                    "flex items-center gap-1 text-11 transition-all cursor-pointer active:scale-95",
-                    isBlueprint ? "text-slate-500 hover:text-slate-800" : "text-zinc-500 hover:text-zinc-200"
-                  )}
+                  className="h-6 px-2 text-11 font-mono font-bold rounded-none border border-rose-500/30 text-rose-500 hover:bg-rose-500/10 cursor-pointer flex items-center gap-1"
                   title="清空基线，改为直接按网卡累计值统计"
                 >
                   <XCircle className="h-3 w-3" />
@@ -275,24 +199,24 @@ export const BandwidthConfig: React.FC<BandwidthConfigProps> = ({
                 <button
                   type="button"
                   onClick={handleSyncLive}
-                  className="flex items-center gap-1 text-11 text-indigo-500 hover:text-indigo-400 transition-all cursor-pointer active:scale-95"
+                  className="h-6 px-2 text-11 font-mono font-bold rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel)] hover:border-[var(--nezha-ink)] text-[var(--nezha-ink)] cursor-pointer flex items-center gap-1"
                   title={`填入当前网卡累计值: ${formatBytes(liveTotalBytes)}`}
                 >
-                  <RefreshCw className="h-3 w-3" />
+                  <RefreshCw className="h-3 w-3 text-[var(--nezha-accent)]" />
                   <span>填入网卡值</span>
                 </button>
               )}
             </div>
           </div>
 
-          <div className={`text-10 mb-2 ${isBlueprint ? "text-slate-500" : "text-zinc-400"}`}>
-            填入服务商面板上的已用量，保存后服务端会在此基线上继续累计真实流量。
+          <div className="text-10 text-[var(--nezha-ink-3)] mb-2">
+            填入服务商面板上的已用量，保存后服务端会在此基线上继续累计。
             {liveTotalBytes > 0 && (
-              <span className="ml-1">
-                当前网卡累计 <strong className={isBlueprint ? "text-slate-700" : "text-zinc-300"}>{formatBytes(liveTotalBytes)}</strong>
+              <span className="ml-1 text-[var(--nezha-ink)] font-bold">
+                当前网卡累计 {formatBytes(liveTotalBytes)}
                 {liveSplit && (
-                  <span className="ml-1">
-                    （↑{formatBytes(liveSplit.up)} ↓{formatBytes(liveSplit.down)}）
+                  <span className="ml-1 opacity-80">
+                    (↑{formatBytes(liveSplit.up)} ↓{formatBytes(liveSplit.down)})
                   </span>
                 )}
               </span>
@@ -300,7 +224,7 @@ export const BandwidthConfig: React.FC<BandwidthConfigProps> = ({
           </div>
 
           <div className="flex items-center gap-1.5">
-            <Input
+            <input
               type="number"
               min="0"
               step="any"
@@ -308,74 +232,41 @@ export const BandwidthConfig: React.FC<BandwidthConfigProps> = ({
               onChange={(e) => handleUsedChange(parseFloat(e.target.value) || 0, usedUnit)}
               placeholder="0"
               aria-label="已用流量数值"
-              className="flex-1 font-mono font-bold"
+              className="w-full h-8 px-2.5 text-xs font-mono font-bold rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel)] text-[var(--nezha-ink)] focus:border-[var(--nezha-accent)] focus:outline-none"
             />
-            <Select
-              selectedKey={usedUnit}
-              onSelectionChange={(key) => handleUnitSwitchUsed(key as Unit)}
+            <BlueprintSelect
+              value={usedUnit}
+              options={USED_UNIT_OPTIONS}
+              onChange={(val) => handleUnitSwitchUsed(val as Unit)}
               aria-label="已用流量单位"
-            >
-              <Select.Trigger className={cn(
-                "relative inline-flex items-center justify-between min-w-[76px] h-9 pl-3 pr-7 font-mono font-bold text-xs rounded-xl border transition-all cursor-pointer",
-                isBlueprint
-                  ? "bg-white border-slate-200 hover:border-slate-300 text-slate-800 shadow-xs"
-                  : "bg-zinc-900 border-zinc-800 hover:border-zinc-700 text-zinc-100"
-              )}>
-                <Select.Value />
-                <Select.Indicator className="text-slate-400 dark:text-zinc-500" />
-              </Select.Trigger>
-              <Select.Popover className={cn(
-                "p-1 rounded-xl border shadow-xl z-[70] min-w-[76px] animate-fade-in outline-none",
-                isBlueprint
-                  ? "bg-white border-slate-200 text-slate-800 shadow-slate-200/80"
-                  : "bg-zinc-900 border-zinc-700 text-zinc-100 shadow-black/80"
-              )}>
-                <ListBox className="outline-none">
-                  {(["GB", "TB", "MB"] as const).map((u) => (
-                    <ListBox.Item
-                      key={u}
-                      id={u}
-                      className={cn(
-                        "px-3 py-1.5 text-xs font-mono font-medium rounded-lg cursor-pointer transition-colors outline-none",
-                        isBlueprint
-                          ? "hover:bg-slate-100 text-slate-800 data-[selected=true]:bg-indigo-50 data-[selected=true]:text-indigo-600 data-[selected=true]:font-bold"
-                          : "hover:bg-zinc-800 text-zinc-200 data-[selected=true]:bg-indigo-500/20 data-[selected=true]:text-indigo-300 data-[selected=true]:font-bold"
-                      )}
-                    >
-                      {u}
-                    </ListBox.Item>
-                  ))}
-                </ListBox>
-              </Select.Popover>
-            </Select>
+              align="right"
+              className="w-20 shrink-0"
+            />
           </div>
         </div>
       </div>
 
       {/* Real-time preview & progress bar */}
       {!isUnlimited && totalCalcQuota > 0 && (
-        <div
-          className={`p-3 rounded-xl border ${
-            isBlueprint ? "bg-slate-50/80 border-slate-200" : "bg-zinc-900/50 border-zinc-800/80"
-          }`}
-        >
+        <div className="p-3 rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)]">
           <div className="flex items-center justify-between text-11 mb-1.5">
-            <span className={isBlueprint ? "text-slate-600" : "text-zinc-400"}>
-              用量进度: <strong className={isBlueprint ? "text-slate-900" : "text-zinc-100"}>{formatBytes(totalCalcUsed)}</strong> / {formatBytes(totalCalcQuota)}
+            <span className="text-[var(--nezha-ink-3)]">
+              用量进度: <strong className="text-[var(--nezha-ink)]">{formatBytes(totalCalcUsed)}</strong> / {formatBytes(totalCalcQuota)}
             </span>
-            <span className={`font-bold ${percentUsed >= 90 ? "text-rose-500" : percentUsed >= 70 ? "text-amber-500" : "text-indigo-500"}`}>
+            <span className={cn("font-bold font-mono", percentUsed >= 90 ? "text-rose-500" : percentUsed >= 70 ? "text-amber-500" : "text-[var(--nezha-accent-ink)] dark:text-[var(--nezha-accent)]")}>
               {percentUsed}% · 剩余 {formatBytes(remainingBytes)}
             </span>
           </div>
-          <div className={`h-2 w-full rounded-full overflow-hidden ${isBlueprint ? "bg-slate-200" : "bg-zinc-800"}`}>
+          <div className="h-2 w-full rounded-none overflow-hidden bg-[var(--nezha-track)]">
             <div
-              className={`h-full rounded-full transition-all duration-300 ${
+              className={cn(
+                "h-full rounded-none transition-all duration-300",
                 percentUsed >= 90
                   ? "bg-rose-500"
                   : percentUsed >= 70
                   ? "bg-amber-500"
-                  : "bg-indigo-500"
-              }`}
+                  : "bg-[var(--nezha-accent)]"
+              )}
               style={{ width: `${Math.min(100, Math.max(0, percentUsed))}%` }}
             />
           </div>

@@ -1,5 +1,27 @@
 # Changelog
 
+## 2026-10-13 - 管理后台工业蓝图风格重构与 Nezha-Live 主题
+
+### 🎨 管理后台视觉重构 (Industrial Warm Blueprint)
+- **统一步调与硬朗工业设计语言**：
+  - 管理后台（`/admin`）整体全面重构为哪吒工业蓝图风格（直角 `rounded-none`、等宽字体 `font-mono`、工业线框 `var(--nezha-line)`、暖橙主色 `var(--nezha-accent)` 及双层面板底色）。
+  - 统一操作按钮规整高度（`h-7` 28px 与 `h-8` 32px），规范所有图标尺寸与交互间距。
+- **模块重构**：
+  - **主机列表与资产卡片**（`HostTable`、`HostEditDialog`、`HostDeployDialog`、`AddNodeModal`）：重构价格显示、计费周期换算、到期剩余天数进度与状态标识，统一流量配额与手工校准设置。
+  - **主题与扩展中心**（`ThemeManagerModal`）：完整重构 4 大子面板（内置精选、已安装主题、Komari 官方主题市场、ZIP/URL 导入自定义主题），支持一键安装、生效切换、独立包导出与卸载。
+  - **全套辅助模块**：登录界面（`LoginScreen`）、密码修改弹窗（`ChangePasswordModal`）、标签输入框（`TagInput`）、带宽配置（`BandwidthConfig`）等全套组件视觉统一。
+
+### 🚀 Nezha-Live 主题与构建体系
+- **实时监控蓝图工业风主题**（`web/src/themes/nezha-live/`）：
+  - 适配完整 Komari RPC 与 WebSocket 实时双向通信，提供集群 CPU/内存/磁盘/网络速率等仪表盘。
+  - 优化网速与带宽展示排版，支持多段流量展示与单行非换行顶栏布局（`flex-wrap: nowrap`）。
+  - 新增 `npm run dev:nezha` 开发环境与 `npm run build:nezha` 打包指令，新增 `make build-theme-nezha` 一键导出 ZIP 主题包。
+
+### 🐛 交互体验与 Linux/Wayland 兼容性修复
+- **下拉菜单与日期选择器浮层漂移修复**：
+  - 彻底移除在 Linux/Chromium + Wayland 环境下会导致弹出层漂移至屏幕最左侧 `(0, y)` 的原生 `<input type="date">` 及 Portal 浮层。
+  - 自研并引入相对容器锚定的内联蓝图下拉框 `BlueprintSelect` 与日历组件 `DatePicker`（支持预设快捷日期、剩余天数徽章与月历视图），确保在任何环境下均在触发器正下方精准展开。
+
 ## 2026-10-13 - 文档整理
 
 - README 收敛为功能概览、快速部署与导航；配置、部署、运维、主题兼容、开发和安全说明拆分至 `docs/`。

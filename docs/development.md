@@ -57,6 +57,16 @@ npx vite build --config vite.btop.config.ts
 
 默认输出到 `themes/btop-terminal/dist`；对外发布独立主题包需要对应仓库的打包与发布流程。
 
+Nezha-Live 主题开发与构建：
+
+```bash
+# 本地热更新开发（监听 5174）
+cd web && npm run dev:nezha
+
+# 编译并导出独立的 themes/nezha-live.zip 安装包（根目录下执行）
+make build-theme-nezha
+```
+
 ## 本地开发
 
 服务端从仓库根目录启动，使用独立的测试数据库：
