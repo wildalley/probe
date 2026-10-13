@@ -134,6 +134,7 @@ func TestRewriteAssetURL(t *testing.T) {
 // marketTestServer builds an HTTP test server answering with the given body
 // and status, so the market fetch can be exercised without touching GitHub.
 func marketTestServer(t *testing.T, status int, body string) *httptest.Server {
+	t.Setenv("PROBE_ALLOW_PRIVATE_TARGETS", "true")
 	t.Helper()
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(status)
@@ -195,6 +196,7 @@ func TestFetchMarketCustomURLDisablesFallback(t *testing.T) {
 // proving the rewrite happens on the actual download path and the SHA256
 // check still guards the bytes.
 func TestDownloadAndInstallUsesAssetMirror(t *testing.T) {
+	t.Setenv("PROBE_ALLOW_PRIVATE_TARGETS", "true")
 	zipFile := zipTheme(t, map[string]string{
 		"komari-theme.json": `{"short":"mirrored","name":"Mirrored","version":"1.0.0"}`,
 		"index.html":        "<html></html>",

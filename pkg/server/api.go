@@ -63,6 +63,7 @@ type Server struct {
 
 	// privateMode requires a login even for read-only telemetry views.
 	privateMode bool
+	rpcSlots    chan struct{}
 
 	// allowedOrigins lists extra browser origins permitted to send credentialed
 	// requests, for setups where the dashboard is served from another host.
@@ -74,6 +75,7 @@ func NewServer(hub *Hub, storage *Storage, downsampler *Downsampler, notifier *N
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
 	router.Use(gin.Recovery())
+	router.Use(limitRequestBody())
 
 	// Logger middleware with clean output
 	router.Use(func(c *gin.Context) {
@@ -105,6 +107,7 @@ func NewServer(hub *Hub, storage *Storage, downsampler *Downsampler, notifier *N
 		auth:         auth,
 		themeManager: NewThemeManager(storage, themesDir),
 		privateMode:  privateMode,
+		rpcSlots:     make(chan struct{}, 8),
 	}
 
 	// PROBE_ALLOWED_ORIGINS is a comma-separated list, e.g.
@@ -487,27 +490,13 @@ func (s *Server) handleClientWS(c *gin.Context) {
 		return
 	}
 
-	clientQueue := s.hub.RegisterClient(conn)
+	clientQueue := s.hub.RegisterClient(conn, func() bool {
+		_, ok := s.auth.Validate(sessionToken)
+		return ok
+	})
 	defer s.hub.UnregisterClient(clientQueue)
-	if s.privateMode {
-		done := make(chan struct{})
-		defer close(done)
-		go func() {
-			ticker := time.NewTicker(5 * time.Second)
-			defer ticker.Stop()
-			for {
-				select {
-				case <-done:
-					return
-				case <-ticker.C:
-					if _, ok := s.auth.Validate(sessionToken); !ok {
-						clientQueue.Close()
-						return
-					}
-				}
-			}
-		}()
-	}
+	stop := s.guardViewerSocket(conn, sessionToken)
+	defer stop()
 
 	// Keep alive & wait for close
 	for {
@@ -519,7 +508,8 @@ func (s *Server) handleClientWS(c *gin.Context) {
 }
 
 func (s *Server) handleGetNodes(c *gin.Context) {
-	states := s.hub.GetAllStates()
+	_, authenticated := s.currentUser(c)
+	states := nodeStatesForViewer(s.hub.GetAllStates(), authenticated)
 	c.JSON(http.StatusOK, gin.H{
 		"nodes": states,
 		// The version a freshly installed agent would report. A release stamps
@@ -539,7 +529,8 @@ func (s *Server) handleGetNode(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "node not found"})
 		return
 	}
-	c.JSON(http.StatusOK, state)
+	_, authenticated := s.currentUser(c)
+	c.JSON(http.StatusOK, nodeStateForViewer(state, authenticated))
 }
 
 func (s *Server) handleGetNodeHistory(c *gin.Context) {

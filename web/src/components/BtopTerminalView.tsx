@@ -320,9 +320,12 @@ export function BtopTerminalView({
         case "region":
           cmp = (a.region || "").localeCompare(b.region || "");
           break;
-        case "ip":
-          cmp = (a.system?.public_ip || "").localeCompare(b.system?.public_ip || "");
+        case "ip": {
+          const left = canManage ? a.system?.public_ip : a.billing?.provider;
+          const right = canManage ? b.system?.public_ip : b.billing?.provider;
+          cmp = (left || "").localeCompare(right || "");
           break;
+        }
         case "cpu":
           cmp = (a.cpu || a.system?.cpu_percent || 0) - (b.cpu || b.system?.cpu_percent || 0);
           break;
@@ -348,7 +351,7 @@ export function BtopTerminalView({
       return hostSortAsc ? cmp : -cmp;
     });
     return list;
-  }, [filteredNodesList, hostSortField, hostSortAsc]);
+  }, [filteredNodesList, hostSortField, hostSortAsc, canManage]);
 
   // Keyboard navigation & global shortcuts
   useEffect(() => {
@@ -949,9 +952,9 @@ export function BtopTerminalView({
             <button
               onClick={() => handleSort("ip")}
               className="col-span-2 hidden md:flex items-center gap-0.5 hover:text-current cursor-pointer"
-              title="按IP/服务商排序"
+              title={canManage ? "按IP/服务商排序" : "按服务商排序"}
             >
-              <span>IP / PROVIDER</span>
+              <span>{canManage ? "IP / PROVIDER" : "PROVIDER"}</span>
               {hostSortField === "ip" && <span>{hostSortAsc ? "▲" : "▼"}</span>}
             </button>
             <button
@@ -1046,7 +1049,7 @@ export function BtopTerminalView({
 
                   {/* IP / Provider */}
                   <span className={`col-span-2 hidden md:inline truncate text-[11px] ${colors.textMuted}`}>
-                    {nIp} · {nProvider}
+                    {canManage && <>{nIp} · </>}{nProvider}
                   </span>
 
                   {/* CPU% */}
@@ -1124,12 +1127,14 @@ export function BtopTerminalView({
               >
                 [ ⇥ 节点全屏详情 ]
               </button>
-              <button
-                onClick={() => setMaskIP(!maskIP)}
-                className="hover:underline cursor-pointer text-current/75"
-              >
-                [ {maskIP ? "显示真实IP" : "遮掩IP"} ]
-              </button>
+              {canManage && (
+                <button
+                  onClick={() => setMaskIP(!maskIP)}
+                  className="hover:underline cursor-pointer text-current/75"
+                >
+                  [ {maskIP ? "显示真实IP" : "遮掩IP"} ]
+                </button>
+              )}
             </div>
             <span className={`hidden sm:inline ${colors.textMuted}`}>
               1: 集群列表 · 2: 拟真监控 · 3: 节点详情 · m: 菜单
@@ -1618,18 +1623,20 @@ export function BtopTerminalView({
                       <span className={colors.textMuted}>系统发行版:</span>
                       <span className="font-semibold truncate">{activeNode.system?.os || "--"}{activeNode.system?.virtualization ? ` · ${activeNode.system.virtualization}` : ""}</span>
                     </div>
-                    <div className="flex justify-between items-center">
-                      <span className={colors.textMuted}>公网 IP 地址:</span>
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono">{maskIP ? "**.***.***.**" : (activeNode.system?.public_ip || "--")}</span>
-                        <button
-                          onClick={() => setMaskIP(!maskIP)}
-                          className="hover:underline cursor-pointer text-[10px] opacity-80"
-                        >
-                          [{maskIP ? "显示" : "遮掩"}]
-                        </button>
+                    {canManage && (
+                      <div className="flex justify-between items-center">
+                        <span className={colors.textMuted}>公网 IP 地址:</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono">{maskIP ? "**.***.***.**" : (activeNode.system?.public_ip || "--")}</span>
+                          <button
+                            onClick={() => setMaskIP(!maskIP)}
+                            className="hover:underline cursor-pointer text-[10px] opacity-80"
+                          >
+                            [{maskIP ? "显示" : "遮掩"}]
+                          </button>
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
 
                   {/* Footer Actions */}
@@ -1675,14 +1682,16 @@ export function BtopTerminalView({
               </span>
             </div>
 
-            <div className="flex items-center gap-2 text-xs">
-              <button
-                onClick={() => setMaskIP(!maskIP)}
-                className="px-2 py-0.5 border border-current/30 hover:bg-current/10 cursor-pointer"
-              >
-                {maskIP ? "显示IP" : "遮掩IP"}
-              </button>
-            </div>
+            {canManage && (
+              <div className="flex items-center gap-2 text-xs">
+                <button
+                  onClick={() => setMaskIP(!maskIP)}
+                  className="px-2 py-0.5 border border-current/30 hover:bg-current/10 cursor-pointer"
+                >
+                  {maskIP ? "显示IP" : "遮掩IP"}
+                </button>
+              </div>
+            )}
           </div>
 
           {/* 4 Diagnostic Quadrants */}
@@ -1772,45 +1781,47 @@ export function BtopTerminalView({
               </div>
 
               {/* Network Address & Interfaces Matrix */}
-              <div className="p-2 border border-current/15 bg-current/5 space-y-1.5 text-xs shrink-0">
-                <div className="font-bold text-[11px] pb-1 border-b border-dashed border-current/20 flex justify-between">
-                  <span className={colors.accent}>NETWORK ADDRESS / 网络地址</span>
-                  <button
-                    onClick={() => setMaskIP(!maskIP)}
-                    className="text-[10px] hover:underline cursor-pointer"
-                  >
-                    [{maskIP ? "显示真实IP" : "遮掩IP"}]
-                  </button>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
-                  <div className="flex items-center justify-between bg-current/5 px-2 py-1 border border-current/10">
-                    <span className={colors.textMuted}>公网 IPv4:</span>
-                    <div className="flex items-center gap-1 font-mono font-bold">
-                      <span>{maskIP ? "**.***.***.**" : (activeNode.system?.public_ip || "--")}</span>
-                      <button
-                        onClick={() => activeNode.system?.public_ip && handleCopy(activeNode.system.public_ip, "IPv4 地址")}
-                        className="hover:opacity-75 cursor-pointer ml-1"
-                        title="复制 IPv4"
-                      >
-                        <Copy className="h-3 w-3" />
-                      </button>
+              {canManage && (
+                <div className="p-2 border border-current/15 bg-current/5 space-y-1.5 text-xs shrink-0">
+                  <div className="font-bold text-[11px] pb-1 border-b border-dashed border-current/20 flex justify-between">
+                    <span className={colors.accent}>NETWORK ADDRESS / 网络地址</span>
+                    <button
+                      onClick={() => setMaskIP(!maskIP)}
+                      className="text-[10px] hover:underline cursor-pointer"
+                    >
+                      [{maskIP ? "显示真实IP" : "遮掩IP"}]
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                    <div className="flex items-center justify-between bg-current/5 px-2 py-1 border border-current/10">
+                      <span className={colors.textMuted}>公网 IPv4:</span>
+                      <div className="flex items-center gap-1 font-mono font-bold">
+                        <span>{maskIP ? "**.***.***.**" : (activeNode.system?.public_ip || "--")}</span>
+                        <button
+                          onClick={() => activeNode.system?.public_ip && handleCopy(activeNode.system.public_ip, "IPv4 地址")}
+                          className="hover:opacity-75 cursor-pointer ml-1"
+                          title="复制 IPv4"
+                        >
+                          <Copy className="h-3 w-3" />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between bg-current/5 px-2 py-1 border border-current/10">
+                      <span className={colors.textMuted}>公网 IPv6:</span>
+                      <div className="flex items-center gap-1 font-mono">
+                        <span className="truncate max-w-[160px]">{maskIP ? "****:****::**" : (activeNode.system?.public_ipv6 || "--")}</span>
+                        <button
+                          onClick={() => activeNode.system?.public_ipv6 && handleCopy(activeNode.system.public_ipv6, "IPv6 地址")}
+                          className="hover:opacity-75 cursor-pointer ml-1"
+                          title="复制 IPv6"
+                        >
+                          <Copy className="h-3 w-3" />
+                        </button>
+                      </div>
                     </div>
                   </div>
-                  <div className="flex items-center justify-between bg-current/5 px-2 py-1 border border-current/10">
-                    <span className={colors.textMuted}>公网 IPv6:</span>
-                    <div className="flex items-center gap-1 font-mono">
-                      <span className="truncate max-w-[160px]">{maskIP ? "****:****::**" : (activeNode.system?.public_ipv6 || "2605:52c0:2:65f8::1")}</span>
-                      <button
-                        onClick={() => handleCopy(activeNode.system?.public_ipv6 || "2605:52c0:2:65f8::1", "IPv6 地址")}
-                        className="hover:opacity-75 cursor-pointer ml-1"
-                        title="复制 IPv6"
-                      >
-                        <Copy className="h-3 w-3" />
-                      </button>
-                    </div>
-                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Hardware Capacity Badges */}
               <div className="grid grid-cols-3 gap-2 text-[11px] text-center shrink-0">
@@ -2114,56 +2125,58 @@ export function BtopTerminalView({
           </div>
 
           {/* Bottom Quick Operations Bar */}
-          <div className="border border-current/20 p-2 shrink-0 flex flex-wrap items-center justify-between gap-2 text-xs bg-current/5">
-            <div className="flex items-center gap-2">
-              <span className="font-bold">[ 快捷运维指令 ]:</span>
-              <button
-                onClick={() =>
-                  handleCopy(
-                    `curl -fsSL ${window.location.origin}/install.sh | bash -s -- --server ${window.location.host}`,
-                    "Agent 安装命令"
-                  )
-                }
-                className="px-2 py-0.5 border border-current/30 hover:bg-current/10 cursor-pointer font-bold"
-                title="复制 Agent 一键部署脚本"
-              >
-                [ 📋 复制 Agent 安装命令 ]
-              </button>
-              <button
-                onClick={() =>
-                  handleCopy(
-                    `ssh root@${activeNode.system?.public_ip || activeNode.system?.public_ipv6 || "<IP>"}`,
-                    "SSH 连接命令"
-                  )
-                }
-                className="px-2 py-0.5 border border-current/30 hover:bg-current/10 cursor-pointer"
-                title="复制快速 SSH 登录命令"
-              >
-                [ 💻 复制 SSH 登录命令 ]
-              </button>
-              <button
-                onClick={() =>
-                  handleCopy(
-                    `mtr -rw -c 50 ${activeNode.system?.public_ip || activeNode.system?.public_ipv6 || "<IP>"}`,
-                    "MTR 诊断命令"
-                  )
-                }
-                className="px-2 py-0.5 border border-current/30 hover:bg-current/10 cursor-pointer hidden sm:inline"
-                title="复制 MTR 路由回程测试命令"
-              >
-                [ 📡 复制 MTR 路由测试 ]
-              </button>
-              {copiedText && (
-                <span className="text-emerald-600 dark:text-emerald-400 font-bold ml-1 animate-pulse">
-                  ✓ 已复制: {copiedText}
-                </span>
-              )}
-            </div>
+          {canManage && (
+            <div className="border border-current/20 p-2 shrink-0 flex flex-wrap items-center justify-between gap-2 text-xs bg-current/5">
+              <div className="flex items-center gap-2">
+                <span className="font-bold">[ 快捷运维指令 ]:</span>
+                <button
+                  onClick={() =>
+                    handleCopy(
+                      `curl -fsSL ${window.location.origin}/install.sh | bash -s -- --server ${window.location.host}`,
+                      "Agent 安装命令"
+                    )
+                  }
+                  className="px-2 py-0.5 border border-current/30 hover:bg-current/10 cursor-pointer font-bold"
+                  title="复制 Agent 一键部署脚本"
+                >
+                  [ 📋 复制 Agent 安装命令 ]
+                </button>
+                <button
+                  onClick={() =>
+                    handleCopy(
+                      `ssh root@${activeNode.system?.public_ip || activeNode.system?.public_ipv6 || "<IP>"}`,
+                      "SSH 连接命令"
+                    )
+                  }
+                  className="px-2 py-0.5 border border-current/30 hover:bg-current/10 cursor-pointer"
+                  title="复制快速 SSH 登录命令"
+                >
+                  [ 💻 复制 SSH 登录命令 ]
+                </button>
+                <button
+                  onClick={() =>
+                    handleCopy(
+                      `mtr -rw -c 50 ${activeNode.system?.public_ip || activeNode.system?.public_ipv6 || "<IP>"}`,
+                      "MTR 诊断命令"
+                    )
+                  }
+                  className="px-2 py-0.5 border border-current/30 hover:bg-current/10 cursor-pointer hidden sm:inline"
+                  title="复制 MTR 路由回程测试命令"
+                >
+                  [ 📡 复制 MTR 路由测试 ]
+                </button>
+                {copiedText && (
+                  <span className="text-emerald-600 dark:text-emerald-400 font-bold ml-1 animate-pulse">
+                    ✓ 已复制: {copiedText}
+                  </span>
+                )}
+              </div>
 
-            <div className="flex items-center gap-2 text-[11px] text-current/75">
-              <span>快捷键: Esc 返回 · 1 集群列表 · 2 拟真监控 · t 切换主题</span>
+              <div className="flex items-center gap-2 text-[11px] text-current/75">
+                <span>快捷键: Esc 返回 · 1 集群列表 · 2 拟真监控 · t 切换主题</span>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       )}
     </div>

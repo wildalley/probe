@@ -113,7 +113,7 @@ func TestKomariRPC2Endpoints(t *testing.T) {
 		if !ok || n1.Name != "Tokyo-Edge-01" {
 			t.Fatalf("node mismatch: %+v", n1)
 		}
-		if n1.IPv4 != "192.0.2.1" || n1.IPv6 != "2001:db8::1" {
+		if n1.IPv4 != "" || n1.IPv6 != "" {
 			t.Fatalf("IP mismatch: %+v", n1)
 		}
 	}
@@ -183,9 +183,15 @@ func TestKomariRPC2Endpoints(t *testing.T) {
 		}
 	}
 
+	token, err := srv.auth.createSession("admin", "", "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	// 5. Test GET /api/admin/client/list
 	{
 		req := httptest.NewRequest("GET", "/api/admin/client/list", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
 		w := httptest.NewRecorder()
 		srv.router.ServeHTTP(w, req)
 		if w.Code != http.StatusOK {
@@ -196,6 +202,7 @@ func TestKomariRPC2Endpoints(t *testing.T) {
 	// 6. Test GET /api/admin/database/size
 	{
 		req := httptest.NewRequest("GET", "/api/admin/database/size", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
 		w := httptest.NewRecorder()
 		srv.router.ServeHTTP(w, req)
 		if w.Code != http.StatusOK {

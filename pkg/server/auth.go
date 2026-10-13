@@ -412,6 +412,7 @@ func (s *Server) currentUser(c *gin.Context) (string, bool) {
 // requireAuth rejects unauthenticated requests to admin endpoints.
 func (s *Server) requireAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		c.Header("Cache-Control", "private, no-store")
 		username, ok := s.currentUser(c)
 		if !ok {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
@@ -429,6 +430,7 @@ func (s *Server) requireAuth() gin.HandlerFunc {
 // requires a session unless the operator opted into public viewing with -public.
 func (s *Server) requireViewer() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		c.Header("Cache-Control", "private, no-store")
 		if !s.privateMode {
 			if username, ok := s.currentUser(c); ok {
 				c.Set("username", username)
@@ -470,29 +472,21 @@ func (s *Server) isTrustedOrigin(c *gin.Context, origin string) bool {
 
 // setSessionCookie writes the session cookie, marking it Secure over HTTPS.
 func setSessionCookie(c *gin.Context, token string, ttl time.Duration) {
+	setNamedSessionCookie(c, SessionCookieName, token, int(ttl.Seconds()))
+	setNamedSessionCookie(c, "session_token", token, int(ttl.Seconds()))
+}
+
+func setNamedSessionCookie(c *gin.Context, name, token string, maxAge int) {
 	secure := c.Request.TLS != nil || strings.EqualFold(c.GetHeader("X-Forwarded-Proto"), "https")
 	http.SetCookie(c.Writer, &http.Cookie{
-		Name:     SessionCookieName,
-		Value:    token,
-		Path:     "/",
-		MaxAge:   int(ttl.Seconds()),
-		HttpOnly: true,
-		Secure:   secure,
-		SameSite: http.SameSiteLaxMode,
+		Name: name, Value: token, Path: "/", MaxAge: maxAge,
+		HttpOnly: true, Secure: secure, SameSite: http.SameSiteLaxMode,
 	})
 }
 
 func clearSessionCookie(c *gin.Context) {
-	secure := c.Request.TLS != nil || strings.EqualFold(c.GetHeader("X-Forwarded-Proto"), "https")
-	http.SetCookie(c.Writer, &http.Cookie{
-		Name:     SessionCookieName,
-		Value:    "",
-		Path:     "/",
-		MaxAge:   -1,
-		HttpOnly: true,
-		Secure:   secure,
-		SameSite: http.SameSiteLaxMode,
-	})
+	setNamedSessionCookie(c, SessionCookieName, "", -1)
+	setNamedSessionCookie(c, "session_token", "", -1)
 }
 
 // handleLogin authenticates an operator and starts a session.

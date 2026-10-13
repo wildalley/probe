@@ -22,30 +22,30 @@ import (
 func (s *Server) setupKomariRoutes(tm *ThemeManager) {
 	// Public Komari REST APIs
 	s.router.GET("/api/public", s.handleKomariPublic(tm))
-	s.router.GET("/api/nodes", s.handleKomariNodes)
+	s.router.GET("/api/nodes", s.requireViewer(), s.handleKomariNodes)
 	s.router.GET("/api/version", s.handleKomariVersion)
 	s.router.GET("/api/me", s.handleKomariMe)
 	s.router.POST("/api/login", s.handleKomariLogin)
 	s.router.GET("/api/logout", s.handleKomariLogout)
 	s.router.POST("/api/logout", s.handleKomariLogout)
-	s.router.GET("/api/records/load", s.handleKomariRecordsLoad)
-	s.router.GET("/api/records/ping", s.handleKomariRecordsPing)
-	s.router.GET("/api/task/ping", s.handleKomariTaskPing)
+	s.router.GET("/api/records/load", s.requireViewer(), s.handleKomariRecordsLoad)
+	s.router.GET("/api/records/ping", s.requireViewer(), s.handleKomariRecordsPing)
+	s.router.GET("/api/task/ping", s.requireViewer(), s.handleKomariTaskPing)
 
 	// Komari Live Telemetry WebSocket
-	s.router.GET("/api/clients", s.handleKomariClientsWS)
+	s.router.GET("/api/clients", s.requireViewer(), s.handleKomariClientsWS)
 
 	// Recent status history (modern Komari themes poll this for the
 	// instance-page monitor charts instead of the live WebSocket).
-	s.router.GET("/api/recent/:uuid", s.handleKomariRecent)
+	s.router.GET("/api/recent/:uuid", s.requireViewer(), s.handleKomariRecent)
 
 	// Komari JSON-RPC 2.0 (Theme Transport: WebSocket & HTTP)
-	s.router.GET("/api/rpc2", s.handleKomariRPC2GET)
-	s.router.POST("/api/rpc2", s.handleKomariRPC2POST)
+	s.router.GET("/api/rpc2", s.requireViewer(), s.handleKomariRPC2GET)
+	s.router.POST("/api/rpc2", s.requireViewer(), s.handleKomariRPC2POST)
 
 	// Additional Komari theme compatibility endpoints
-	s.router.GET("/api/admin/client/list", s.handleKomariAdminClientList)
-	s.router.GET("/api/admin/database/size", s.handleKomariAdminDBSize)
+	s.router.GET("/api/admin/client/list", s.requireAuth(), s.handleKomariAdminClientList)
+	s.router.GET("/api/admin/database/size", s.requireAuth(), s.handleKomariAdminDBSize)
 
 	// Theme Static Assets (/themes/*)
 	s.router.Static("/themes", tm.themesDir)
@@ -207,8 +207,6 @@ func (s *Server) handleKomariLogin(c *gin.Context) {
 	}
 
 	setSessionCookie(c, token, s.auth.sessionTTL)
-	// Also set Komari's standard session_token cookie
-	c.SetCookie("session_token", token, int(s.auth.sessionTTL.Seconds()), "/", "", false, true)
 
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "success",
@@ -229,7 +227,6 @@ func (s *Server) handleKomariLogout(c *gin.Context) {
 		s.auth.Revoke(token)
 	}
 	clearSessionCookie(c)
-	c.SetCookie("session_token", "", -1, "/", "", false, true)
 	if strings.Contains(c.GetHeader("Accept"), "application/json") || c.ContentType() == "application/json" {
 		c.JSON(http.StatusOK, gin.H{"status": "success", "message": "logged out"})
 		return
@@ -239,9 +236,7 @@ func (s *Server) handleKomariLogout(c *gin.Context) {
 
 // GET /api/clients (WebSocket)
 func (s *Server) handleKomariClientsWS(c *gin.Context) {
-	upgrader := websocket.Upgrader{
-		CheckOrigin: func(r *http.Request) bool { return true },
-	}
+	upgrader := s.clientUpgrader(c)
 
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
@@ -249,6 +244,8 @@ func (s *Server) handleKomariClientsWS(c *gin.Context) {
 		return
 	}
 	defer conn.Close()
+	stop := s.guardViewerSocket(conn, extractSessionToken(c))
+	defer stop()
 
 	// Helper to send snapshot of current nodes
 	sendSnapshot := func() error {
@@ -318,11 +315,14 @@ func (s *Server) handleKomariClientsWS(c *gin.Context) {
 				Data:   dataMap,
 			},
 		}
+		_ = conn.SetWriteDeadline(time.Now().Add(wsWriteTimeout))
 		return conn.WriteJSON(resp)
 	}
 
 	// Channel for incoming client messages
 	clientMsgCh := make(chan string, 4)
+	done := make(chan struct{})
+	defer close(done)
 	go func() {
 		defer close(clientMsgCh)
 		for {
@@ -330,7 +330,11 @@ func (s *Server) handleKomariClientsWS(c *gin.Context) {
 			if err != nil {
 				return
 			}
-			clientMsgCh <- strings.TrimSpace(string(msg))
+			select {
+			case clientMsgCh <- strings.TrimSpace(string(msg)):
+			case <-done:
+				return
+			}
 		}
 	}()
 
@@ -366,6 +370,9 @@ func (s *Server) handleKomariRecordsLoad(c *gin.Context) {
 	hours, _ := strconv.Atoi(hoursStr)
 	if hours <= 0 {
 		hours = 4
+	}
+	if hours > 720 {
+		hours = 720
 	}
 
 	end := time.Now().Unix()
@@ -446,6 +453,9 @@ func (s *Server) handleKomariRecordsPing(c *gin.Context) {
 	hours, _ := strconv.Atoi(hoursStr)
 	if hours <= 0 {
 		hours = 4
+	}
+	if hours > 720 {
+		hours = 720
 	}
 
 	end := time.Now().Unix()
@@ -533,9 +543,7 @@ func (s *Server) handleKomariRPC2GET(c *gin.Context) {
 		return
 	}
 
-	upgrader := websocket.Upgrader{
-		CheckOrigin: func(r *http.Request) bool { return true },
-	}
+	upgrader := s.clientUpgrader(c)
 
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
@@ -543,6 +551,8 @@ func (s *Server) handleKomariRPC2GET(c *gin.Context) {
 		return
 	}
 	defer conn.Close()
+	stop := s.guardViewerSocket(conn, extractSessionToken(c))
+	defer stop()
 
 	for {
 		messageType, message, err := conn.ReadMessage()
@@ -553,39 +563,10 @@ func (s *Server) handleKomariRPC2GET(c *gin.Context) {
 			continue
 		}
 
-		trimmed := bytes.TrimSpace(message)
-		if len(trimmed) == 0 {
-			continue
-		}
-
-		if trimmed[0] == '[' {
-			var requests []JSONRPCRequest
-			if err := json.Unmarshal(trimmed, &requests); err == nil {
-				responses := make([]JSONRPCResponse, 0, len(requests))
-				for _, req := range requests {
-					res, rpcErr := s.executeRPCMethod(req.Method, req.Params)
-					resp := JSONRPCResponse{JSONRPC: "2.0", ID: req.ID}
-					if rpcErr != nil {
-						resp.Error = rpcErr
-					} else {
-						resp.Result = res
-					}
-					responses = append(responses, resp)
-				}
-				_ = conn.WriteJSON(responses)
-			}
-		} else {
-			var req JSONRPCRequest
-			if err := json.Unmarshal(trimmed, &req); err == nil {
-				res, rpcErr := s.executeRPCMethod(req.Method, req.Params)
-				resp := JSONRPCResponse{JSONRPC: "2.0", ID: req.ID}
-				if rpcErr != nil {
-					resp.Error = rpcErr
-				} else {
-					resp.Result = res
-				}
-				_ = conn.WriteJSON(resp)
-			}
+		response := s.processRPCMessage(message, extractSessionToken(c))
+		_ = conn.SetWriteDeadline(time.Now().Add(wsWriteTimeout))
+		if err := conn.WriteJSON(response); err != nil {
+			return
 		}
 	}
 }
@@ -594,64 +575,77 @@ func (s *Server) handleKomariRPC2GET(c *gin.Context) {
 func (s *Server) handleKomariRPC2POST(c *gin.Context) {
 	bodyBytes, err := io.ReadAll(c.Request.Body)
 	if err != nil {
-		c.JSON(http.StatusOK, JSONRPCResponse{
-			JSONRPC: "2.0",
-			Error:   &JSONRPCError{Code: -32700, Message: "Parse error"},
-		})
+		c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "request body exceeds limit"})
 		return
 	}
+	c.JSON(http.StatusOK, s.processRPCMessage(bodyBytes, extractSessionToken(c)))
+}
 
-	trimmed := bytes.TrimSpace(bodyBytes)
+func (s *Server) processRPCMessage(message []byte, token string) interface{} {
+	select {
+	case s.rpcSlots <- struct{}{}:
+		defer func() { <-s.rpcSlots }()
+	default:
+		return JSONRPCResponse{JSONRPC: "2.0", Error: &JSONRPCError{Code: -32000, Message: "server busy"}}
+	}
+	trimmed := bytes.TrimSpace(message)
+	failure := func(code int, message string) JSONRPCResponse {
+		return JSONRPCResponse{JSONRPC: "2.0", Error: &JSONRPCError{Code: code, Message: message}}
+	}
 	if len(trimmed) == 0 {
-		c.JSON(http.StatusOK, JSONRPCResponse{
-			JSONRPC: "2.0",
-			Error:   &JSONRPCError{Code: -32600, Message: "Invalid Request"},
-		})
-		return
+		return failure(-32600, "Invalid Request")
 	}
-
-	if trimmed[0] == '[' {
-		var requests []JSONRPCRequest
-		if err := json.Unmarshal(trimmed, &requests); err != nil {
-			c.JSON(http.StatusOK, JSONRPCResponse{
-				JSONRPC: "2.0",
-				Error:   &JSONRPCError{Code: -32700, Message: "Parse error"},
-			})
-			return
+	execute := func(req JSONRPCRequest) JSONRPCResponse {
+		resp := JSONRPCResponse{JSONRPC: "2.0", ID: req.ID}
+		// Revalidate for every message, including admin methods in public mode.
+		if s.privateMode || strings.HasPrefix(req.Method, "admin:") {
+			if _, ok := s.auth.Validate(token); !ok {
+				resp.Error = &JSONRPCError{Code: -32001, Message: "authentication required"}
+				return resp
+			}
 		}
-
+		resp.Result, resp.Error = s.executeRPCMethod(req.Method, req.Params)
+		_, canViewIPs := s.auth.Validate(token)
+		resp.Result = rpcResultForViewer(resp.Result, canViewIPs)
+		return resp
+	}
+	if trimmed[0] == '[' {
+		// Decode only a bounded number of entries. Unmarshalling the whole
+		// array first would allocate for an oversized batch before rejecting it.
+		decoder := json.NewDecoder(bytes.NewReader(trimmed))
+		_, _ = decoder.Token() // '[' checked above
+		requests := make([]JSONRPCRequest, 0, maxRPCBatch)
+		for decoder.More() {
+			if len(requests) >= maxRPCBatch {
+				return failure(-32600, "batch must contain 1 to 32 requests")
+			}
+			var req JSONRPCRequest
+			if err := decoder.Decode(&req); err != nil {
+				return failure(-32700, "Parse error")
+			}
+			requests = append(requests, req)
+		}
+		if _, err := decoder.Token(); err != nil {
+			return failure(-32700, "Parse error")
+		}
+		var trailing interface{}
+		if err := decoder.Decode(&trailing); err != io.EOF {
+			return failure(-32700, "Parse error")
+		}
+		if len(requests) == 0 {
+			return failure(-32600, "batch must contain 1 to 32 requests")
+		}
 		responses := make([]JSONRPCResponse, 0, len(requests))
 		for _, req := range requests {
-			res, rpcErr := s.executeRPCMethod(req.Method, req.Params)
-			resp := JSONRPCResponse{JSONRPC: "2.0", ID: req.ID}
-			if rpcErr != nil {
-				resp.Error = rpcErr
-			} else {
-				resp.Result = res
-			}
-			responses = append(responses, resp)
+			responses = append(responses, execute(req))
 		}
-		c.JSON(http.StatusOK, responses)
-		return
+		return responses
 	}
-
 	var req JSONRPCRequest
 	if err := json.Unmarshal(trimmed, &req); err != nil {
-		c.JSON(http.StatusOK, JSONRPCResponse{
-			JSONRPC: "2.0",
-			Error:   &JSONRPCError{Code: -32700, Message: "Parse error"},
-		})
-		return
+		return failure(-32700, "Parse error")
 	}
-
-	res, rpcErr := s.executeRPCMethod(req.Method, req.Params)
-	resp := JSONRPCResponse{JSONRPC: "2.0", ID: req.ID}
-	if rpcErr != nil {
-		resp.Error = rpcErr
-	} else {
-		resp.Result = res
-	}
-	c.JSON(http.StatusOK, resp)
+	return execute(req)
 }
 
 // executeRPCMethod executes a Komari JSON-RPC method and returns its result or error.
@@ -855,7 +849,7 @@ func (s *Server) getKomariNodeRecentStatus(params interface{}) interface{} {
 			uuid = u
 		}
 		if l, ok := m["limit"].(float64); ok && l > 0 {
-			limit = int(l)
+			limit = int(math.Min(l, 3000))
 		}
 	}
 
@@ -1103,6 +1097,11 @@ func (s *Server) handleInstallTheme(tm *ThemeManager) gin.HandlerFunc {
 // POST /api/v1/themes/upload
 func (s *Server) handleUploadTheme(tm *ThemeManager) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		defer func() {
+			if c.Request.MultipartForm != nil {
+				_ = c.Request.MultipartForm.RemoveAll()
+			}
+		}()
 		fileHeader, err := c.FormFile("theme")
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "file 'theme' is required"})
@@ -1459,6 +1458,9 @@ func (s *Server) getKomariPingMetricStats(params interface{}) interface{} {
 	}
 	if p.Hours <= 0 {
 		p.Hours = 1
+	}
+	if p.Hours > 720 {
+		p.Hours = 720
 	}
 	entity := p.EntityID
 	if entity == "" {

@@ -21,7 +21,7 @@ RUN npm run build
 
 
 # Stage 2 — compile the server with the freshly built UI embedded via go:embed.
-FROM golang:1.27.1-alpine AS server
+FROM golang:1.27.2-alpine AS server
 
 WORKDIR /build
 

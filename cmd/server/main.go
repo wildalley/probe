@@ -133,8 +133,12 @@ func main() {
 	srv := server.NewServer(hub, storage, downsampler, notifier, distFS, auth, !publicView)
 
 	httpServer := &http.Server{
-		Addr:    listenAddr,
-		Handler: srv,
+		Addr:              listenAddr,
+		Handler:           srv,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       90 * time.Second,
+		WriteTimeout:      120 * time.Second,
+		IdleTimeout:       60 * time.Second,
 	}
 
 	go func() {

@@ -1,7 +1,6 @@
 package server
 
 import (
-	"archive/zip"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -15,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"probe/pkg/netguard"
 )
 
 const (
@@ -29,6 +30,7 @@ const (
 
 // ThemeManager coordinates installed Komari themes and the community theme market.
 type ThemeManager struct {
+	installMu    sync.Mutex // serializes install and delete transactions
 	mu           sync.RWMutex
 	themesDir    string
 	activeTheme  string // "builtin" or a theme short identifier
@@ -101,6 +103,11 @@ func (tm *ThemeManager) GetActiveTheme() string {
 
 // SetActiveTheme updates and persists the active theme.
 func (tm *ThemeManager) SetActiveTheme(short string) error {
+	if short != "builtin" {
+		if err := validateThemeShort(short); err != nil {
+			return err
+		}
+	}
 	tm.mu.Lock()
 	defer tm.mu.Unlock()
 
@@ -133,7 +140,7 @@ func (tm *ThemeManager) ScanInstalled() map[string]*KomariThemeItem {
 	}
 
 	for _, entry := range entries {
-		if !entry.IsDir() {
+		if !entry.IsDir() || validateThemeShort(entry.Name()) != nil {
 			continue
 		}
 		themeDir := filepath.Join(tm.themesDir, entry.Name())
@@ -164,6 +171,10 @@ func (tm *ThemeManager) ScanInstalled() map[string]*KomariThemeItem {
 		short := manifest.Short
 		if short == "" {
 			short = entry.Name()
+		}
+
+		if short != entry.Name() || validateThemeShort(short) != nil {
+			continue
 		}
 
 		name := extractI18nString(manifest.Name, "zh-CN")
@@ -214,11 +225,14 @@ func (tm *ThemeManager) GetInstalledThemes() []KomariThemeItem {
 
 // GetThemeDirPath returns the absolute or relative disk path to a theme's directory.
 func (tm *ThemeManager) GetThemeDirPath(short string) (string, error) {
+	if err := validateThemeShort(short); err != nil {
+		return "", err
+	}
 	tm.mu.RLock()
 	defer tm.mu.RUnlock()
 
 	themeDir := filepath.Join(tm.themesDir, short)
-	if fi, err := os.Stat(themeDir); err == nil && fi.IsDir() {
+	if fi, err := os.Lstat(themeDir); err == nil && fi.IsDir() && fi.Mode()&os.ModeSymlink == 0 {
 		return themeDir, nil
 	}
 	return "", fmt.Errorf("theme directory for '%s' not found", short)
@@ -226,6 +240,11 @@ func (tm *ThemeManager) GetThemeDirPath(short string) (string, error) {
 
 // DeleteTheme removes a theme from disk.
 func (tm *ThemeManager) DeleteTheme(short string) error {
+	if err := validateThemeShort(short); err != nil {
+		return err
+	}
+	tm.installMu.Lock()
+	defer tm.installMu.Unlock()
 	tm.mu.Lock()
 	defer tm.mu.Unlock()
 
@@ -233,8 +252,15 @@ func (tm *ThemeManager) DeleteTheme(short string) error {
 		return errors.New("cannot delete built-in theme")
 	}
 
-	themeDir := filepath.Join(tm.themesDir, short)
-	if err := os.RemoveAll(themeDir); err != nil {
+	if _, ok := tm.installed[short]; !ok {
+		return errors.New("theme is not installed")
+	}
+	root, err := os.OpenRoot(tm.themesDir)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	if err := root.RemoveAll(short); err != nil {
 		return fmt.Errorf("failed to remove theme directory: %w", err)
 	}
 
@@ -249,110 +275,13 @@ func (tm *ThemeManager) DeleteTheme(short string) error {
 	return nil
 }
 
-// InstallFromZip extracts a theme zip stream into the themes directory.
-func (tm *ThemeManager) InstallFromZip(r io.ReaderAt, size int64) (*KomariThemeItem, error) {
-	zr, err := zip.NewReader(r, size)
-	if err != nil {
-		return nil, fmt.Errorf("invalid zip file: %w", err)
-	}
-
-	// 1. Locate and parse komari-theme.json to determine short name
-	var manifest *KomariThemeManifest
-	var prefix string
-
-	for _, f := range zr.File {
-		cleanName := filepath.Clean(f.Name)
-		if strings.HasSuffix(cleanName, "komari-theme.json") {
-			rc, err := f.Open()
-			if err != nil {
-				continue
-			}
-			bytes, _ := io.ReadAll(rc)
-			_ = rc.Close()
-
-			var m KomariThemeManifest
-			if err := json.Unmarshal(bytes, &m); err == nil && m.Short != "" {
-				manifest = &m
-				prefix = strings.TrimSuffix(f.Name, "komari-theme.json")
-				break
-			}
-		}
-	}
-
-	if manifest == nil || manifest.Short == "" {
-		return nil, errors.New("theme package is missing a valid komari-theme.json with 'short' identifier")
-	}
-
-	targetDir := filepath.Join(tm.themesDir, manifest.Short)
-	_ = os.RemoveAll(targetDir) // Clean before install
-	if err := os.MkdirAll(targetDir, 0755); err != nil {
-		return nil, fmt.Errorf("无法创建主题目录 %s：%v。请检查服务端对主题目录（PROBE_THEMES_DIR，默认工作目录下的 themes/）是否有写权限", targetDir, err)
-	}
-
-	// 2. Extract files, stripping any top-level wrapping directory prefix
-	for _, f := range zr.File {
-		relPath := f.Name
-		if prefix != "" && strings.HasPrefix(relPath, prefix) {
-			relPath = strings.TrimPrefix(relPath, prefix)
-		}
-		if relPath == "" || strings.HasPrefix(relPath, "/") || strings.Contains(relPath, "..") {
-			continue // Prevent Zip Slip vulnerability
-		}
-
-		destPath := filepath.Join(targetDir, relPath)
-		if f.FileInfo().IsDir() {
-			_ = os.MkdirAll(destPath, 0755)
-			continue
-		}
-
-		_ = os.MkdirAll(filepath.Dir(destPath), 0755)
-		destFile, err := os.OpenFile(destPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())
-		if err != nil {
-			continue
-		}
-
-		srcFile, err := f.Open()
-		if err != nil {
-			_ = destFile.Close()
-			continue
-		}
-
-		_, _ = io.Copy(destFile, srcFile)
-		_ = srcFile.Close()
-		_ = destFile.Close()
-	}
-
-	// 3. Verify that the theme package contains a valid index.html entry point
-	hasIndex := false
-	if fi, err := os.Stat(filepath.Join(targetDir, "dist", "index.html")); err == nil && !fi.IsDir() {
-		hasIndex = true
-	} else if fi, err := os.Stat(filepath.Join(targetDir, "index.html")); err == nil && !fi.IsDir() {
-		hasIndex = true
-	}
-	if !hasIndex {
-		_ = os.RemoveAll(targetDir)
-		return nil, fmt.Errorf("主题包「%s」缺少 index.html 入口（未检测到 dist/index.html 或 index.html），请确认上传的是已打包编译的 Release 发行包，而非未编译的代码仓库", manifest.Short)
-	}
-
-	// 4. Rescan to register newly installed theme
-	tm.ScanInstalled()
-
-	tm.mu.RLock()
-	item, ok := tm.installed[manifest.Short]
-	tm.mu.RUnlock()
-
-	if !ok {
-		return nil, fmt.Errorf("failed to register installed theme %s", manifest.Short)
-	}
-
-	log.Printf("[Theme] Successfully installed theme: %s (%s)", item.Name, item.Short)
-	return item, nil
-}
-
 // DownloadAndInstall downloads a theme zip from URL, optionally verifies SHA256, and installs it.
 func (tm *ThemeManager) DownloadAndInstall(downloadURL string, expectedSHA256 string) (*KomariThemeItem, error) {
 	downloadURL = tm.rewriteAssetURL(downloadURL)
-	client := &http.Client{Timeout: 60 * time.Second}
+	if err := netguard.ValidateOutboundURL(downloadURL); err != nil {
+		return nil, err
+	}
+	client := netguard.NewGuardedHTTPClient(60 * time.Second)
 	req, err := http.NewRequest("GET", downloadURL, nil)
 	if err != nil {
 		return nil, err
@@ -380,7 +309,13 @@ func (tm *ThemeManager) DownloadAndInstall(downloadURL string, expectedSHA256 st
 	hasher := sha256.New()
 	multiWriter := io.MultiWriter(tmpFile, hasher)
 
-	size, err := io.Copy(multiWriter, resp.Body)
+	if resp.ContentLength > maxThemeArchiveBytes {
+		return nil, errors.New("theme archive exceeds size limit")
+	}
+	size, err := io.Copy(multiWriter, io.LimitReader(resp.Body, maxThemeArchiveBytes+1))
+	if size > maxThemeArchiveBytes {
+		return nil, errors.New("theme archive exceeds size limit")
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to stream download: %w", err)
 	}
@@ -418,6 +353,9 @@ func (tm *ThemeManager) rewriteAssetURL(raw string) string {
 
 // fetchMarketIndex retrieves and decodes one market index document.
 func fetchMarketIndex(client *http.Client, url string) (*KomariMarketPayload, error) {
+	if err := netguard.ValidateOutboundURL(url); err != nil {
+		return nil, err
+	}
 	resp, err := client.Get(url)
 	if err != nil {
 		return nil, err
@@ -427,7 +365,7 @@ func fetchMarketIndex(client *http.Client, url string) (*KomariMarketPayload, er
 		return nil, fmt.Errorf("market index responded with status %d", resp.StatusCode)
 	}
 	var payload KomariMarketPayload
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&payload); err != nil {
 		return nil, fmt.Errorf("failed to decode market payload: %w", err)
 	}
 	return &payload, nil
@@ -443,7 +381,7 @@ func (tm *ThemeManager) FetchMarketThemes() ([]KomariThemeItem, error) {
 		return tm.marketCache, nil
 	}
 
-	client := &http.Client{Timeout: 15 * time.Second}
+	client := netguard.NewGuardedHTTPClient(15 * time.Second)
 	payload, err := fetchMarketIndex(client, tm.marketURL)
 	if err != nil && tm.marketFallbackURL != "" {
 		// Raw GitHub is unreachable from many mainland-China networks; the
@@ -539,4 +477,3 @@ func (tm *ThemeManager) GetThemeSettings(short string) map[string]interface{} {
 	}
 	return settings
 }
-

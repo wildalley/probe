@@ -172,10 +172,14 @@ export function App() {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<number | null>(null);
 
+  const nodesRequestEpoch = useRef(0);
+
   const fetchNodes = () => {
+    const epoch = nodesRequestEpoch.current;
     fetch("/api/v1/nodes")
       .then((r) => r.json())
       .then((data) => {
+        if (epoch !== nodesRequestEpoch.current) return;
         if (data.nodes && Array.isArray(data.nodes)) {
           setNodes((prev) => {
             const next = new Map(prev);
@@ -196,6 +200,10 @@ export function App() {
   // Connect WebSocket to Hub. Held back until the session state is known so a
   // private-mode server does not reject the stream and trigger a reconnect loop.
   useEffect(() => {
+    nodesRequestEpoch.current++;
+    setNodes(new Map());
+    setSelectedNode(null);
+    setWsConnected(false);
     if (!auth.ready || showLogin) return;
 
     let isSubscribed = true;
@@ -284,7 +292,7 @@ export function App() {
     fetch("/api/v1/nodes")
       .then((r) => r.json())
       .then((data) => {
-        if (data.nodes && Array.isArray(data.nodes)) {
+        if (isSubscribed && data.nodes && Array.isArray(data.nodes)) {
           setNodes((prev) => {
             const next = new Map(prev);
             data.nodes.forEach((n: NodeState) => next.set(n.node_id, n));
@@ -303,7 +311,7 @@ export function App() {
         clearTimeout(reconnectTimeoutRef.current);
       }
     };
-  }, [auth.ready, showLogin]);
+  }, [auth.ready, auth.authenticated, showLogin]);
 
   const nodesList = useMemo(() => Array.from(nodes.values()), [nodes]);
 

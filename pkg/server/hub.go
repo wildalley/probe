@@ -22,7 +22,7 @@ import (
 )
 
 var (
-	geoIPCache    sync.Map // map[string]*GeoIPDetails, successful lookups only
+	geoIPCache sync.Map // map[string]*GeoIPDetails, successful lookups only
 	// geoIPInflight holds keys whose background lookup is running, so a node
 	// reporting every second does not fan out one lookup per report.
 	geoIPInflight sync.Map // map[string]struct{}
@@ -1208,8 +1208,12 @@ func (h *Hub) sendBroadcast(event *model.WSEvent) {
 // RegisterClient adds a new Web Dashboard WebSocket client and sends full state
 // snapshot. The returned queue owns every write to the socket and must be closed
 // by the caller when the connection ends.
-func (h *Hub) RegisterClient(conn *websocket.Conn) *wsWriteQueue {
+func (h *Hub) RegisterClient(conn *websocket.Conn, access ...func() bool) *wsWriteQueue {
 	q := newWSWriteQueue(conn)
+	if len(access) > 0 {
+		q.canViewIPs = access[0]
+	}
+	canViewIPs := q.canViewIPs != nil && q.canViewIPs()
 
 	// Read the state before admitting this queue to broadcasts. Events already
 	// pending in the hub channel have a sequence at or below minSequence and
@@ -1217,7 +1221,7 @@ func (h *Hub) RegisterClient(conn *websocket.Conn) *wsWriteQueue {
 	h.mu.RLock()
 	snapshot := make([]*model.NodeState, 0, len(h.nodeStates))
 	for _, s := range h.nodeStates {
-		snapshot = append(snapshot, cloneNodeState(s))
+		snapshot = append(snapshot, nodeStateForViewer(s, canViewIPs))
 	}
 
 	event := &model.WSEvent{
@@ -1257,6 +1261,10 @@ func (h *Hub) broadcastToClients(event *model.WSEvent) {
 	if err != nil {
 		return
 	}
+	guestPayload, err := json.Marshal(eventForGuest(event))
+	if err != nil {
+		return
+	}
 
 	// A client whose queue is full has missed a state transition. Close its
 	// socket so the dashboard reconnects and receives a fresh snapshot.
@@ -1266,7 +1274,11 @@ func (h *Hub) broadcastToClients(event *model.WSEvent) {
 		if event.Sequence <= q.minSequence {
 			continue
 		}
-		if !q.Send(payload) {
+		viewerPayload := guestPayload
+		if q.canViewIPs != nil && q.canViewIPs() {
+			viewerPayload = payload
+		}
+		if !q.Send(viewerPayload) {
 			toRemove = append(toRemove, q)
 		}
 	}

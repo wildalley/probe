@@ -37,6 +37,7 @@ type wsWriteQueue struct {
 	conn        *websocket.Conn
 	send        chan []byte
 	ping        time.Duration // heartbeat interval for this connection
+	canViewIPs  func() bool   // rechecked for every broadcast; nil means guest
 	minSequence uint64        // events at or below this preceded the initial snapshot
 
 	closeOnce sync.Once
