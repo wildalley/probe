@@ -2,7 +2,7 @@
   "name": "Meridian 子午",
   "short": "meridian",
   "description": "工业蓝图风格的 3D 地球节点实况：节点分布、实时速率、告警与节点详情",
-  "version": "1.3.1",
+  "version": "1.3.2",
   "author": "wildalley",
   "url": "https://github.com/wildalley/komari-theme-meridian",
   "preview": "preview.jpg"

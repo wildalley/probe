@@ -190,7 +190,7 @@
   "three/addons/": "./vendor/"
 } }
 </script>
-  <script type="module" crossorigin src="./assets/index-McmQ1JnY.js"></script>
+  <script type="module" crossorigin src="./assets/index-CKBSfzp9.js"></script>
 </head><body>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -267,6 +267,7 @@ button, input, select { font: inherit; color: inherit; }
 .crumb b { letter-spacing: 0.04em; }
 .crumb .dim { color: var(--ink-3); }
 .spacer { flex: 1 1 auto; min-width: 8px; }
+.clock { flex: none; white-space: nowrap; font-size: 11px; color: var(--ink-2); }
 .topbar-actions { display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; white-space: nowrap; }
 .live { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-2); font-size: 11px; font-weight: 700; height: 28px; line-height: 1; }
 .live i { width: 7px; height: 7px; background: var(--accent); border-radius: 50%; animation: blink 1.6s ease-in-out infinite; }
@@ -508,6 +509,7 @@ button, input, select { font: inherit; color: inherit; }
   .strip .alerts { display: block; }
   .rows { overflow: visible; }
   .topbar .ms { display: none; }
+  .clock { display: none; }
   /* Node list first on narrow screens; map controls last. */
   .table-panel { order: 1; }
   .strip { order: 2; }
@@ -519,6 +521,8 @@ button, input, select { font: inherit; color: inherit; }
     flex-wrap: wrap; overflow: visible;
   }
   .topbar .spacer { display: none; }
+  .crumb { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .clock { display: inline; margin-left: auto; font-size: 10.5px; }
   .topbar-actions { width: 100%; justify-content: flex-end; gap: 6px; }
   .topbar-actions .live { margin-right: auto; }
   .chip .lbl { display: none; }
@@ -543,11 +547,11 @@ button, input, select { font: inherit; color: inherit; }
   <header class="topbar">
     <span class="crumb"><b>MERIDIAN</b><span class="dim">/ <span data-i18n="crumb.overview">总览</span> /</span><b id="crumbRegion">—</b></span>
     <span class="spacer"></span>
+    <span id="clock" class="clock">--:--:--</span>
     <div class="topbar-actions">
       <span class="live" id="connChip"><i aria-hidden="true"></i><span id="connText" data-i18n="conn.wait">连接中…</span></span>
       <button type="button" class="chip" id="themeChip"><span class="ico" aria-hidden="true">◐</span><span class="lbl" id="themeLbl" data-i18n="top.light">浅色</span></button>
       <a href="/admin" class="chip"><span data-i18n="top.admin">管理后台</span></a>
-      <span id="clock" class="ms">--:--:--</span>
       <label><span class="sr" data-i18n="lang">语言</span><select id="langSel" class="lang-select"></select></label>
       <button class="alerts-btn" type="button" id="alertsBtn">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 22a2.5 2.5 0 0 0 2.4-2h-4.8a2.5 2.5 0 0 0 2.4 2zm7-6V11a7 7 0 0 0-5.5-6.8V3a1.5 1.5 0 0 0-3 0v1.2A7 7 0 0 0 5 11v5l-2 2v1h18v-1z"/></svg>
