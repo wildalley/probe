@@ -319,6 +319,12 @@ export const ThemeManagerPanel: React.FC<ThemeManagerPanelProps> = ({
     }
   };
 
+  // Nezha-Live ships inside the server binary and is installed into the themes
+  // directory on startup, so it is offered here beside the native presets.
+  const NEZHA_LIVE = "nezha-live";
+  const nezhaLive = installedThemes.find((t) => t.short === NEZHA_LIVE);
+  const isNezhaLiveActive = activeBackendTheme === NEZHA_LIVE;
+
   const themes: Array<{
     id: ThemePreset;
     name: string;
@@ -591,7 +597,7 @@ export const ThemeManagerPanel: React.FC<ThemeManagerPanelProps> = ({
                 <div className="flex items-center gap-2.5">
                   <Globe className="h-4 w-4 text-[var(--nezha-accent)] shrink-0" />
                   <span className="text-[var(--nezha-ink)]">
-                    当前根路径 <code className="font-mono font-bold text-[var(--nezha-accent)]">/</code> 正由 Komari 社区主题{" "}
+                    当前根路径 <code className="font-mono font-bold text-[var(--nezha-accent)]">/</code> 正由{isNezhaLiveActive ? "内置主题" : " Komari 社区主题"}{" "}
                     <strong className="text-[var(--nezha-accent)]">{activeBackendTheme}</strong> 接管。内置控制台在{" "}
                     <code>/admin</code> 与 <code>/terminal</code> 保持独立运行。
                   </span>
@@ -667,6 +673,84 @@ export const ThemeManagerPanel: React.FC<ThemeManagerPanelProps> = ({
                   </div>
                 );
               })}
+
+              <div
+                onClick={() => {
+                  if (nezhaLive && !isNezhaLiveActive) handleActivateTheme(NEZHA_LIVE);
+                }}
+                className={cn(
+                  "relative flex flex-col justify-between rounded-none border p-4 transition-all font-mono",
+                  isNezhaLiveActive
+                    ? "border-[var(--nezha-accent)] bg-[var(--nezha-panel)] ring-1 ring-[var(--nezha-accent)] shadow-none"
+                    : nezhaLive
+                      ? "border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] hover:border-[var(--nezha-ink)] cursor-pointer"
+                      : "border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] opacity-60 cursor-not-allowed"
+                )}
+              >
+                {isNezhaLiveActive && (
+                  <div className="absolute top-0 right-0 px-2 py-0.5 rounded-none bg-[var(--nezha-accent)] text-[#141414] text-10 font-mono font-bold">
+                    当前使用中
+                  </div>
+                )}
+
+                <div className="space-y-3">
+                  <div className="relative h-28 w-full overflow-hidden rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel)] p-2.5 font-mono text-10 text-[var(--nezha-ink)]">
+                    <div className="flex items-center justify-between border-b border-[var(--nezha-line-soft)] pb-1 text-9">
+                      <span className="font-bold">NEZHA / 总览 / 全部地区</span>
+                      <span className="text-[var(--nezha-accent)] font-bold">● LIVE</span>
+                    </div>
+                    <div className="mt-1.5 grid grid-cols-[1fr_auto] gap-2 text-9">
+                      <div className="relative h-14 rounded-full border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] aspect-square mx-auto">
+                        <span className="absolute left-[30%] top-[35%] h-1.5 w-1.5 bg-[var(--nezha-accent)]" />
+                        <span className="absolute left-[62%] top-[30%] h-1.5 w-1.5 bg-[var(--nezha-ink)]" />
+                        <span className="absolute left-[55%] top-[60%] h-1.5 w-1.5 bg-[var(--nezha-ink)]" />
+                      </div>
+                      <div className="space-y-1 text-[var(--nezha-ink-2)]">
+                        <div>HK01 · CPU 76%</div>
+                        <div>JP01 · CPU 89%</div>
+                        <div>DE01 · ↓23.8M</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h3 className="font-bold text-sm text-[var(--nezha-ink)]">Nezha Live 节点实况</h3>
+                    <p className="text-11 font-mono text-[var(--nezha-accent-ink)] mt-0.5">
+                      Industrial Blueprint (Probe 内置){nezhaLive?.version ? ` · v${nezhaLive.version}` : ""}
+                    </p>
+                    <p className="mt-2 text-xs text-[var(--nezha-ink-3)] leading-relaxed">
+                      工业蓝图风格的 3D 地球 / 平面节点地图，配合节点列表、集群带宽曲线、实时告警与节点详情大屏。
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-4 pt-3 border-t border-[var(--nezha-line)] flex items-center justify-between">
+                  <div className="flex flex-wrap gap-1">
+                    {["3D 地图", "实时告警", "节点详情"].map((b) => (
+                      <span
+                        key={b}
+                        className="text-9 px-1.5 py-0.2 rounded-none font-mono border border-[var(--nezha-line)] bg-[var(--nezha-panel)] text-[var(--nezha-ink-2)]"
+                      >
+                        {b}
+                      </span>
+                    ))}
+                  </div>
+                  <span
+                    className={cn(
+                      "text-xs font-mono font-bold",
+                      isNezhaLiveActive ? "text-[var(--nezha-accent)]" : "text-[var(--nezha-ink-3)]"
+                    )}
+                  >
+                    {isNezhaLiveActive
+                      ? "● 已生效"
+                      : actionLoading[`activate-${NEZHA_LIVE}`]
+                        ? "应用中…"
+                        : nezhaLive
+                          ? "点击应用"
+                          : "未安装，请更新服务端"}
+                  </span>
+                </div>
+              </div>
             </div>
 
             {/* Market Promo Banner */}
