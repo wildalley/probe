@@ -36,7 +36,7 @@
 
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
-| `TZ` | `Asia/Shanghai` | 容器时区，影响每日简报触发时间 |
+| `TZ` | `Asia/Shanghai` | 容器时区，影响每日简报触发时间；页面上的时间按访客浏览器本地时区显示，不受此项影响 |
 | `PROBE_VERSION` | `dev` | Docker 构建时注入两个二进制的版本；修改后需重建 |
 | `GOPROXY` | `https://goproxy.cn,direct` | Docker Go 构建的模块代理 |
 | `GOSUMDB` | `sum.golang.google.cn` | Docker Go 构建的校验数据库 |
