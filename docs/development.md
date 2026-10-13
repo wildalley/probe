@@ -12,7 +12,7 @@ Agent ── WebSocket / WSS ──> Hub 内存状态 ── REST / WebSocket �
 
 Agent 默认每秒采集并上报；Hub 维护当前节点状态并广播，Downsampler 默认每 15 秒批量写入历史，默认保留 7 天。原生与 Komari 兼容接口共用服务端状态与鉴权边界。
 
-前端采用 React 19、Vite、Tailwind CSS 4、HeroUI；当前内置波形使用 Canvas，已移除 uPlot 依赖。构建资源通过 Go embed 编入服务端。
+前端采用 React 19、Vite、Tailwind CSS 4、HeroUI；内置波形使用 Canvas。构建资源通过 Go embed 编入服务端。
 
 ## 目录结构
 
@@ -88,4 +88,4 @@ python3 -m venv /tmp/probe-simulator-venv
 
 ## 文档维护
 
-README 只保留项目概览、快速上手和文档入口。新增配置更新 `configuration.md`，使用行为更新相应专题；修复过程与版本差异写入 [CHANGELOG](../CHANGELOG.md)。临时任务日志、进程号及本地绝对路径不放入项目使用文档。
+README 只保留项目概览、快速上手和文档入口。新增配置更新 `configuration.md`，使用行为更新相应专题。功能变化、修复和升级影响统一写入 [CHANGELOG](../CHANGELOG.md) 对应日期或版本的条目，专题文档不插入更新记录；安全审计的复现与验证证据独立归档。临时任务日志、进程号及本地绝对路径不放入项目使用文档。

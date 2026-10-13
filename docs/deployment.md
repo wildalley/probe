@@ -83,4 +83,4 @@ docker compose up -d --build
 
 `docker compose down` 保留数据卷；`docker compose down -v` 会删除卷及其中的数据，不用于普通更新。
 
-服务端更新不会自动替换已部署 Agent。访客 IP 隐藏和本次服务端权限修复无需 Agent 协议升级；若要同步工具链安全更新，仍建议重新构建并按[Agent 升级说明](operations.md#升级-agent)更新各节点。
+服务端更新不会自动替换已部署 Agent。各版本是否需要更新 Agent，见 [CHANGELOG](../CHANGELOG.md) 中对应的升级说明；执行步骤见 [Agent 升级说明](operations.md#升级-agent)。
