@@ -23,7 +23,7 @@ import (
 //go:embed all:dist
 var embeddedDist embed.FS
 
-// Themes shipped with the server (refreshed by `make sync-theme-nezha`), installed
+// Themes shipped with the server (refreshed by `make sync-theme-meridian`), installed
 // into the themes directory on startup.
 //
 //go:embed all:themes

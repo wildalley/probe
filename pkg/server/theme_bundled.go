@@ -30,6 +30,38 @@ func (s *Server) SeedBundledThemes(fsys fs.FS) {
 			log.Printf("[Theme] Failed to install bundled theme %q: %v", entry.Name(), err)
 		}
 	}
+	s.themeManager.migrateRenamedThemes()
+}
+
+// renamedBundledThemes maps an earlier identifier of a bundled theme to its
+// current one.
+var renamedBundledThemes = map[string]string{"nezha-live": "meridian"}
+
+// migrateRenamedThemes moves a site that had a renamed bundled theme active
+// onto its new identifier and removes the old copy, so the theme list does not
+// show both. Nothing happens unless the new theme is installed.
+func (tm *ThemeManager) migrateRenamedThemes() {
+	for old, cur := range renamedBundledThemes {
+		tm.mu.RLock()
+		_, hasOld := tm.installed[old]
+		_, hasCur := tm.installed[cur]
+		active := tm.activeTheme
+		tm.mu.RUnlock()
+		if !hasCur {
+			continue
+		}
+		if active == old {
+			if err := tm.SetActiveTheme(cur); err != nil {
+				log.Printf("[Theme] Failed to move active theme %s to %s: %v", old, cur, err)
+				continue
+			}
+		}
+		if hasOld {
+			if err := tm.DeleteTheme(old); err != nil {
+				log.Printf("[Theme] Failed to remove renamed theme %s: %v", old, err)
+			}
+		}
+	}
 }
 
 func (tm *ThemeManager) seedBundledTheme(fsys fs.FS, dir string) error {

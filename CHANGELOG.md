@@ -1,6 +1,6 @@
 # Changelog
 
-## 2026-10-13 - 管理后台工业蓝图风格重构与 Nezha-Live 主题
+## 2026-10-13 - 管理后台工业蓝图风格重构与 Meridian 子午主题
 
 ### 🎨 管理后台视觉重构 (Industrial Warm Blueprint)
 - **统一步调与硬朗工业设计语言**：
@@ -11,11 +11,15 @@
   - **主题与扩展中心**（`ThemeManagerModal`）：完整重构 4 大子面板（内置精选、已安装主题、Komari 官方主题市场、ZIP/URL 导入自定义主题），支持一键安装、生效切换、独立包导出与卸载。
   - **全套辅助模块**：登录界面（`LoginScreen`）、密码修改弹窗（`ChangePasswordModal`）、标签输入框（`TagInput`）、带宽配置（`BandwidthConfig`）等全套组件视觉统一。
 
-### 🚀 Nezha-Live 主题与构建体系
-- **实时监控蓝图工业风主题**（独立仓库 [komari-theme-nezha-live](https://github.com/wildalley/komari-theme-nezha-live)）：
+### 🚀 Meridian 子午主题与构建体系
+- **实时监控蓝图工业风主题**（独立仓库 [komari-theme-meridian](https://github.com/wildalley/komari-theme-meridian)，原名 Nezha Live）：
   - 3D 地球 / 平面地图展示节点分布，配合节点列表、集群带宽曲线、告警流与节点详情大屏。
   - 数据全部来自 Cyber Probe 原生接口（`/api/v1/nodes` + `/api/v1/client/ws` 实时推送），移除演示数据与模拟刷新；流量、配额、资费、探测目标和硬件规格均读取节点真实状态，告警由离线 / 恢复、CPU 高负载与配额 ≥80% 的实际变化产生。
-  - 主题随服务端二进制内嵌（`cmd/server/themes`），启动时若未安装或版本不同则自动安装，管理后台即可切换，不改变当前启用的主题；`make sync-theme-nezha` 从独立仓库更新内嵌副本。
+  - 主题随服务端二进制内嵌（`cmd/server/themes`），启动时若未安装或版本不同则自动安装，管理后台「原生精选」中即可切换，不改变当前启用的主题；`make sync-theme-meridian` 从独立仓库更新内嵌副本。
+  - 改名为 Meridian 子午（标识 `meridian`），避免与哪吒监控混淆；启动时自动移除旧的 `nezha-live`，原先启用旧主题的站点切换到新主题。
+  - 界面统一：顶栏只保留一个连接状态指示，切换按钮去掉 emoji，详情弹窗与焦点卡片全部接入四种语言，深浅色默认跟随系统；修复禁用本地存储时页面无法加载。
+  - 可读性：网络柱 / 图例改用强调色（原先浅色下近白、深色下近黑，与底色难以区分）；3D 详情标签加宽，指标名不再与进度条重叠；统计条标签不再折行。
+  - 移动端：顶栏折为两行，不再横向截断；节点列表排在地图之后、控制面板之前；3D 标签限制在地图范围内；详情弹窗隐藏空 IP 行，探测表收起地址列以容纳全部指标。
 
 ### 🔌 Komari 兼容
 - `common:getRecords` 的 ping 记录额外返回 `tasks` 列表，附带窗口聚合的 `loss`、`avg`、`min`、`max`、`latest`，修复 Blueprint 等主题详情页调用 `task.loss.toFixed()` 报错。

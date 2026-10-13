@@ -56,7 +56,8 @@
 .g-header { display: flex; justify-content: space-between; align-items: baseline; font-size: 11px; color: var(--ink-3); }
 .g-val { font-size: 18px; font-weight: 700; color: var(--ink); }
 .g-val.hot { color: var(--accent-ink); }
-.g-foot { display: flex; justify-content: space-between; font-size: 10px; color: var(--ink-2); white-space: nowrap; gap: 4px; }
+.g-foot { display: flex; justify-content: space-between; flex-wrap: wrap; font-size: 10px; color: var(--ink-2); gap: 2px 8px; }
+.g-foot span { white-space: nowrap; }
 .m-net-rates { display: flex; justify-content: space-between; font-size: 11px; margin: 4px 0; white-space: nowrap; gap: 6px; }
 .rate-down { color: var(--ink); font-weight: 700; }
 .rate-up { color: var(--accent-ink); font-weight: 700; }
@@ -161,7 +162,8 @@
   .ping-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .ping-table { min-width: 460px; font-size: 10.5px; }
   .ping-table th, .ping-table td { padding: 6px 8px; white-space: nowrap; }
-  .ping-table th:first-child, .ping-table td:first-child { white-space: normal; min-width: 130px; }
+  .ping-table th:nth-child(2), .ping-table td:nth-child(2) { display: none; }
+  .ping-table th:first-child, .ping-table td:first-child { white-space: normal; min-width: 0; }
   .billing-grid { grid-template-columns: 1fr; gap: 6px; }
   .billing-card { padding: 8px 10px; }
   .billing-card .b-val { font-size: 13px; }
@@ -188,11 +190,11 @@
   "three/addons/": "./vendor/"
 } }
 </script>
-  <script type="module" crossorigin src="./assets/index-DqhtEc15.js"></script>
+  <script type="module" crossorigin src="./assets/index-Vr85eXfb.js"></script>
 </head><body>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>哪吒节点实况</title>
+<title>子午 · 节点实况</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Sans+TC:wght@400;500;700&family=Noto+Sans+JP:wght@400;500;700&display=swap">
 <style>
 /* Layout: a full-bleed WebGL map (globe or Equal Earth) under an engineering HUD:
@@ -221,7 +223,7 @@
   --bar-cpu: #1E1E1C;
   --bar-mem: #64645D;
   --bar-disk: #A9A9A1;
-  --bar-net: #F7F7F4;
+  --bar-net: #FF5A1F;
   --track: #E3E3DD;
   --f-cjk: 'Noto Sans SC';
   --f-sans: 'Geist', var(--f-cjk), system-ui, sans-serif;
@@ -235,7 +237,7 @@
     --line: #34352F; --line-soft: #2A2B26; --ink: #ECECE6; --ink-2: #A9A9A0; --ink-3: #9C9C93;
     --accent: #FF6A33; --accent-ink: #FF8A5C; --accent-soft: rgba(255, 106, 51, 0.22); --on-accent: #141414;
     --land-lo: #3D3E39; --land-hi: #D8D8CF; --coast: #8E8E85; --grid: #23241F; --plate: #8E8E85; --pillar-edge: #ECECE6;
-    --bar-cpu: #ECECE6; --bar-mem: #A9A9A0; --bar-disk: #6B6B63; --bar-net: #2B2C28; --track: #2E2F2A;
+    --bar-cpu: #ECECE6; --bar-mem: #A9A9A0; --bar-disk: #6B6B63; --bar-net: #FF6A33; --track: #2E2F2A;
     color-scheme: dark;
   }
 }
@@ -244,7 +246,7 @@
   --line: #34352F; --line-soft: #2A2B26; --ink: #ECECE6; --ink-2: #A9A9A0; --ink-3: #9C9C93;
   --accent: #FF6A33; --accent-ink: #FF8A5C; --accent-soft: rgba(255, 106, 51, 0.22); --on-accent: #141414;
   --land-lo: #3D3E39; --land-hi: #D8D8CF; --coast: #8E8E85; --grid: #23241F; --plate: #8E8E85; --pillar-edge: #ECECE6;
-  --bar-cpu: #ECECE6; --bar-mem: #A9A9A0; --bar-disk: #6B6B63; --bar-net: #2B2C28; --track: #2E2F2A;
+  --bar-cpu: #ECECE6; --bar-mem: #A9A9A0; --bar-disk: #6B6B63; --bar-net: #FF6A33; --track: #2E2F2A;
   color-scheme: dark;
 }
 
@@ -269,6 +271,9 @@ button, input, select { font: inherit; color: inherit; }
 .topbar-actions { display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; white-space: nowrap; }
 .live { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-2); font-size: 11px; font-weight: 700; height: 28px; line-height: 1; }
 .live i { width: 7px; height: 7px; background: var(--accent); border-radius: 50%; animation: blink 1.6s ease-in-out infinite; }
+.live[data-state="wait"] i, .live[data-state="lost"] i { background: var(--ink-3); animation: none; }
+.live[data-state="lost"] { color: var(--accent-ink); }
+.chip .ico { font-size: 13px; line-height: 1; }
 .chip {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   height: 28px; padding: 0 10px; box-sizing: border-box;
@@ -289,7 +294,7 @@ button, input, select { font: inherit; color: inherit; }
   font-size: 11px; font-weight: 700; letter-spacing: 0.04em; font-family: var(--f-mono);
   white-space: nowrap; transition: background 0.15s ease;
 }
-.alerts-btn:hover { background: #E54D16; }
+.alerts-btn:hover { filter: brightness(0.92); }
 .alerts-btn svg { width: 13px; height: 13px; flex-shrink: 0; }
 
 .stage { position: relative; flex: 1 1 auto; min-height: 0; }
@@ -305,7 +310,7 @@ button, input, select { font: inherit; color: inherit; }
   will-change: transform; display: flex; flex-direction: column; transition: opacity 0.15s ease-out; }
 .tag[data-level="compact"] { width: 74px; height: 20px; }
 .tag[data-level="std"] { width: 126px; height: 42px; }
-.tag[data-level="detail"] { width: 178px; height: 114px; }
+.tag[data-level="detail"] { width: 200px; height: 114px; }
 .tg-h { flex: none; display: flex; justify-content: space-between; align-items: center; height: 20px; padding: 0 8px 0 10px; box-sizing: border-box;
   background: var(--ink); color: var(--panel); clip-path: polygon(0 0, 100% 0, 96% 100%, 4% 100%); font-size: 11px; font-weight: 700; gap: 6px; }
 .tag[data-level="compact"] .tg-h { clip-path: none; padding: 0 6px; }
@@ -315,7 +320,7 @@ button, input, select { font: inherit; color: inherit; }
 .tag[data-hover="true"]:not([data-selected="true"]) { outline: 1.5px solid var(--ink); outline-offset: 1px; }
 .tg-s { display: flex; justify-content: space-between; padding: 4px 8px 0; font-size: 10px; color: var(--ink-2); }
 .tg-d { display: flex; flex-direction: column; gap: 3px; padding: 5px 8px 0; font-size: 10px; color: var(--ink-2); }
-.tg-d .mrow { display: grid; grid-template-columns: 34px minmax(0, 1fr) 34px; gap: 6px; align-items: center; }
+.tg-d .mrow { display: grid; grid-template-columns: 50px minmax(0, 1fr) 38px; gap: 6px; align-items: center; }
 .tg-d .mrow em { font-style: normal; text-align: right; color: var(--ink); }
 .tg-d .mrow em.hot { color: var(--accent-ink); font-weight: 700; }
 .tg-d .foot { display: flex; justify-content: space-between; align-items: center; margin-top: 3px; font-size: 9.5px; white-space: nowrap; gap: 4px; }
@@ -346,7 +351,7 @@ button, input, select { font: inherit; color: inherit; }
 .free { pointer-events: none; position: relative; grid-column: 2; grid-row: 1; }
 .rail { grid-column: 1; grid-row: 1; align-self: stretch; display: flex; flex-direction: column; min-height: 0; overflow: auto; }
 .table-panel { grid-column: 3; grid-row: 1 / span 2; display: flex; flex-direction: column; min-height: 0; }
-.strip { grid-column: 1 / span 2; grid-row: 2; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1.3fr); gap: 14px; pointer-events: none; }
+.strip { grid-column: 1 / span 2; grid-row: 2; display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1.1fr) minmax(0, 1.25fr); gap: 14px; pointer-events: none; }
 .strip > * { pointer-events: auto; }
 
 .sec { padding: 11px 16px; display: flex; flex-direction: column; gap: 7px; }
@@ -441,12 +446,13 @@ button, input, select { font: inherit; color: inherit; }
 .big4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
 .big4 div { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .big4 strong { font-family: var(--f-sans); font-size: 36px; line-height: 0.95; font-weight: 300; letter-spacing: -0.04em; }
-.big4 span { font-size: 11px; color: var(--ink-2); }
+.big4 span { font-size: 10.5px; letter-spacing: 0; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .big4 .off strong { color: var(--accent-ink); }
 .totals { display: flex; justify-content: space-between; gap: 8px; padding-top: 8px; border-top: 1px dashed var(--line); font-size: 11.5px; }
 .chart-wrap { position: relative; flex: 1 1 auto; min-height: 92px; }
 .chart-wrap canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
-.legend { display: flex; gap: 12px; font-size: 10.5px; color: var(--ink-2); }
+.legend { display: flex; gap: 12px; font-size: 10.5px; color: var(--ink-2); white-space: nowrap; flex: none; }
+.sec-h > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .legend i { display: inline-block; width: 12px; height: 2px; vertical-align: middle; margin-right: 6px; }
 .feed { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line-soft); }
 .feed li { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 5px 4px; border-bottom: 1px solid var(--line-soft); font-size: 11.5px; }
@@ -489,12 +495,19 @@ button, input, select { font: inherit; color: inherit; }
   .strip .alerts { display: block; }
   .rows { overflow: visible; }
   .topbar .ms { display: none; }
+  /* Node list first on narrow screens; map controls last. */
+  .table-panel { order: 1; }
+  .strip { order: 2; }
+  .rail { order: 3; }
 }
 @media (max-width: 640px) {
   .topbar {
-    padding-inline: 10px; padding-block: 6px; gap: 6px; min-height: 42px; font-size: 11px;
-    flex-wrap: nowrap; overflow-x: auto;
+    padding-inline: 10px; padding-block: 6px; gap: 6px 8px; min-height: 42px; font-size: 11px;
+    flex-wrap: wrap; overflow: visible;
   }
+  .topbar .spacer { display: none; }
+  .topbar-actions { width: 100%; justify-content: space-between; }
+  .chip .lbl { display: none; }
   .crumb { gap: 6px; font-size: 11px; flex-shrink: 0; white-space: nowrap; }
   .topbar-actions { gap: 5px; flex-shrink: 0; white-space: nowrap; }
   .chip, .alerts-btn, .lang-select {
@@ -513,15 +526,14 @@ button, input, select { font: inherit; color: inherit; }
 
 <div class="app">
   <header class="topbar">
-    <span class="crumb"><b>NEZHA</b><span class="dim">/ <span data-i18n="crumb.overview">总览</span> /</span><b id="crumbRegion">—</b></span>
+    <span class="crumb"><b>MERIDIAN</b><span class="dim">/ <span data-i18n="crumb.overview">总览</span> /</span><b id="crumbRegion">—</b></span>
     <span class="spacer"></span>
     <div class="topbar-actions">
-      <span class="live"><i aria-hidden="true"></i><span data-i18n="live">实时</span></span>
-      <span class="chip" id="connChip" data-i18n="conn.wait">连接中…</span>
-      <button type="button" class="chip" id="themeChip">☀️ 浅色模式</button>
-      <a href="/admin" class="chip">管理后台</a>
+      <span class="live" id="connChip"><i aria-hidden="true"></i><span id="connText" data-i18n="conn.wait">连接中…</span></span>
+      <button type="button" class="chip" id="themeChip"><span class="ico" aria-hidden="true">◐</span><span class="lbl" id="themeLbl" data-i18n="top.light">浅色</span></button>
+      <a href="/admin" class="chip"><span data-i18n="top.admin">管理后台</span></a>
       <span id="clock" class="ms">--:--:--</span>
-      <label class="ms"><span class="sr" data-i18n="lang">语言</span><select id="langSel" class="lang-select"></select></label>
+      <label><span class="sr" data-i18n="lang">语言</span><select id="langSel" class="lang-select"></select></label>
       <button class="alerts-btn" type="button" id="alertsBtn">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 22a2.5 2.5 0 0 0 2.4-2h-4.8a2.5 2.5 0 0 0 2.4 2zm7-6V11a7 7 0 0 0-5.5-6.8V3a1.5 1.5 0 0 0-3 0v1.2A7 7 0 0 0 5 11v5l-2 2v1h18v-1z"/></svg>
         <span data-i18n="alerts">告警</span> <span id="alertCount">0</span>
@@ -588,9 +600,9 @@ button, input, select { font: inherit; color: inherit; }
         <div class="sec">
           <div class="sec-h"><span data-i18n="focus">选中节点</span><span id="focusCode"></span></div>
           <div class="focus-card" id="focusCard">
-            <div class="focus-head" id="openDetailBtn" title="点击打开全量详情页"><span id="focusName"></span><span aria-hidden="true">↗ 详情</span></div>
+            <div class="focus-head" id="openDetailBtn"><span id="focusName"></span><span aria-hidden="true">↗ <span data-i18n="f.detail">详情</span></span></div>
             <dl class="focus-body" id="focusBody"></dl>
-            <button type="button" id="openDetailBtn2" class="detail-jump-btn" title="打开节点详情页面">查看完整节点详情页 ↗</button>
+            <button type="button" id="openDetailBtn2" class="detail-jump-btn"><span data-i18n="f.detailFull">查看完整详情</span> ↗</button>
           </div>
         </div>
       </aside>
@@ -658,7 +670,7 @@ button, input, select { font: inherit; color: inherit; }
     </div>
   </main>
 
-<!-- Node Detail Modal (全量节点详情大屏) -->
+<!-- Node detail modal -->
 <div class="modal-backdrop" id="detailModalBackdrop" aria-hidden="true">
   <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="modalNodeTitle">
     <div class="modal-header">
@@ -670,13 +682,13 @@ button, input, select { font: inherit; color: inherit; }
       <div class="modal-actions">
         <span class="modal-ip-copy" id="modalIpWrap">
           <span id="modalIpText">--.---.---.--</span>
-          <button type="button" id="copyIpBtn" class="ip-btn" title="复制 IP">复制</button>
+          <button type="button" id="copyIpBtn" class="ip-btn" data-i18n="d.copy">复制</button>
         </span>
         <div class="modal-nav">
-          <button type="button" id="prevNodeBtn" class="dirbtn" title="上一个节点">◀</button>
-          <button type="button" id="nextNodeBtn" class="dirbtn" title="下一个节点">▶</button>
+          <button type="button" id="prevNodeBtn" class="dirbtn" data-i18n-aria="d.prev">◀</button>
+          <button type="button" id="nextNodeBtn" class="dirbtn" data-i18n-aria="d.next">▶</button>
         </div>
-        <button type="button" class="modal-close-btn" id="closeDetailBtn" aria-label="关闭详情 (ESC)">✕</button>
+        <button type="button" class="modal-close-btn" id="closeDetailBtn" data-i18n-aria="d.close">✕</button>
       </div>
     </div>
 
@@ -686,20 +698,20 @@ button, input, select { font: inherit; color: inherit; }
         <!-- CPU Card -->
         <div class="gauge-card">
           <div class="g-header">
-            <span>CPU 核心负载</span>
+            <span data-i18n="d.cpu">CPU 负载</span>
             <strong class="g-val" id="mCpuVal">0%</strong>
           </div>
           <div class="mbar" style="height: 6px; margin: 8px 0;"><i id="mCpuBar" style="width: 0%;"></i></div>
           <div class="g-foot">
-            <span id="mCpuCores">-- 核</span>
-            <span id="mCpuLoad">负载: 0.00, 0.00</span>
+            <span id="mCpuCores"></span>
+            <span id="mCpuLoad"></span>
           </div>
         </div>
 
         <!-- RAM Card -->
         <div class="gauge-card">
           <div class="g-header">
-            <span>物理内存占用</span>
+            <span data-i18n="d.mem">内存</span>
             <strong class="g-val" id="mMemVal">0%</strong>
           </div>
           <div class="mbar" style="height: 6px; margin: 8px 0;"><i id="mMemBar" style="width: 0%;"></i></div>
@@ -712,7 +724,7 @@ button, input, select { font: inherit; color: inherit; }
         <!-- Disk Card -->
         <div class="gauge-card">
           <div class="g-header">
-            <span>存储磁盘利用</span>
+            <span data-i18n="d.disk">磁盘</span>
             <strong class="g-val" id="mDiskVal">0%</strong>
           </div>
           <div class="mbar" style="height: 6px; margin: 8px 0;"><i id="mDiskBar" style="width: 0%;"></i></div>
@@ -725,19 +737,19 @@ button, input, select { font: inherit; color: inherit; }
         <!-- Network Card -->
         <div class="gauge-card">
           <div class="g-header">
-            <span>网络实时速率</span>
+            <span data-i18n="d.net">实时网速</span>
             <strong class="g-val" id="mNetVal">-- MB/s</strong>
           </div>
           <div class="mbar dual-mbar" style="height: 6px; margin: 8px 0; display: flex; background: var(--track); overflow: hidden;">
-            <i id="mNetDownBar" style="height: 100%; width: 0%; background: var(--ink); transition: width 0.6s ease;" title="下行吞吐率"></i>
-            <i id="mNetUpBar" style="height: 100%; width: 0%; background: var(--accent); transition: width 0.6s ease;" title="上行吞吐率"></i>
+            <i id="mNetDownBar" style="height: 100%; width: 0%; background: var(--ink); transition: width 0.6s ease;"></i>
+            <i id="mNetUpBar" style="height: 100%; width: 0%; background: var(--accent); transition: width 0.6s ease;"></i>
           </div>
           <div class="m-net-rates">
             <span class="rate-down">↓ <b id="mRateDown">--</b> M/s</span>
             <span class="rate-up">↑ <b id="mRateUp">--</b> M/s</span>
           </div>
           <div class="g-foot">
-            <span id="mTotalDown">总计: --</span>
+            <span id="mTotalDown"></span>
             <span id="mTotalUp">↓ -- · ↑ --</span>
           </div>
         </div>
@@ -745,22 +757,22 @@ button, input, select { font: inherit; color: inherit; }
 
       <!-- Specs & Hardware Information -->
       <div class="modal-section">
-        <div class="sec-h"><b>[系统与硬件配置]</b><span>HARDWARE & SYSTEM SPECIFICATIONS</span></div>
+        <div class="sec-h"><b data-i18n="d.specs">[系统与硬件]</b></div>
         <div class="specs-grid" id="modalSpecsGrid"></div>
       </div>
 
       <!-- Network Probes & Ping Targets -->
       <div class="modal-section">
-        <div class="sec-h"><b>[网络延迟与丢包探测]</b><span>LATENCY & PACKET LOSS TARGETS</span></div>
+        <div class="sec-h"><b data-i18n="d.pings">[延迟与丢包]</b></div>
         <div class="ping-table-wrap">
           <table class="ping-table">
             <thead>
               <tr>
-                <th>探测目标</th>
-                <th>协议 / 地址</th>
-                <th>平均延迟</th>
-                <th>丢包率</th>
-                <th>状态评估</th>
+                <th data-i18n="d.target">探测目标</th>
+                <th data-i18n="d.addr">地址</th>
+                <th data-i18n="d.lat">延迟</th>
+                <th data-i18n="d.loss">丢包率</th>
+                <th data-i18n="d.qual">状态</th>
               </tr>
             </thead>
             <tbody id="modalPingTbody"></tbody>
@@ -770,18 +782,18 @@ button, input, select { font: inherit; color: inherit; }
 
       <!-- Billing, Quota & Provider -->
       <div class="modal-section" id="modalBillingSection">
-        <div class="sec-h"><b>[资产账单与流量配额]</b><span>BILLING, QUOTA & LIFETIME VALUE</span></div>
+        <div class="sec-h"><b data-i18n="d.billing">[账单与流量]</b></div>
         <div class="billing-grid" id="modalBillingGrid"></div>
       </div>
     </div>
 
     <div class="modal-footer">
       <div class="mf-left">
-        <span class="dim">Cyber Probe & Komari 兼容遥测大屏 · 实时指标监控</span>
+        <span class="dim">MERIDIAN · Cyber Probe</span>
       </div>
       <div class="mf-right">
-        <a href="/admin" class="modal-btn-terminal">管理终端 / 控制台 ↗</a>
-        <button type="button" id="modalCloseFooterBtn" class="modal-btn-close">关闭 (ESC)</button>
+        <a href="/admin" class="modal-btn-terminal"><span data-i18n="top.admin">管理后台</span>&nbsp;↗</a>
+        <button type="button" id="modalCloseFooterBtn" class="modal-btn-close" data-i18n="d.close">关闭 (ESC)</button>
       </div>
     </div>
   </div>

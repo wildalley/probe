@@ -1,4 +1,4 @@
-.PHONY: all build-all build-agent build-server build-web dev-server dev-agent dev-web clean sync-theme-nezha
+.PHONY: all build-all build-agent build-server build-web dev-server dev-agent dev-web clean sync-theme-meridian
 
 # Release version stamped into both binaries. Override for a real release:
 #   make build-all PROBE_VERSION=1.2.3
@@ -19,15 +19,15 @@ build-web:
 
 # Bundled themes live in their own repositories; this refreshes the copy the
 # server embeds (cmd/server/themes) from the published package.
-NEZHA_THEME_ZIP ?= https://raw.githubusercontent.com/wildalley/komari-theme-nezha-live/main/nezha-live.zip
+MERIDIAN_THEME_ZIP ?= https://raw.githubusercontent.com/wildalley/komari-theme-meridian/main/meridian.zip
 
-sync-theme-nezha:
-	@echo "==> Syncing bundled Nezha-Live theme..."
-	rm -rf cmd/server/themes/nezha-live
+sync-theme-meridian:
+	@echo "==> Syncing bundled Meridian theme..."
+	rm -rf cmd/server/themes/meridian
 	mkdir -p cmd/server/themes
-	curl -fsSL -o /tmp/nezha-live.zip $(NEZHA_THEME_ZIP)
-	unzip -q /tmp/nezha-live.zip -d cmd/server/themes
-	rm -f /tmp/nezha-live.zip
+	curl -fsSL -o /tmp/meridian.zip $(MERIDIAN_THEME_ZIP)
+	unzip -q /tmp/meridian.zip -d cmd/server/themes
+	rm -f /tmp/meridian.zip
 
 build-agent:
 	@echo "==> Building Probe Agent (Static & Stripped)..."

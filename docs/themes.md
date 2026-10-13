@@ -4,9 +4,9 @@
 
 ## 内置主题与安装
 
-内置 btop++ 看板包含集群、监控、详情视图，支持深浅色外观；Canvas 绘制实时波形，可切换盲文点阵、TTY 和方块符号。服务端还内嵌了 Nezha-Live（哪吒实时蓝图工业风主题）：3D 地图节点分布、实时速率、告警与节点详情，数据全部来自 Cyber Probe 原生接口。管理后台固定使用 `/admin`，可从主题市场安装，也可上传第三方 ZIP。
+内置 btop++ 看板包含集群、监控、详情视图，支持深浅色外观；Canvas 绘制实时波形，可切换盲文点阵、TTY 和方块符号。服务端还内嵌了 Meridian 子午（工业蓝图风格 3D 地图主题）：3D 地图节点分布、实时速率、告警与节点详情，数据全部来自 Cyber Probe 原生接口。管理后台固定使用 `/admin`，可从主题市场安装，也可上传第三方 ZIP。
 
-独立 btop 主题维护在 [komari-theme-btop 仓库](https://github.com/wildalley/komari-theme-btop)。Nezha-Live 主题维护在 [komari-theme-nezha-live 仓库](https://github.com/wildalley/komari-theme-nezha-live)，其编译产物放在 `cmd/server/themes/nezha-live`，随服务端二进制内嵌：服务端启动时若主题目录中没有该主题、或已装版本与内嵌版本不同，会自动安装，之后在管理后台主题管理中即可切换（不会自动改变当前启用的主题）。主题仓库发布新版本（提升 `komari-theme.json` 的 `version`）后，执行 `make sync-theme-nezha` 更新内嵌副本再重新构建，已部署实例才会覆盖更新。其它独立主题包有自己的发布周期，更新 Probe 不会自动更新已安装的主题包。
+独立 btop 主题维护在 [komari-theme-btop 仓库](https://github.com/wildalley/komari-theme-btop)。Meridian 主题维护在 [komari-theme-meridian 仓库](https://github.com/wildalley/komari-theme-meridian)，其编译产物放在 `cmd/server/themes/meridian`，随服务端二进制内嵌：服务端启动时若主题目录中没有该主题、或已装版本与内嵌版本不同，会自动安装，之后在管理后台「主题扩展 → 原生精选」中即可切换（不会自动改变当前启用的主题）。主题仓库发布新版本（提升 `komari-theme.json` 的 `version`）后，执行 `make sync-theme-meridian` 更新内嵌副本再重新构建，已部署实例才会覆盖更新。该主题曾名 Nezha Live（标识 `nezha-live`）：启动时若检测到旧主题，会删除旧目录，原先启用它的站点自动切换到 `meridian`。其它独立主题包有自己的发布周期，更新 Probe 不会自动更新已安装的主题包。
 
 主题安装目录默认是工作目录的 `themes/`，可用 `PROBE_THEMES_DIR` 指向可写路径。Compose 将 `/app/themes` 挂载为持久卷，升级容器不会丢失已安装主题。
 

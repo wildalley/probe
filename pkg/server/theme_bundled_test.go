@@ -67,3 +67,30 @@ func TestSeedBundledThemesUpgradesOnlyOnVersionChange(t *testing.T) {
 		t.Fatalf("new version not installed: %q", got)
 	}
 }
+
+func TestSeedBundledThemesMigratesRenamedTheme(t *testing.T) {
+	tm := NewThemeManager(nil, filepath.Join(t.TempDir(), "themes"))
+	s := &Server{themeManager: tm}
+
+	s.SeedBundledThemes(fstest.MapFS{
+		"nezha-live/komari-theme.json": {Data: []byte(`{"name":"Old","short":"nezha-live","version":"1.1.0"}`)},
+		"nezha-live/dist/index.html":   {Data: []byte("old")},
+	})
+	if err := tm.SetActiveTheme("nezha-live"); err != nil {
+		t.Fatal(err)
+	}
+
+	s.SeedBundledThemes(fstest.MapFS{
+		"meridian/komari-theme.json": {Data: []byte(`{"name":"New","short":"meridian","version":"1.2.0"}`)},
+		"meridian/dist/index.html":   {Data: []byte("new")},
+	})
+	if got := tm.GetActiveTheme(); got != "meridian" {
+		t.Fatalf("active = %q, want meridian", got)
+	}
+	if themes := tm.GetInstalledThemes(); len(themes) != 1 || themes[0].Short != "meridian" {
+		t.Fatalf("installed = %+v", themes)
+	}
+	if _, err := os.Stat(filepath.Join(tm.themesDir, "nezha-live")); !os.IsNotExist(err) {
+		t.Fatalf("old theme directory still present: %v", err)
+	}
+}
