@@ -1,4 +1,4 @@
-.PHONY: all build-all build-agent build-server build-web dev-server dev-agent dev-web clean
+.PHONY: all build-all build-agent build-server build-web dev-server dev-agent dev-web clean sync-theme-nezha
 
 # Release version stamped into both binaries. Override for a real release:
 #   make build-all PROBE_VERSION=1.2.3
@@ -17,11 +17,17 @@ build-web:
 	@echo "==> Building Web frontend..."
 	cd web && npm install && npm run build
 
-build-theme-nezha:
-	@echo "==> Building Nezha Live Theme (dist + zip)..."
-	cd web && npm run build:nezha
-	python3 -c "import zipfile, os; zf = zipfile.ZipFile('themes/nezha-live.zip', 'w', zipfile.ZIP_DEFLATED); [zf.write(os.path.join(r, f), os.path.relpath(os.path.join(r, f), 'themes')) for r, _, fs in os.walk('themes/nezha-live') for f in fs]; zf.close()"
+# Bundled themes live in their own repositories; this refreshes the copy the
+# server embeds (cmd/server/themes) from the published package.
+NEZHA_THEME_ZIP ?= https://raw.githubusercontent.com/wildalley/komari-theme-nezha-live/main/nezha-live.zip
 
+sync-theme-nezha:
+	@echo "==> Syncing bundled Nezha-Live theme..."
+	rm -rf cmd/server/themes/nezha-live
+	mkdir -p cmd/server/themes
+	curl -fsSL -o /tmp/nezha-live.zip $(NEZHA_THEME_ZIP)
+	unzip -q /tmp/nezha-live.zip -d cmd/server/themes
+	rm -f /tmp/nezha-live.zip
 
 build-agent:
 	@echo "==> Building Probe Agent (Static & Stripped)..."

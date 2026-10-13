@@ -23,6 +23,12 @@ import (
 //go:embed all:dist
 var embeddedDist embed.FS
 
+// Themes shipped with the server (refreshed by `make sync-theme-nezha`), installed
+// into the themes directory on startup.
+//
+//go:embed all:themes
+var embeddedThemes embed.FS
+
 func main() {
 	var (
 		listenAddr    string
@@ -131,6 +137,9 @@ func main() {
 	}
 
 	srv := server.NewServer(hub, storage, downsampler, notifier, distFS, auth, !publicView)
+	if themes, err := fs.Sub(embeddedThemes, "themes"); err == nil {
+		srv.SeedBundledThemes(themes)
+	}
 
 	httpServer := &http.Server{
 		Addr:              listenAddr,

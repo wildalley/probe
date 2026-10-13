@@ -12,10 +12,13 @@
   - **全套辅助模块**：登录界面（`LoginScreen`）、密码修改弹窗（`ChangePasswordModal`）、标签输入框（`TagInput`）、带宽配置（`BandwidthConfig`）等全套组件视觉统一。
 
 ### 🚀 Nezha-Live 主题与构建体系
-- **实时监控蓝图工业风主题**（`web/src/themes/nezha-live/`）：
-  - 适配完整 Komari RPC 与 WebSocket 实时双向通信，提供集群 CPU/内存/磁盘/网络速率等仪表盘。
-  - 优化网速与带宽展示排版，支持多段流量展示与单行非换行顶栏布局（`flex-wrap: nowrap`）。
-  - 新增 `npm run dev:nezha` 开发环境与 `npm run build:nezha` 打包指令，新增 `make build-theme-nezha` 一键导出 ZIP 主题包。
+- **实时监控蓝图工业风主题**（独立仓库 [komari-theme-nezha-live](https://github.com/wildalley/komari-theme-nezha-live)）：
+  - 3D 地球 / 平面地图展示节点分布，配合节点列表、集群带宽曲线、告警流与节点详情大屏。
+  - 数据全部来自 Cyber Probe 原生接口（`/api/v1/nodes` + `/api/v1/client/ws` 实时推送），移除演示数据与模拟刷新；流量、配额、资费、探测目标和硬件规格均读取节点真实状态，告警由离线 / 恢复、CPU 高负载与配额 ≥80% 的实际变化产生。
+  - 主题随服务端二进制内嵌（`cmd/server/themes`），启动时若未安装或版本不同则自动安装，管理后台即可切换，不改变当前启用的主题；`make sync-theme-nezha` 从独立仓库更新内嵌副本。
+
+### 🔌 Komari 兼容
+- `common:getRecords` 的 ping 记录额外返回 `tasks` 列表，附带窗口聚合的 `loss`、`avg`、`min`、`max`、`latest`，修复 Blueprint 等主题详情页调用 `task.loss.toFixed()` 报错。
 
 ### 🐛 交互体验与 Linux/Wayland 兼容性修复
 - **下拉菜单与日期选择器浮层漂移修复**：
