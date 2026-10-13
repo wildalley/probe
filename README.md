@@ -1,461 +1,64 @@
-# 🛸 Cyber Probe · 自研高性能极客服务器探针系统
+# Cyber Probe
 
-<p align="center">
-  <img src="https://img.shields.io/badge/Agent%20RAM-5~10MB-emerald?style=flat-square&logo=go" alt="Agent RAM" />
-  <img src="https://img.shields.io/badge/Agent%20CPU-~0%25-blue?style=flat-square&logo=linux" alt="Agent CPU" />
-  <img src="https://img.shields.io/badge/UI%20Engine-uPlot%20%2B%20React%2019-violet?style=flat-square&logo=react" alt="Frontend" />
-  <img src="https://img.shields.io/badge/Native%20Theme-btop%2B%2B%20Terminal-cyan?style=flat-square&logo=linux" alt="btop++" />
-  <img src="https://img.shields.io/badge/Theme%20Market-Komari%20Compatible-emerald?style=flat-square" alt="Komari Themes" />
-  <img src="https://img.shields.io/badge/License-MIT-gray?style=flat-square" alt="License" />
-</p>
+基于 Go 和 React 的服务器监控系统。Agent 主动连接服务端，上报主机资源、流量和网络探测结果；服务端提供实时看板、历史记录、节点管理和告警。
 
-> **原生 btop++ 极客终端全屏架构 · 兼容 Komari 主题市场生态 · 极简轻量 Agent · 纯内存事件分发 Hub · 财务汇率与网络质量图表**  
-> 一款专为极客、运维与 VPS 玩家打造的高性能、低开销自研服务器探针系统。
+## 主要功能
 
----
+- **主机监控**：CPU、内存、磁盘、网络吞吐、系统规格与公网 IPv4 / IPv6。
+- **实时看板**：内置 btop++ 风格的集群、单机监控和详情视图，支持深浅色外观与移动端。
+- **网络探测**：ICMP、TCP、HTTP 延迟与丢包记录，可按节点分配目标。
+- **资产管理**：价格、计费周期、到期日、汇率折算、流量配额与手工校准。
+- **通知**：Telegram、Discord、自定义 Webhook，支持离线、恢复、流量预警和每日简报。
+- **主题扩展**：主题市场、ZIP 安装及 Komari 兼容数据接口。
+- **访问控制**：默认需要登录；可开启公开看板，访客看不到节点 IP，管理操作仍需登录。
 
-## ✨ 核心特性一览
+Agent 通过 WebSocket / WSS 主动出站，无需开放被控主机的入站端口。服务端使用 SQLite，内嵌前端资源，可通过 Docker Compose 或单二进制部署。
 
-### 1. 极轻被控端 (Agent)
-- **零依赖单二进制**：纯 Go 静态交叉编译（`CGO_ENABLED=0`），内存严格控制在 **5~10MB**，日常 CPU 占用趋近于 **0%**。
-- **单向出站长连接**：Agent 主动通过 WebSocket/WSS 向上连入 Hub，**无需开放受控机入站端口**，轻松穿透 NAT、家庭宽带与内网环境。
-- **自动环境探测**：自动识别公网 IPv4 / IPv6、地理归属国家/地区、系统内核、虚拟化架构（KVM/Xen/LXC 等）。双栈地址探测与地区标签相互独立——手工用 `--region` 钉死地区标签不会让 Agent 停止探测自己的出口地址；地址每 10 分钟复查一次，因此机器重建或换 IP 后看板不会一直挂着旧地址。识别不出虚拟化平台时如实上报 `physical` / `vm` / 空值，不再一律标记 KVM。同时上报分核 CPU 占用与可用/缓存内存，btop 视图的分核与内存面板据此显示真实数据（旧 Agent 不上报时显示 `--`）。
-- **只上报真实测得的数据**：Agent 不再携带任何占位计费/标签数据。价格、周期、配额、线路标签一律由管理后台配置，未配置就显示 `--`，而不是拿一份看起来像真数据的默认值糊在看板上。
-- **流量与网速算法**：物理网卡与虚拟网卡智能过滤（容器、桥接之外也剔除 WireGuard / Tailscale / ZeroTier / utun 等隧道，避免同一份流量在物理网卡与隧道上被重复统计），自研差分即时速率算法，自动规避重启计数器归零与溢出异常。
-- **构建期版本标识**：两个二进制都在链接期注入发布版本（`make build-all PROBE_VERSION=1.2.3`），Agent 每次上报都随身携带自身版本。看板据此标出与当前下发版本不一致的节点，因此「哪几台机器跑的是旧 Agent」一眼可见，不必逐台登录确认。
+## 快速部署
 
-### 2. 纯内存调度与时序分层持久化 (Server Hub)
-- **纯内存高频广播**：Goroutine 高并发处理 Agent 连接池与 Web 客户端 1Hz 实时数据流推送。
-- **连接心跳保活**：服务端每 30 秒向每条 WebSocket 下发 Ping，两端的 60 秒读超时均由对端 Pong 刷新，空闲链路不会被误判断开；Agent 断线后按 1s→30s 指数退避自动重连。
-- **Downsampler 降采样分层存储**：实时数据秒级内存广播；历史时序由降采样引擎批量写入嵌入式纯 Go SQLite（`modernc.org/sqlite`），杜绝磁盘 I/O 损耗与数据库膨胀。
-- **单二进制全内置**：Web 前端基于 `//go:embed` 完整编译进单一二进制，无须额外安装 Nginx 或配置反向代理即可直接运行。
-
-### 3. 极客视觉与交互系统 (Web Dashboard)
-- **原生 btop++ 4 视窗终端拟真布局（官方默认）**：
-  - 深度还原 Linux 顶级终端监控工具 btop++ 视觉范式，纯直角硬朗形态、全等宽字体、盲文点阵（`⡇⡎⡍⣹⣽⣻⣷⣾⣿`）波形图谱与填满容器的分段量表。波形由 Canvas 按真实采样绘制（原始每秒遥测、离散步进、无字体回退错位），支持 盲文点阵 / TTY 抖动块 / 方块 三种符号风格点击切换；量表括号贴边，负载达到 65% / 85% 时分别变为警告色 / 告警色；
-  - `[1] hosts`（集群多节点聚合列表）、`[2] monitor`（拟真单机 4 象限监控）、`[3] details`（全屏深度诊断）三重视图自由穿梭；
-  - 双色终端外观：🌙 **暗色终端（btop++ Dark）** 与 ☀️ **浅色终端（btop++ Light）** 即时切换；
-  - 不展示未采集的 CPU 主频、温度、功耗、挂载盘和网卡规格；网络面板标明物理网卡汇总，未设置流量配额时显示「无限制」。
-  - 提供兼容 **Komari 监控** 与 **Cyber Probe** 的独立插件包：[下载 btop-terminal.zip](https://raw.githubusercontent.com/wildalley/komari-theme-btop/main/btop-terminal.zip)（[源码与安装说明](https://github.com/wildalley/komari-theme-btop)）。插件资源从站点根路径加载，在 `/dashboard` 等页面路径下也可正常打开。
-- **全生态主题扩展（Komari Theme Market）**：
-  - 原生内置主题管理器，完全兼容 Komari 主题生态；
-  - 支持在管理后台一键拉取并安装官方市场主题，亦可上传第三方 ZIP 主题包；
-  - 主题安装目录默认为工作目录下的 `themes/`，可用 `PROBE_THEMES_DIR` 指向可写路径（如挂载卷 `/data/themes`）；Docker 镜像已预置属主正确的 `/app/themes` 并由 compose 挂 named volume 持久化，镜像升级不再丢已装主题；
-  - **国内网络友好**：市场索引默认走 raw.githubusercontent.com，取不到时自动回退 jsDelivr 镜像；可用 `PROBE_THEME_MARKET_URL` 指向自建/CDN 市场源，`PROBE_THEME_ASSET_MIRROR` 可为 GitHub 主题包下载配置加速前缀或 `{url}` 模板（自带 SHA256 的主题包下载后仍会校验完整性）；
-  - **指标与图标兼容**：实现 Komari 的 `public:queryMetrics` / `public:getPingMetricStats` RPC 与 `/api/recent/{uuid}` 历史接口（延迟/丢包图表与实例监控页依赖它们），OS 图标与地区旗帜在内置解析器找不到时回退到程序内嵌的通用图标，任何 Komari 主题都不会出现破图；
-  - 独立管理后台页面（`/admin`），主题切换与管理操作彻底解耦。
-  - **Komari 兼容接口一览**（对主题开发者）：
-    - JSON-RPC 2.0（`/api/rpc2`，HTTP POST 与 WebSocket 双通道）：`common:getNodes`、`common:getNodesLatestStatus`、`common:getNodeRecentStatus`、`common:getRecords`、`common:getPublicInfo`、`common:getVersion`，以及指标类 `public:queryMetrics`（`ping.latency_ms` / `ping.loss` / `cpu.usage` / `memory.used` / `net.in.rate` / `net.out.rate` / `load.load1` 等，ping 序列按 `tags.task_id` 分组；`ping.loss` 为**丢包事件语义**——干净桶 `0`、丢包桶 `100`，且丢包桶不下发延迟样本，对齐上游「全丢桶无延迟样本」约定。窗口平均丢包率仅从 stats 与实时卡片下发。注意：`ping.loss` 事件依赖 Agent 上报的丢失位，建议 Agent 与服务端一同升级，否则丢包标记不显示）、`public:getPingMetricStats`（每任务 loss/min/max/avg/latest/p50/p99/p99_p50_ratio）、`public:getPublicPingTasks`；
-    - REST 与 WebSocket：`/api/nodes`、`/api/recent/{uuid}`（最近 150 个状态点，记录形状与实时 WS 一致）、`/api/records/load`、`/api/records/ping`、`/api/task/ping`、`/api/public`、实时流 `/api/clients`（WS）；
-    - 静态资源：`/assets/flags/*`、`/assets/flags-4x3/*`、`/assets/logo/*`（OS 图标支持未哈希文件名解析与多主题目录回退，找不到时返回内嵌通用图标而非 404）。
-- **现代前端技术栈与移动端深度适配**：基于 React 19、Tailwind CSS 4 与 HeroUI 构建。重构了移动端全屏响应式体验：导航顶栏自适应紧凑折叠与抽屉菜单彻底杜绝内容遮挡，地区支持横向平滑滚动筛选；管理后台全面采用移动端全屏抽屉排版防溢出，详情页主机切换下拉采用居中防越界浮层与毛玻璃遮罩。
-- **uPlot 毫秒级时序图**：体积仅 30KB，微秒级渲染上万点数据；全功能 **Hover 垂直标尺 + 毛玻璃浮动指示气泡**，实时展示精确时间与数值。
-- **主机卡片双段胶囊网络监测条**：双段 40 槽位对称胶囊条设计，左半段对齐呈现目标名称与实时延迟（如 44ms），右半段呈现丢包率百分比（如 0%）；下半部分对称排列 20+20 个圆角状态胶囊条。平稳状态呈沉稳深绿（`#268462`），轻度升高波动呈现高亮鲜蓝（`#316aea`）；Hover 悬浮精准弹出带小尖角指针的 Tooltip 浮层气泡（显示 `HH:mm · X ms`），同行其余胶囊条自动半透明淡化聚焦，内置边界智能约束防止卡片边缘裁剪。40 格即该目标最近 40 次**真实探测**（每分钟从历史接口刷新，实时流中尚未落库的最新一次探测即时追加），红色为该次探测丢包；历史不足 40 次时左侧留灰色空格，不做任何模拟填充。
-- **网络质量监测系统 (Network Probes)**：支持 ICMP / TCP / HTTP 探测（Google、电信、联通、移动、YouTube、ChatGPT、Claude 等），按目标展示实时延迟与丢包分布。Agent 随每次上报携带「最近一次探测是否丢包」的事件位，历史时序按事件记录丢包——第三方主题的丢包标记精确到每次真实丢包，而不是被窗口平均恒置为正；每次探测随上报携带完成时间 `probed_at`，服务端据此**每次探测只落库一行**并以真实探测时刻为时间戳（Agent 每秒上报、降采样器每 15 秒落库，旧逻辑会把同一次探测重复写入多次）；`public:getPingMetricStats` 的丢包率 = 丢包探测数 / 总探测数，延迟 min/avg/p50/p99 只统计成功探测，丢包行在 ping 记录接口中以 `value: -1` 下发。旧 Agent 不带 `probed_at` 时回退为每次落库一行、丢包率标记 `loss_approximate`。
-- **设备全景详情页**：
-  - CPU 与负载、物理内存与 Swap、实时网络吞吐、TCP/UDP 连接数、磁盘读写 IOPS、进程数等 6 组轻量时序图表。
-  - 公网 IPv4 / IPv6 双栈展示，支持 **IP 地址一键脱敏隐藏** 与 **一键复制真实地址**。
-  - 硬件规格真实动态识别，根据 CPU 物理核心数与型号自适应算力分级与架构描述。
-- **多资产财务定价与实时汇率折算**：
-  - 支持多货币定价（USD, CNY, EUR, HKD, GBP, JPY），计费周期（按月/季/半年/年/两年/三年/一次性）。
-  - 支持到期时间管理、剩余天数与自动续费提醒。未填到期日的主机显示「未设到期 / 自动续费」，不会凭空编出一个剩余天数。
-  - **主机备注与优惠折扣码管理**：可针对每台主机记录专属续费折扣码（如循环 5 折优惠码）、购买渠道、工单号或配置备忘，并在卡片与详情页醒目呈现，支持一键快捷复制。
-  - 自动拉取实时央行汇率，精确统计全集群每月总成本与当前各主机 **实时剩余价值（Remaining Value）**。单机卡片与详情页按该节点本币显示（如 `$1.40`），管理后台的集群汇总按人民币折算，两者不会混用符号。
-- **流量配额与校准累计**：支持总额（GB / TB / PB / 无限）配置与用量进度条、超额预警。当前统一按**上行 + 下行**计算已用流量和配额占用，例如上传 10 GB、下载 20 GB 计为 30 GB；暂不支持仅计单向流量。未校准时直接使用物理网卡累计值，因此它可能与只统计公网流量的服务商账单不同。已用流量可按服务商面板的数字手工校准，**校准值作为基线而非终值**——保存后上下行流量继续在此基线上累加，网卡计数器归零（重启、换网卡）会自动重锚，自校准以来已累计的流量会按上下行方向折算进基线并持久化，重启、服务端重启都不会丢；仅修改其它配置（改名、改价格等）不会动锚点，基线真正变化才重新锚定；基线填 0 表示取消校准，直接按网卡累计值统计。重新打开主机设置时会先读取已保存的校准值，读取失败时禁止保存，避免误将基线覆盖为 0；「填入网卡值」按原始字节数保存。
-- **已用流量上/下行明细**：主机卡片与详情页在已用流量旁展示 ↑/↓ 拆分，上下行之和恒等于配额所依据的总量，明细不会和总数互相矛盾。配额本身仍是合并口径，拆分只用于展示，不构成独立限额。校准基线是服务商面板上的单一合并数字，其方向占比按锚定时刻的网卡上下行比例折算；锚定之后的流量归属真实承载它的方向，重启折算进基线的部分同样保留各自的方向。
-- **通信鉴权 Token 管理**：内置安全令牌体系，一键生成命令自动嵌入 Token，提供交互式换 Token 与动态吊销。
-- **主机集中管理**：管理后台提供主机搜索与状态列表，将新增部署、地区线路识别、计费周期、到期日、标签和流量配额集中到独立配置弹窗。「手动覆盖」区块还可强制指定公网 IPv4 / IPv6，用于 Agent 探测不到出口地址（或反代/DNAT 环境下探测有误）的场景。
-- **公网地址取值优先级**：后台手填 > Agent 自报 > 连接来源地址。每一级都会校验，回环、私网、链路本地、CGNAT 等内部地址一律丢弃而非展示——因此 Docker 网关这类地址不会被误当成公网 IP 显示（确需展示内网地址时可设 `PROBE_ALLOW_PRIVATE_TARGETS=1`）。这个地址同时用作 GeoIP 归属查询的依据，纯 IPv6 主机也能正常解析。
-- **管理后台会话鉴权**：默认全站需登录，加 `-public` 后访客可只读浏览看板；节点配置、Token、通知渠道凭据与其他写操作始终要求管理员登录，并支持修改密码后注销全部既有会话。
-- **多色彩语义标签与收藏**：根据线路与特性（CN2, BGP, GIA, 1Gbps, 原生IP 等）自动渲染多彩色微光标签；支持单机星标置顶与收藏筛选。
-- **多通道告警与定时简报**：
-  - 三条独立通道：Telegram Bot、Discord Webhook 与自定义 Webhook；自定义 Webhook 内置报文格式预设，可直接对接飞书、钉钉、企业微信群机器人与 Bark（iOS），或用通用 JSON 自行处理。
-  - 可配置规则：节点离线告警（含离线判定阈值）、恢复上线通知、流量配额预警（阈值百分比可调）、每日定时集群简报。
-  - 内置推送审计日志，逐条记录投递通道、事件类型与成功/失败状态，支持分页翻阅与一键清空。
-
----
-
-## 🔄 更新日志
-
-版本级更新记录见 [GitHub Releases](https://github.com/wildalley/probe/releases)；开发进度与设计取舍见各提交说明，README 只保留与当前版本一致的使用文档。
-
----
-
-## 🏛 架构与原理
-
-```
-  ┌────────────────────────────────────────────────────────┐
-  │              Target Hosts (受控服务器集群)               │
-  │                                                        │
-  │  ┌──────────────────────┐    ┌──────────────────────┐  │
-  │  │   Probe Agent (Go)   │    │   Probe Agent (Go)   │  │
-  │  │   RAM: 5~10MB        │    │   RAM: 5~10MB        │  │
-  │  │   CPU: ~0%           │    │   CPU: ~0%           │  │
-  │  └──────────┬───────────┘    └──────────┬───────────┘  │
-  └─────────────┼───────────────────────────┼──────────────┘
-                │ WSS Outbound (单向主动出站) │
-                ▼                           ▼
-  ┌────────────────────────────────────────────────────────┐
-  │             Server Hub (事件中心 / API 网关)             │
-  │                                                        │
-  │  ┌──────────────────────────────────────────────────┐  │
-  │  │ In-Memory Node States & WebSocket Connection Pool│  │
-  │  └──────────────────────────┬───────────────────────┘  │
-  │               ▲             │                          │
-  │               │             ▼ Downsampler              │
-  │               │      ┌───────────────────────────┐     │
-  │               │      │ modernc.org/sqlite        │     │
-  │               │      │ (分层降采样持久化时序库)    │     │
-  │               │      └───────────────────────────┘     │
-  └───────────────┼────────────────────────────────────────┘
-                  │ WebSocket Live Stream (1Hz 实时广播)
-                  ▼
-  ┌────────────────────────────────────────────────────────┐
-  │    Web Dashboard (React 19 + Tailwind 4 + HeroUI)     │
-  │                                                        │
-  │  • btop++ 终端（默认）/ 赛博暗黑 / 蓝图工程多套主题切换    │
-  │  • uPlot 极速时序图 (带垂直光标指示与毛玻璃 Hover Tooltip)│
-  │  • 网站延迟丢包质量监测 (Google / Cloudflare / 电信等)  │
-  │  • 财务汇率月度总览、剩余价值折算、流量配额进度计算       │
-  │  • 单二进制 embed.FS 零依赖打包分发                    │
-  └────────────────────────────────────────────────────────┘
-```
-
----
-
-## 🚀 快速上手
-
-服务端有两种部署方式，选其一即可：**方式 A（Docker Compose）** 开箱即用，无需本机安装 Go 与 Node；**方式 B（源码编译）** 适合二次开发调试。Agent 的部署（第 3 步起）两种方式通用。
-
-### 1. 方式 A · Docker Compose 部署（推荐）
-
-只需要 Docker，无需在宿主机安装 Go 或 Node —— 前端打包与二进制编译都在镜像内完成。
+需要 Git、Docker 和 Docker Compose。前端与 Go 程序在镜像内构建，宿主机无需安装编译工具。
 
 ```bash
 git clone https://github.com/wildalley/probe.git
 cd probe
-
-# 建议先设置管理员密码，否则会随机生成并只在启动日志里打印一次
 cp .env.example .env
-$EDITOR .env
-
-docker compose up -d
 ```
 
-随后访问 `http://<服务器IP>:8080` 即可登录。常用运维命令：
+编辑 `.env`，设置 `PROBE_ADMIN_PASSWORD`，然后启动：
 
 ```bash
-docker compose logs -f          # 查看实时日志（首启的随机密码在这里）
-docker compose restart          # 重启服务
-git pull && docker compose up -d --build   # 拉取最新代码并重建镜像
-docker compose down             # 停止并删除容器（数据卷保留）
+docker compose up -d --build
 ```
 
-关于这套镜像的几点说明：
+访问 `http://<服务器地址>:8080`，默认管理员用户名为 `admin`。未设置密码时，首次启动会生成随机密码，可用 `docker compose logs server` 查看；首次登录后需修改密码。账号环境变量仅在首次创建账号时生效。
 
-- **单容器**：只有服务端一个服务，SQLite 内嵌、前端已编译进二进制，不需要额外的数据库或 Nginx 容器。
-- **数据持久化**：SQLite 落在命名卷 `probe-data`（容器内 `/data`）。`docker compose down` 不会删数据；确实要清空得显式执行 `docker compose down -v`。
-- **非 root 运行**：容器内以 `probe` 普通用户启动，仅对 `/data` 有写权限。
-- **时区**：每日简报按本地挂钟时间触发，因此镜像内置 tzdata，用 `.env` 里的 `TZ` 指定时区（默认 `Asia/Shanghai`），否则 `09:00` 会按 UTC 计算。
-- **健康检查**：内置 `HEALTHCHECK` 探测 `/api/v1/auth/status`，`docker compose ps` 可直接看到 healthy 状态。
-- **Agent 部署链路自带**：镜像内已包含 `install.sh` 与 Agent 二进制，管理后台给出的一键部署命令可直接使用。
+登录后进入 `/admin`，复制 Agent 安装命令，在目标 Linux 主机上执行。安装脚本会创建 systemd 服务。公网访问建议配置 HTTPS，并使用 `wss://` 连接 Agent。
 
-> **生产建议**：用反向代理（Caddy / Nginx / Traefik）终止 HTTPS，并把 `docker-compose.yml` 里的端口映射改为 `"127.0.0.1:8080:8080"`，只允许代理访问。走 HTTPS 后会话 Cookie 才会带上 `Secure` 属性。
-
----
-
-### 2. 方式 B · 从源码编译
-
-本系统支持一键打包编译（需要本机具备 Go 与 Node 环境）：
+常用命令：
 
 ```bash
-# 克隆仓库
-git clone https://github.com/wildalley/probe.git
-cd probe
-
-# 编译全部组件（前端自动打包并嵌入服务端二进制中）
-make build-all
+docker compose logs -f server       # 查看日志
+docker compose restart server       # 重启服务
+git pull --ff-only                  # 更新源码
+docker compose up -d --build        # 重建并更新服务端
+docker compose down                # 停止服务，保留数据卷
 ```
 
-编译产物位于 `bin/` 目录：
-- `bin/probe-server`：包含 API 网关、WSS Hub、SQLite 存储与 Web 前端界面的单二进制程序（约 25MB）。
-- `bin/probe-agent`：纯静态交叉编译的被控端 Agent 二进制程序（约 6.8MB）。
+SQLite 与已安装主题分别保存在 `probe-data`、`probe-themes` 命名卷中。更新前的备份、反向代理和源码部署步骤见[部署指南](docs/deployment.md)。
 
-两个二进制都会在链接期注入发布版本，默认取 `git describe --tags --always --dirty`，因此不带参数构建出来的版本号也能对应到确切的提交。正式发布时显式指定：
+## 文档导航
 
-```bash
-make build-all PROBE_VERSION=1.2.3
-./bin/probe-server --version   # probe-server 1.2.3
-./bin/probe-agent  --version   # probe-agent 1.2.3
-```
-
-Docker 构建走同一条通道：`PROBE_VERSION=1.2.3 docker compose build`（`docker-compose.yml` 把它转发给镜像的 `VERSION` 构建参数）。`.dockerignore` 排除了 `.git`，镜像内跑不了 `git describe`，所以这个值必须由宿主机传入。
-
-端口同样由环境变量驱动：`PROBE_PORT=9090 docker compose up -d` 会同时改写宿主机端口映射、容器内监听地址与健康检查（默认 8080）。构建期 Go 模块下载默认走 `goproxy.cn` 镜像（`docker-compose.yml` 转发 `GOPROXY` / `GOSUMDB` 构建参数），海外网络可覆盖为直连：`GOPROXY=https://proxy.golang.org,direct GOSUMDB=sum.golang.org docker compose build`。
-
-> 服务端与 Agent 从同一个 `PROBE_VERSION` 取值，因此**服务端下发的 Agent 版本与它自己报告的版本必然一致**——这正是看板用来判断「哪台机器是旧的」的基准。
-
----
-
-### 3. 启动服务端 (Probe Server)
-
-```bash
-# 推荐在首次启动前显式设置管理员密码
-PROBE_ADMIN_USER=admin \
-PROBE_ADMIN_PASSWORD='请替换为强密码' \
-./bin/probe-server -addr :8080 -db probe.db
-```
-
-常用参数说明：
-- `-addr`：监听地址与端口（默认 `:8080`）。
-- `-db`：SQLite 数据文件路径（默认 `probe.db`）。
-- `-flush-interval`：历史数据批量写入间隔秒数（默认 `15` 秒）。
-- `-retention-days`：历史时序数据保存天数（默认 `7` 天）。
-- `-public`：公开模式，允许未登录访客只读浏览看板（默认关闭，即**任何页面与数据都必须登录后才能查看**）。
-- `-session-hours`：登录会话有效期小时数（默认 `168`，即 7 天）。
-
-#### 首次启动与管理员账号
-
-服务端首次启动会自动创建管理员账号。若未通过环境变量预设密码，则会随机生成一个强密码并**仅在启动日志中打印一次**：
-
-```
-==================================================
-  初始管理员账号已创建 (请立即登录并修改密码)
-  Username : admin
-  Password : 8r5qfqDBsGWrQcvr
-==================================================
-```
-
-也可以用环境变量预设账号密码（适合自动化部署，跳过强制改密）：
-
-```bash
-PROBE_ADMIN_USER=admin PROBE_ADMIN_PASSWORD='YourStrongPassword' \
-  ./bin/probe-server -addr :8080 -db probe.db
-```
-
-若使用随机生成的密码登录，前端会强制要求先修改密码，改密后所有旧会话立即失效。忘记密码可停止服务后删除数据库中的账号记录，重启即重新生成：
-
-```bash
-sqlite3 probe.db "DELETE FROM admin_users;"
-```
-
-服务启动后，在浏览器访问 `http://localhost:8080`，登录后即可进入管理看板。
-
-#### 权限边界一览
-
-| 类别 | 未登录访客 | 已登录管理员 |
-| --- | --- | --- |
-| 看板与节点时序数据（只读） | ❌ 401（加 `-public` 后才可匿名查看） | ✅ |
-| Agent Token 查看 / 生成 | ❌ 401 | ✅ |
-| 节点删除、财务与定价配置 | ❌ 401 | ✅ |
-| 延迟监测目标增删改、汇率刷新 | ❌ 401 | ✅ |
-| 通知渠道配置、测试推送与审计日志 | ❌ 401 | ✅ |
-| `install.sh` 与 Agent 二进制下载 | ✅ 公开（部署链路需要，不含机密） | ✅ |
-
-反向代理或前后端分离部署时，如需允许其他来源携带 Cookie 访问，用环境变量声明可信来源：
-
-```bash
-PROBE_ALLOWED_ORIGINS="https://probe.example.com,http://localhost:5173"
-```
-
-如果服务端位于反向代理之后，还应单独声明可信代理地址或网段，登录限流才会采用其转发的客户端 IP。未配置时，服务端不会信任任何 `X-Forwarded-For`：
-
-```bash
-PROBE_TRUSTED_PROXIES="127.0.0.1,10.0.0.0/8"
-```
-
-初始 Agent 通信 Token 同样按安装随机生成并写入启动日志，可登录管理后台复制或轮换，不再使用固定默认 Token。
-
-服务端可用环境变量（每一项都有对应的命令行参数，参数优先）：
-
-| 变量 | 对应参数 | 默认值 | 说明 |
-| --- | --- | --- | --- |
-| `PROBE_ADMIN_USER` | — | `admin` | 首次创建管理员时使用的用户名 |
-| `PROBE_ADMIN_PASSWORD` | — | 随机生成 | 首次创建管理员时使用的密码；建议生产环境显式设置 |
-| `PROBE_ALLOWED_ORIGINS` | — | 服务自身来源 | 额外允许携带会话 Cookie 的跨域来源，多个来源用逗号分隔 |
-| `PROBE_TRUSTED_PROXIES` | — | 不信任任何代理 | 反向代理的地址或网段，多个用逗号分隔。只有列入的来源才允许通过 `X-Forwarded-For` 覆盖客户端 IP |
-| `PROBE_ALLOW_PRIVATE_TARGETS` | — | `false` | 置为 `1` 后允许延迟探测目标与 Webhook 指向内网地址；内网探测还需在对应 Agent 上设置 |
-| `PROBE_SERVER_ADDR` | `-addr` | `:8080` | 监听地址与端口 |
-| `PROBE_PORT` | — | — | 仅端口的简写（纯数字或 `:端口`），等价 `-addr :端口`；`PROBE_SERVER_ADDR` 未设置时生效。Docker 部署用它可以同时改端口与健康检查 |
-| `PROBE_DB_PATH` | `-db` | `probe.db` | SQLite 数据文件路径 |
-| `PROBE_PUBLIC_VIEW` | `-public` | `false` | 置为 `true` 等同于加 `-public`，开放匿名只读看板 |
-| `PROBE_THEMES_DIR` | — | 工作目录下 `themes` | 主题（插件包）安装目录；工作目录只读或权限受限（如非特权容器）时指向可写路径 |
-| `PROBE_THEME_MARKET_URL` | — | 上游市场（失败自动回退 jsDelivr） | 主题市场索引 `v1.json` 的自定义地址；设置后不再使用内置镜像回退 |
-| `PROBE_THEME_ASSET_MIRROR` | — | 不重写 | GitHub 主题包下载加速：前缀式（`https://gh-proxy.com/`）或含 `{url}` 的模板；只重写 github.com / githubusercontent.com 链接，带 SHA256 的包下载后仍校验完整性 |
-
-Agent 端可用环境变量（同样可用对应参数覆盖）：
-
-| 变量 | 对应参数 | 默认值 | 说明 |
-| --- | --- | --- | --- |
-| `PROBE_SERVER` | `--server` | `ws://127.0.0.1:8080` | 服务端地址，公网部署建议用 `wss://` |
-| `PROBE_TOKEN` | `--token` | — | 通信鉴权 Token，须与服务端一致 |
-| `PROBE_NODE_ID` | `--node-id` | 主机名 | 节点唯一标识 |
-| `PROBE_NAME` | `--name` | 主机名 | 看板显示名称 |
-| `PROBE_REGION` | `--region` | `auto` | 归属地区，`auto` 表示按公网 IP 自动识别 |
-| `PROBE_INTERVAL` | `--interval` | `1` | 采集上报间隔秒数 |
-| `PROBE_ALLOW_PRIVATE_TARGETS` | — | `false` | 置为 `1` 后允许该 Agent 探测内网地址和非白名单端口 |
-
-监测目标可指定执行探测的节点。未指定节点且关闭“默认自动开启监测”时，服务端记录当时已接入的节点；后续新节点不会自动获得该目标。
-
-删除节点前需先停止对应 Agent：仍保持 WebSocket 连接的节点会返回 `409`，Agent 一断开即可删除，无须等待离线判定阈值。节点是否「在线」由告警阈值决定（默认 60 秒），该阈值只影响看板状态与告警，不阻塞删除。
-
-> 会话记录持久化在 SQLite 中，默认有效期 7 天（`-session-hours` 可调），重启服务端不会强制登出。生产环境建议通过 HTTPS 访问，以启用 Cookie 的 `Secure` 属性。
-
----
-
-### 4. 一键部署被控端 (Agent)
-
-使用管理员账号登录后，在 Web 界面点击右上角 **「管理后台」** 或 **「快速部署」**，即可获取自动嵌入当前通信 Token 与自适应参数的命令。
-
-只需在目标 Linux 服务器上以 root 身份执行：
-
-```bash
-curl -sSL http://<你的服务端IP或域名>:8080/install.sh | sudo bash -s -- \
-  --server "ws://<你的服务端IP或域名>:8080" \
-  --token "<从管理后台复制的 Agent Token>" \
-  --name "Silicon Valley Gateway" \
-  --region "US"
-```
-
-> **自动特性**：
-> - 地区参数 `--region` 留空时，脚本将自动根据公网 IP 智能识别归属国家与城市。
-> - 脚本会自动创建并注册 `probe-agent.service` Systemd 系统服务，支持开机自启与异常断线自愈。
-
-#### Agent 常用运维命令
-```bash
-systemctl status probe-agent   # 查看探针运行状态
-journalctl -u probe-agent -f   # 查看实时运行日志
-systemctl restart probe-agent  # 重启探针服务
-bash install.sh --upgrade      # 仅更新二进制，保留现有配置与节点标识
-bash install.sh --uninstall    # 一键彻底卸载探针与清理服务
-```
-
-#### 升级已部署的 Agent
-
-服务端发布新版本后，在目标机器上执行一条命令即可升级：
-
-```bash
-curl -sSL http://<你的服务端IP或域名>:8080/install.sh | sudo bash -s -- --upgrade
-```
-
-`--upgrade` 只做三件事：读现有的 `/etc/probe/agent.yaml` 取出 `server_url`、下载新二进制、重启服务。
-
-- **不需要 Token**：`node_id` 与 Token 都保存在 `agent.yaml` 里，换二进制不会改变它们，看板上不会多出一个节点。
-- **不改配置文件**：脚本不会重写 `agent.yaml`，手工调过的 `insecure_tls`、`report_interval` 等设置原样保留。
-- **原子替换**：新二进制先落到同目录的临时文件并校验是 ELF，再 `rename` 覆盖。Linux 拒绝以 `O_TRUNC` 写入正在运行的二进制（`ETXTBSY`），而 `rename` 不碰运行中的 inode，因此对正在运行的 Agent 升级是安全的——旧进程照常上报，直到紧随其后的 `systemctl restart` 才切到新版本。
-- **失败即回退**：下载失败或校验不通过时，旧二进制原封不动，服务不受影响。
-
-升级完成后脚本会打印 `旧版本 → 新版本`，也可以用 `probe-agent --version` 随时自证这台机器上装的是什么。
-
-#### 旧版 Agent 的兼容处理
-
-早期版本的 Agent 会在上报里携带一份硬编码的演示数据（固定的价格、剩余天数、2TB 配额、线路标签与 CPU 分级）。这些字段从来都不是 Agent 能配置的——命令行与 `agent.yaml` 里都没有对应项——所以服务端现在一律丢弃它们，只采信管理后台里存的配置。
-
-因此还没升级的节点会显示 `--` 或「未上报」，而不是显示一份看起来合理其实是假的数据。把这类节点补上配置，或走一遍 `--upgrade`，显示就恢复正常。
-
-另外，**公网 IPv6 上报需要节点运行新版 Agent**。旧版 Agent 只上报 IPv4，此时 IPv6 栏位要么留空，要么用管理后台「手动覆盖」里填的地址。
-
-#### 版本一致性提示
-
-看板按 **服务端此刻真的会下发的那份 `probe-agent`** 作为基准版本比较每个节点：
-
-| 看板显示 | 含义 |
+| 文档 | 内容 |
 | --- | --- |
-| 不显示标记 | 节点版本与基准一致 |
-| **未知（旧版）** | 该 Agent 不上报版本号，说明它早于版本字段本身——最需要升级的那批 |
-| **版本不一致** | 该节点与基准不同。文案刻意不写「可升级」：服务端只能看出两者不同，看不出谁新谁旧（灰度升级中的节点会比基准还新） |
+| [部署指南](docs/deployment.md) | Docker、源码构建、HTTPS、更新与备份 |
+| [配置参考](docs/configuration.md) | 服务端与 Agent 参数、环境变量、配置优先级 |
+| [Agent 与日常运维](docs/operations.md) | 安装升级、版本提示、流量校准、监测和通知 |
+| [主题与兼容接口](docs/themes.md) | 主题安装、镜像配置、Komari API、指标语义 |
+| [安全与访问控制](docs/security.md) | 访客 IP 隐私、权限边界、凭据、出站及上传限制 |
+| [开发指南](docs/development.md) | 架构、目录结构、构建、测试与模拟器 |
+| [更新记录](CHANGELOG.md) | 按日期记录功能变化和修复 |
+| [安全审计记录](docs/security-audit-2026-10-12.md) | 2026-10-12 的历史问题、修复和验证范围 |
 
-若服务端自身未打版本戳（`dev`）或版本字段缺失，看板不做任何版本判断，不会把整个机群标成不一致。
+## 开源许可
 
----
-
-### 5. 手动运行 Agent (调试模式)
-
-```bash
-./bin/probe-agent \
-  --server "ws://127.0.0.1:8080" \
-  --token "<从管理后台复制的 Agent Token>" \
-  --node-id "node-01" \
-  --name "本地主机" \
-  --region "CN" \
-  --interval 1
-```
-
----
-
-### 6. 多节点仿真测试
-
-无需真实部署多台 VPS，即可通过内置模拟器体验多台分布式节点的实时动态监控（Token 从管理后台「通信 Token」处复制）：
-
-```bash
-# Go 模拟器（4 台预设节点，含延迟探测模拟）
-go run ./cmd/simulator -server ws://127.0.0.1:8080/api/v1/agent/ws "<Agent Token>"
-
-# Python 多节点模拟脚本（备选）
-python3 -m pip install websocket-client
-python3 scripts/simulate_nodes.py \
-  ws://127.0.0.1:8080/api/v1/agent/ws \
-  "<Agent Token>"
-```
-
----
-
-## 📁 目录结构
-
-```
-probe/
-├── cmd/
-│   ├── agent/                 # Agent 采集端入口
-│   ├── server/                # Server 调度端入口（含 //go:embed 静态资源打包）
-│   └── simulator/             # 多节点流量模拟器（联调与演示用）
-├── pkg/
-│   ├── agent/                 # 采集逻辑、网卡过滤、差分速率计算、WSS 客户端
-│   ├── model/                 # 协议模型与数据结构
-│   ├── server/                # 纯内存 Hub、Downsampler 降采样、SQLite 持久化、会话鉴权、告警推送、REST API
-│   └── version/               # 构建期注入的发布版本号（两个二进制共用同一符号）
-├── web/                       # React 19 + Vite + Tailwind CSS 4 + HeroUI + uPlot 前端源码
-│   ├── src/
-│   │   ├── components/        # 仪表盘卡片、图表组件、管理弹窗、详情页、登录与改密界面
-│   │   │   └── ui/            # 动效基元（扫光文字、渐变标题、呼吸圆环、数字滚动等）
-│   │   ├── hooks/             # 会话状态等自定义 Hook
-│   │   ├── lib/               # 类名合并等通用工具
-│   │   ├── utils/             # 标签配色系统、汇率计算、国旗解析、单位格式化、流量方向明细
-│   │   └── types/             # 前端 TypeScript 类型定义
-├── deploy/                    # 一键部署脚本与 Systemd 模板
-├── themes/                    # 内置 Komari 兼容主题与市场缓存（ServerStatus 等）
-├── scripts/                   # Python 多节点模拟脚本
-├── Dockerfile                 # 三阶段构建：前端打包 → Go 编译 → 精简运行时镜像
-├── docker-compose.yml         # 单容器编排（命名卷持久化 SQLite）
-├── .env.example               # Compose 环境变量模板，复制为 .env 后使用
-├── Makefile                   # 统一构建自动化
-└── README.md                  # 详细使用文档
-```
-
----
-
-## 🛡️ 安全与权限规范
-
-1. **默认全站鉴权**：默认情况下未登录用户看不到任何监控数据，看板、节点时序与实时数据流一律返回 `401`，仅登录页可访问。需要对外公开只读看板时，才显式添加 `-public`。
-2. **后台登录鉴权**：所有写操作、Agent Token 与通知渠道凭据（Telegram Bot Token、Webhook 地址等）均要求管理员会话，未登录访问一律返回 `401`。会话令牌存放于 `HttpOnly` + `SameSite=Lax` Cookie，数据库内仅保存其 SHA-256 摘要，密码使用 bcrypt（cost 12）哈希存储。
-3. **登录防爆破**：同一 IP 连续 5 次密码错误后锁定 15 分钟；用户名不存在时同样执行一次 bcrypt 比对，避免通过响应耗时探测账号是否存在。
-4. **首次启动强制改密**：未预设环境变量时随机生成 16 位初始密码并仅打印一次，登录后强制修改；改密会吊销该账号的全部历史会话。
-5. **Token 鉴权机制**：服务端与被控端之间采用安全 Token 握手机制，未授权的连接直接被拒绝，支持后台多 Token 动态分发与废止。Agent Token 属于凭据，仅登录后可见。
-6. **跨站防护**：浏览器实时数据流会校验 `Origin`，阻止恶意页面借用 Cookie 建立 WebSocket；CORS 仅回显同源或 `PROBE_ALLOWED_ORIGINS` 显式声明的来源。
-7. **可信代理边界**：服务端默认不信任代理转发头。仅当请求来自 `PROBE_TRUSTED_PROXIES` 声明的地址或网段时，才使用 `X-Forwarded-For` 识别客户端 IP，避免伪造来源绕过登录限流。
-8. **出站请求防护**：延迟测试和周期性探测目标在保存时、Agent 同步时及实际连接时均默认拒绝回环、私网、链路本地、云元数据等内部地址；TCP 与 HTTP 探测端口均限制为 `53`、`80`、`123`、`443`、`853`、`8080` 和 `8443`，HTTP 重定向也受此限制。GeoIP 查询及 Webhook 请求同样拒绝内部地址。确需探测内网目标时，需在服务端和目标 Agent 上分别设置 `PROBE_ALLOW_PRIVATE_TARGETS=1`，这会放开私网地址和探测端口限制。
-9. **只读信息采集**：Agent 端仅采集只读的系统硬件、负载与流量指标，不具备任何远程命令执行（RCE）通道，保障受控主机绝对安全。
-10. **敏感信息脱敏**：前端提供 IP 脱敏隐藏开关（如 `154.82.***.***`），方便截图分享与多用户公开展示。
-
-> **部署链路说明**：`/install.sh` 与 `/download/probe-agent` 保持公开，因为它们由目标机器上的 `curl`/`wget` 拉取，不携带浏览器会话。两者均不含机密：Agent Token 由运维人员通过命令行参数传入，而分发 Token 的接口需要登录。
-
-> **版本可见性不改变第 9 条**：服务端只**读取** Agent 上报的版本号用于展示，从不向 Agent 下发任何指令或要求其自我更新；Agent 至今仍只有上报方向。`install.sh --upgrade` 是运维人员在目标机器上亲自发起的操作，与看板无关——看板最多给出一条供人复制、粘贴、按回车的命令。
-
----
-
-## 📄 开源许可证
-
-本项目基于 [MIT License](LICENSE) 协议开源。
-
-## 2026-09-27 14:01:59 任务记录
-重试 1 轮后 API 仍不可用
-进程 PID 264631，会话已中断或 API 长期不可用，自动暂存当前进度。
+[MIT License](LICENSE)。
