@@ -190,7 +190,7 @@
   "three/addons/": "./vendor/"
 } }
 </script>
-  <script type="module" crossorigin src="./assets/index-Vr85eXfb.js"></script>
+  <script type="module" crossorigin src="./assets/index-BIJddKX9.js"></script>
 </head><body>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -260,8 +260,7 @@ button, input, select { font: inherit; color: inherit; }
 .topbar {
   flex: none; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: nowrap; min-height: 48px; box-sizing: border-box;
   padding-inline: 16px; padding-block: 6px; background: var(--panel); border-bottom: 1px solid var(--line);
-  font-family: var(--f-mono); font-size: 13px; position: relative; z-index: 5;
-  overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none;
+  font-family: var(--f-mono); font-size: 13px; position: relative; z-index: 20;
 }
 .topbar::-webkit-scrollbar { display: none; }
 .crumb { display: flex; gap: 8px; align-items: center; min-width: 0; flex-shrink: 0; white-space: nowrap; }
@@ -404,6 +403,20 @@ button, input, select { font: inherit; color: inherit; }
 .chips button[aria-pressed="true"] { background: var(--ink); color: var(--panel); }
 .chips button .c { opacity: 0.75; margin-left: 4px; }
 .sortsel { height: 30px; padding: 0 6px; border: 1px solid var(--line); background: var(--panel); font-size: 11.5px; }
+.dd { position: relative; display: inline-flex; }
+.dd-btn { display: inline-flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 84px; cursor: pointer; text-align: left; }
+.dd-btn i { font-style: normal; font-size: 10px; color: var(--ink-3); }
+.dd-btn[aria-expanded="true"] { border-color: var(--accent); }
+.dd-btn[aria-expanded="true"] i { color: var(--accent); transform: rotate(180deg); }
+.dd-btn:hover { border-color: var(--ink); }
+.dd-list { position: absolute; top: calc(100% + 4px); z-index: 60; min-width: 100%; max-height: 280px; overflow-y: auto; box-sizing: border-box;
+  display: flex; flex-direction: column; padding: 4px 0; background: var(--panel); border: 1px solid var(--line); box-shadow: 0 12px 28px rgba(0, 0, 0, 0.18); }
+.dd[data-align="right"] .dd-list { right: 0; }
+.dd[data-align="left"] .dd-list { left: 0; }
+.dd-list button { border: 0; background: none; padding: 6px 12px; text-align: left; white-space: nowrap; cursor: pointer;
+  font-family: var(--f-mono); font-size: 11.5px; font-weight: 700; color: var(--ink); }
+.dd-list button:hover, .dd-list button:focus-visible { background: var(--sea); color: var(--accent-ink); outline: none; }
+.dd-list button[aria-selected="true"] { background: var(--accent); color: var(--on-accent); }
 .dirbtn { height: 30px; min-width: 30px; border: 1px solid var(--line); background: var(--panel); cursor: pointer; font-size: 13px; }
 .rows { list-style: none; margin: 0; padding: 0; overflow: auto; min-height: 0; flex: 1 1 auto; }
 .row { width: 100%; display: flex; flex-direction: column; gap: 6px; padding: 9px 14px; border: 0; border-bottom: 1px solid var(--line-soft);
@@ -506,8 +519,10 @@ button, input, select { font: inherit; color: inherit; }
     flex-wrap: wrap; overflow: visible;
   }
   .topbar .spacer { display: none; }
-  .topbar-actions { width: 100%; justify-content: space-between; }
+  .topbar-actions { width: 100%; justify-content: flex-end; gap: 6px; }
+  .topbar-actions .live { margin-right: auto; }
   .chip .lbl { display: none; }
+  #themeChip { width: 26px; padding: 0; }
   .crumb { gap: 6px; font-size: 11px; flex-shrink: 0; white-space: nowrap; }
   .topbar-actions { gap: 5px; flex-shrink: 0; white-space: nowrap; }
   .chip, .alerts-btn, .lang-select {

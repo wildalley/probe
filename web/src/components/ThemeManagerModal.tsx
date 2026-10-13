@@ -694,23 +694,13 @@ export const ThemeManagerPanel: React.FC<ThemeManagerPanelProps> = ({
                 )}
 
                 <div className="space-y-3">
-                  <div className="relative h-28 w-full overflow-hidden rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel)] p-2.5 font-mono text-10 text-[var(--nezha-ink)]">
-                    <div className="flex items-center justify-between border-b border-[var(--nezha-line-soft)] pb-1 text-9">
-                      <span className="font-bold">MERIDIAN / 总览 / 全部地区</span>
-                      <span className="text-[var(--nezha-accent)] font-bold">● LIVE</span>
-                    </div>
-                    <div className="mt-1.5 grid grid-cols-[1fr_auto] gap-2 text-9">
-                      <div className="relative h-14 rounded-full border border-[var(--nezha-line)] bg-[var(--nezha-panel-sub)] aspect-square mx-auto">
-                        <span className="absolute left-[30%] top-[35%] h-1.5 w-1.5 bg-[var(--nezha-accent)]" />
-                        <span className="absolute left-[62%] top-[30%] h-1.5 w-1.5 bg-[var(--nezha-ink)]" />
-                        <span className="absolute left-[55%] top-[60%] h-1.5 w-1.5 bg-[var(--nezha-ink)]" />
-                      </div>
-                      <div className="space-y-1 text-[var(--nezha-ink-2)]">
-                        <div>HK01 · CPU 76%</div>
-                        <div>JP01 · CPU 89%</div>
-                        <div>DE01 · ↓23.8M</div>
-                      </div>
-                    </div>
+                  {/* The theme ships a real screenshot (komari-theme.json "preview"). */}
+                  <div className="relative h-28 w-full overflow-hidden rounded-none border border-[var(--nezha-line)] bg-[var(--nezha-panel)]">
+                    {meridian?.preview ? (
+                      <img src={meridian.preview} alt="Meridian 子午预览" loading="lazy" className="h-full w-full object-cover object-center" />
+                    ) : (
+                      <div className="flex h-full items-center justify-center font-mono text-xs text-[var(--nezha-ink-3)]">MERIDIAN</div>
+                    )}
                   </div>
 
                   <div>
@@ -1194,7 +1184,9 @@ export const ThemeManagerPanel: React.FC<ThemeManagerPanelProps> = ({
         <div className="text-xs font-mono">
           <span className="text-[var(--nezha-ink-3)]">当前方案: </span>
           <span className="font-bold text-[var(--nezha-ink)]">
-            {activeBackendTheme !== "builtin"
+            {isMeridianActive
+              ? "内置 · Meridian 子午"
+              : activeBackendTheme !== "builtin"
               ? `Komari · ${activeBackendTheme}`
               : currentPreset === "btop"
               ? "📟 btop++ 极客终端 (官方默认)"

@@ -668,9 +668,10 @@ export const AdminModal: React.FC<AdminModalProps> = ({
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <h2 className="text-sm sm:text-base font-bold font-mono tracking-tight truncate text-[var(--nezha-ink)]">
-                  PROBE // CONTROL CONSOLE
+                  <span className="hidden sm:inline">PROBE // CONTROL CONSOLE</span>
+                  <span className="sm:hidden">PROBE // CONSOLE</span>
                 </h2>
-                <span className="inline-flex items-center px-1.5 py-0.5 text-10 font-mono font-bold bg-[var(--nezha-accent)] text-[#141414] rounded-none shrink-0">
+                <span className="hidden sm:inline-flex items-center px-1.5 py-0.5 text-10 font-mono font-bold bg-[var(--nezha-accent)] text-[#141414] rounded-none shrink-0">
                   ADMIN
                 </span>
               </div>
@@ -731,7 +732,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                 <button
                   type="button"
                   onClick={onLogout}
-                  className="h-7 px-2 sm:px-2.5 flex items-center justify-center gap-1 rounded-none border border-rose-500/30 bg-[var(--nezha-panel)] text-rose-500 hover:bg-rose-500/10 text-xs font-mono font-bold shrink-0 whitespace-nowrap transition-all cursor-pointer"
+                  className="h-7 w-7 sm:w-auto sm:px-2.5 flex items-center justify-center gap-1 rounded-none border border-rose-500/30 bg-[var(--nezha-panel)] text-rose-500 hover:bg-rose-500/10 text-xs font-mono font-bold shrink-0 whitespace-nowrap transition-all cursor-pointer"
                   title="退出登录"
                 >
                   <LogOut className="h-3.5 w-3.5 shrink-0" />
